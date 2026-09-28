@@ -1,4 +1,146 @@
-<!doctype html><html lang="en" dir="ltr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#7c3aed"><link rel="manifest" href="manifest.webmanifest"><title>Class Hub Pro</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="style.css"></head><body>
-<div id="loader"><div class="loader-logo"><img src="assets/logo.jpg"></div><div class="loader-ring"></div><b>CLASS HUB</b><small>Loading your class...</small></div><div id="glow"></div>
-<div class="app"><aside id="side"><div class="brand"><img src="assets/logo.jpg"><div><b>Class Hub</b><small>A2 • Pro</small></div></div><div class="live"><i></i><div><b>LIVE NOW</b><small>Networking • <span id="miniTime">32:15</span></small></div></div><nav id="nav"></nav><div class="side-bottom"><button id="theme">◐ <span></span></button><button id="lang">文 <span>العربية</span></button><button id="install">⌄ <span>Install App</span></button></div></aside>
-<main><header><button id="mobile">☰</button><div class="search">⌕ <input id="search" placeholder="Search everything..."></div><div class="top"><button id="ai">✦</button><button id="bell">♢<i></i></button><button id="profile"><img src="assets/logo.jpg">Kareem</button></div></header><section id="content"></section></main></div><div id="toast"></div><div id="back"><div id="modal"></div></div><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+
+  <meta name="theme-color" content="#7c3aed">
+  <meta name="description" content="Class Hub Pro A2 - Class management dashboard">
+
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <title>Class Hub Pro</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&family=Inter:wght@400;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+  <!-- LOADER -->
+  <div id="loader">
+    <div class="loader-logo">
+      <img
+        src="assets/logo.jpg"
+        alt="Class Hub"
+        onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect width=%22200%22 height=%22200%22 rx=%2245%22 fill=%22%237c3aed%22/%3E%3Ctext x=%22100%22 y=%22122%22 text-anchor=%22middle%22 font-size=%2282%22 font-family=%22Arial%22 font-weight=%22700%22 fill=%22white%22%3EA2%3C/text%3E%3C/svg%3E'"
+      >
+    </div>
+
+    <div class="loader-ring"></div>
+
+    <b>CLASS HUB</b>
+    <small>Loading your class...</small>
+  </div>
+
+  <div id="glow"></div>
+
+  <div class="app">
+
+    <!-- SIDEBAR -->
+    <aside id="side">
+
+      <div class="brand">
+        <img
+          src="assets/logo.jpg"
+          alt="Class Hub"
+          onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect width=%22200%22 height=%22200%22 rx=%2245%22 fill=%22%237c3aed%22/%3E%3Ctext x=%22100%22 y=%22122%22 text-anchor=%22middle%22 font-size=%2282%22 font-family=%22Arial%22 font-weight=%22700%22 fill=%22white%22%3EA2%3C/text%3E%3C/svg%3E'"
+        >
+
+        <div>
+          <b>Class Hub</b>
+          <small>A2 • Pro</small>
+        </div>
+      </div>
+
+      <div class="live">
+        <i></i>
+
+        <div>
+          <b>LIVE NOW</b>
+          <small>
+            Networking •
+            <span id="miniTime">32:15</span>
+          </small>
+        </div>
+      </div>
+
+      <nav id="nav"></nav>
+
+      <div class="side-bottom">
+        <button id="theme">◐ <span></span></button>
+
+        <button id="lang">
+          文 <span>العربية</span>
+        </button>
+
+        <button id="install">
+          ⌄ <span>Install App</span>
+        </button>
+      </div>
+
+    </aside>
+
+    <!-- MAIN -->
+    <main>
+
+      <header>
+
+        <button id="mobile">☰</button>
+
+        <div class="search">
+          ⌕
+          <input
+            id="search"
+            placeholder="Search everything..."
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="top">
+
+          <button id="ai">✦</button>
+
+          <button id="bell">
+            ♢
+            <i></i>
+          </button>
+
+          <button id="profile">
+            <img
+              src="assets/logo.jpg"
+              alt="Profile"
+              onerror="this.onerror=null;this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22%3E%3Crect width=%22200%22 height=%22200%22 rx=%2245%22 fill=%22%237c3aed%22/%3E%3Ctext x=%22100%22 y=%22122%22 text-anchor=%22middle%22 font-size=%2282%22 font-family=%22Arial%22 font-weight=%22700%22 fill=%22white%22%3EA2%3C/text%3E%3C/svg%3E'"
+            >
+            Kareem
+          </button>
+
+        </div>
+
+      </header>
+
+      <section id="content"></section>
+
+    </main>
+
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast"></div>
+
+  <!-- MODAL -->
+  <div id="back">
+    <div id="modal"></div>
+  </div>
+
+  <script src="app.js"></script>
+
+</body>
+</html>
