@@ -1,31 +1,38 @@
-# Class Hub — Class A2
+# Class Hub Pro — A2
 
-واجهة موقع فصل دراسي متكاملة مبنية بـ HTML/CSS/JavaScript فقط.
+نسخة Front-end متقدمة لموقع الفصل، بالشعار المرفوع.
 
-## تشغيل
-1. فك الضغط.
-2. افتح `index.html` في المتصفح.
-3. الأفضل استخدام Live Server في VS Code.
-
-## الموجود حاليًا
-- Dashboard
-- Students
-- Subjects
+## Features
+- Dashboard متحرك + Live Class countdown
+- Dark / Light transitions
+- English / Arabic + RTL/LTR
+- Students + roles + activity + XP
+- Digital Student Card + QR-style demo
+- Subjects + progress
 - Weekly Schedule
-- Assignments مع حفظ LocalStorage
+- Assignments + LocalStorage
+- Smart Resources
+- Exam Center + practice demo
 - Announcements
 - Calendar
-- Gallery
+- Events + RSVP demo
 - Polls
-- XP Leaderboard
+- Class Chat demo
+- XP / Levels / Badges / Leaderboard
+- Class AI demo modal
+- Analytics charts
 - Admin Center
-- Dark / Light Mode مع Transition
-- English / Arabic مع RTL/LTR Transition
-- Responsive للموبايل
-- Search
+- Roles & Permissions UI
+- Activity Logs UI
+- Theme Studio + custom accent
 - Notifications
-- Modals / Toasts / Loading animation
-- الشعار المرفوع موجود في `assets/logo.jpg`
+- Search
+- PWA manifest + offline service worker
+- Responsive mobile design
+- Loading, page, card, hover, progress, chart, modal, toast, chat, live and theme animations
 
-## مهم
-دي نسخة Front-end كاملة قابلة للتشغيل مباشرة. الـ Login الحقيقي، قاعدة البيانات، رفع الصور والملفات، صلاحيات الأدمن، والإشعارات الحقيقية تحتاج Backend/Database عند تحويلها لـ Production.
+## تشغيل
+افتح `index.html` أو استخدم VS Code + Live Server.
+
+## Production
+الـ Login الحقيقي، قاعدة البيانات، صلاحيات السيرفر، رفع الملفات، AI API الحقيقي، chat real-time، QR الحقيقي، push notifications والـ analytics الحقيقية تحتاج Backend.
