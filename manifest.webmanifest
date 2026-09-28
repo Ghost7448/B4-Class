@@ -1,1 +1,11 @@
-{"name":"Class Hub Pro A2","short_name":"Class Hub","start_url":"./index.html","display":"standalone","background_color":"#f5f3fa","theme_color":"#7c3aed","icons":[{"src":"assets/logo.jpg","sizes":"192x192","type":"image/jpeg"},{"src":"assets/logo.jpg","sizes":"512x512","type":"image/jpeg"}]}
+{
+  "name": "Class Hub Pro A2",
+  "short_name": "Class Hub",
+  "description": "Class Hub Pro A2 - Class management dashboard",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f3fa",
+  "theme_color": "#7c3aed"
+}
