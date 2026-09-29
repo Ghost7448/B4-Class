@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import mysql from 'mysql2/promise';
 import OpenAI from 'openai';
 import path from 'path';
+import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -56,6 +57,63 @@ app.use(session({
     maxAge: 1000 * 60 * 60 * 24 * 30
   }
 }));
+
+const dataPath = path.resolve(__dirname, '../../data');
+
+async function loadJson(name) {
+  const raw = await fs.readFile(path.join(dataPath, name), 'utf8');
+  return JSON.parse(raw);
+}
+
+// JSON holds the class's base roster/catalog. MySQL mirrors it so accounts,
+// attendance, chat, assignments and activation keys can all reference stable DB IDs.
+async function syncClassJson() {
+  const [students, subjects] = await Promise.all([
+    loadJson('students.json'),
+    loadJson('subjects.json')
+  ]);
+
+  for (const s of students) {
+    if (!s.student_code || !s.official_name) continue;
+    const [existing] = await q('SELECT id FROM students WHERE student_code=? LIMIT 1', [s.student_code]);
+    if (existing[0]) {
+      await q(
+        'UPDATE students SET official_name=?, class_name=?, specialization=? WHERE student_code=?',
+        [s.official_name, s.class_name || 'B4', s.specialization || 'Telecommunication', s.student_code]
+      );
+      // Do not overwrite a user's chosen display name after account activation.
+      await q(
+        'UPDATE students SET display_name=? WHERE student_code=? AND NOT EXISTS (SELECT 1 FROM users u WHERE u.student_id=students.id)',
+        [s.display_name || s.official_name, s.student_code]
+      );
+    } else {
+      await q(
+        'INSERT INTO students(student_code,official_name,display_name,class_name,specialization) VALUES(?,?,?,?,?)',
+        [s.student_code, s.official_name, s.display_name || s.official_name, s.class_name || 'B4', s.specialization || 'Telecommunication']
+      );
+    }
+  }
+
+  for (const subject of subjects) {
+    if (!subject.name) continue;
+    const className = subject.class_name || 'B4';
+    const [existing] = await q('SELECT id FROM subjects WHERE name=? AND class_name=? LIMIT 1', [subject.name, className]);
+    if (existing[0]) {
+      await q(
+        'UPDATE subjects SET teacher_name=?, progress=? WHERE id=?',
+        [subject.teacher_name || '', Number(subject.progress || 0), existing[0].id]
+      );
+    } else {
+      await q(
+        'INSERT INTO subjects(name,class_name,teacher_name,progress) VALUES(?,?,?,?)',
+        [subject.name, className, subject.teacher_name || '', Number(subject.progress || 0)]
+      );
+    }
+  }
+
+  // Remove legacy subjects from the old demo dataset, but never touch assignments or users.
+  await q("DELETE FROM subjects WHERE class_name='B4' AND name IN ('Technical Drawing','Programming') AND id NOT IN (SELECT DISTINCT subject_id FROM assignments WHERE subject_id IS NOT NULL)");
+}
 
 const q = (sql, args = []) => pool.execute(sql, args);
 const requireAuth = (req, res, next) => req.session.userId
@@ -341,4 +399,9 @@ app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-app.listen(PORT, () => console.log(`B4 backend + frontend listening on ${PORT}`));
+syncClassJson()
+  .then(() => app.listen(PORT, () => console.log('B4 backend + frontend listening on ' + PORT + ' | JSON data synced')))
+  .catch(err => {
+    console.error('B4 JSON sync failed:', err.message);
+    process.exit(1);
+  });
