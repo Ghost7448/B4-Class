@@ -107,26 +107,21 @@ app.get('/api/bootstrap', async (req, res) => {
     `);
     const [schedule] = await q(`SELECT day_name,p1,p2,p3,p4 FROM schedule WHERE class_name='B4' ORDER BY day_order`);
 
-    let grades = [], attendance = [], messages = [];
+    let attendance = [], messages = [];
     if (req.session.userId) {
-      [grades] = await q(`
-        SELECT g.score,g.max_score,g.grade_type,g.created_at,s.name subject_name
-        FROM grades g LEFT JOIN subjects s ON s.id=g.subject_id
-        WHERE g.user_id=? ORDER BY g.created_at DESC
-      `, [req.session.userId]);
       [attendance] = await q(`
         SELECT date,status FROM attendance WHERE user_id=? ORDER BY date DESC LIMIT 60
       `, [req.session.userId]);
     }
     [messages] = await q(`
-      SELECT m.id,m.body,m.created_at,m.user_id,
+      SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,
              COALESCE(u.display_name,'Deleted user') display_name,u.avatar_url
       FROM chat_messages m LEFT JOIN users u ON u.id=m.user_id
       WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100
     `);
     messages.reverse();
 
-    res.json({ students, subjects, assignments, announcements, schedule, grades, attendance, messages });
+    res.json({ students, subjects, assignments, announcements, schedule, attendance, messages });
   } catch (e) {
     console.error('Bootstrap failed:', e.message);
     res.status(500).json({ error: 'Could not load class data' });
@@ -283,15 +278,41 @@ app.post('/api/admin/activation-keys', requireRole(['SUPER_ADMIN']), async (req,
   res.json({ ok: true, key: raw });
 });
 
-app.post('/api/chat/messages', requireAuth, async (req, res) => {
-  const body = String(req.body?.body || '').trim();
-  if (!body || body.length > 4000) return res.status(400).json({ error: 'Message is empty or too long' });
-  const [r] = await q(`INSERT INTO chat_messages(user_id,body) VALUES(?,?)`, [req.session.userId, body]);
-  const [rows] = await q(`
-    SELECT m.id,m.body,m.created_at,m.user_id,u.display_name,u.avatar_url
-    FROM chat_messages m JOIN users u ON u.id=m.user_id WHERE m.id=?
-  `, [r.insertId]);
-  res.json({ message: rows[0] });
+app.post('/api/chat/messages',requireAuth,async(req,res)=>{
+  const body=String(req.body?.body||'').trim();
+  if(!body||body.length>4000)return res.status(400).json({error:'Message is empty or too long'});
+  const [r]=await q('INSERT INTO chat_messages(user_id,body) VALUES(?,?)',[req.session.userId,body]);
+  const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,u.display_name,u.avatar_url FROM chat_messages m JOIN users u ON u.id=m.user_id WHERE m.id=?',[r.insertId]);
+  res.json({message:rows[0]});
+});
+app.patch('/api/chat/messages/:id',requireAuth,async(req,res)=>{
+  const id=Number(req.params.id),body=String(req.body?.body||'').trim();
+  if(!Number.isSafeInteger(id)||!body||body.length>4000)return res.status(400).json({error:'Invalid message'});
+  const [rows]=await q('SELECT id,user_id,body,deleted_at FROM chat_messages WHERE id=? LIMIT 1',[id]);const m=rows[0];
+  if(!m)return res.status(404).json({error:'Message not found'});
+  if(m.deleted_at)return res.status(400).json({error:'Deleted message cannot be edited'});
+  if(Number(m.user_id)!==Number(req.session.userId))return res.status(403).json({error:'You can edit only your own messages'});
+  if(body===m.body)return res.status(400).json({error:'No changes made'});
+  await q('INSERT INTO chat_message_edits(message_id,editor_user_id,old_body,new_body) VALUES(?,?,?,?)',[id,req.session.userId,m.body,body]);
+  await q('UPDATE chat_messages SET body=?,edited_at=NOW() WHERE id=?',[body,id]);
+  await q('INSERT INTO activity_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)',[req.session.userId,'CHAT_MESSAGE_EDITED','chat_message',id,JSON.stringify({old_body:m.body,new_body:body})]);
+  const [updated]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,u.display_name,u.avatar_url FROM chat_messages m JOIN users u ON u.id=m.user_id WHERE m.id=?',[id]);
+  res.json({message:updated[0]});
+});
+app.delete('/api/chat/messages/:id',requireAuth,async(req,res)=>{
+  const id=Number(req.params.id);
+  const [rows]=await q('SELECT id,user_id,deleted_at FROM chat_messages WHERE id=? LIMIT 1',[id]);const m=rows[0];
+  if(!m)return res.status(404).json({error:'Message not found'});
+  const canDelete=Number(m.user_id)===Number(req.session.userId)||['SUPER_ADMIN','ADMIN','TEACHER'].includes(req.session.role);
+  if(!canDelete)return res.status(403).json({error:'Permission denied'});
+  if(m.deleted_at)return res.json({ok:true});
+  await q('UPDATE chat_messages SET deleted_at=NOW(),deleted_by=? WHERE id=?',[req.session.userId,id]);
+  await q('INSERT INTO activity_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)',[req.session.userId,'CHAT_MESSAGE_DELETED','chat_message',id,'Message deleted']);
+  res.json({ok:true});
+});
+app.get('/api/admin/chat/edit-logs',requireRole(['SUPER_ADMIN','ADMIN','TEACHER']),async(req,res)=>{
+  const [logs]=await q('SELECT e.id,e.message_id,e.old_body,e.new_body,e.created_at,u.display_name editor_name FROM chat_message_edits e LEFT JOIN users u ON u.id=e.editor_user_id ORDER BY e.created_at DESC LIMIT 200');
+  res.json({logs});
 });
 
 app.post('/api/ai', requireAuth, async (req, res) => {
