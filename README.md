@@ -1,4 +1,4 @@
-# B4 Class Portal — Full Stack Starter
+# B4 Class Portal
 
 This package upgrades the original front-end into a B4 Telecommunication class portal and adds a production-oriented Node/Express + MySQL backend.
 
