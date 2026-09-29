@@ -1,44 +1,92 @@
-# B4 Class — Full Stack
+# B4 Class
 
-B4 Telecommunication class portal using a Node.js/Express backend, Railway MySQL, secure sessions, activation keys and a frontend served by the same Railway service.
+Production-ready class portal for **B4 — Telecommunication**.
 
-## Railway deployment
+## Architecture
 
-1. Deploy this repository/service with the **Root Directory set to `/backend` only if the backend is deployed as a separate service**.
-2. If you want the backend to serve the frontend from the same service (the recommended setup in this package), set the Railway service Root Directory to `/` so the service can access both `backend/` and `frontend/`, then use the start command:
+- Frontend: HTML / CSS / JavaScript
+- Backend: Node.js + Express
+- Database: MySQL 8.x
+- Authentication: MySQL-backed secure sessions + bcrypt passwords
+- AI: OpenAI Responses API through the backend
+- Deployment: Railway
+- Data source: **MySQL / SQL seed only** — no JSON class-data sync
 
-```bash
-npm --prefix backend start
-```
+## Main modules
 
-3. Add these Railway variables:
+- Dashboard
+- Students
+- Subjects
+- Schedule
+- Assignments
+- Resources
+- Exam Center
+- Announcements
+- Class Chat
+- Attendance
+- B4 AI Assistant
+- Admin Center
+- Settings
+- Install App / PWA
+- Arabic / English
+- Light / Dark
+- Activation Keys
+- Role-based permissions
+
+## Roles
+
+- STUDENT
+- TEACHER
+- ADMIN
+- SUPER_ADMIN
+
+## Database setup
+
+Run:
+
+1. `database/schema.sql`
+2. `database/seed.sql`
+
+Do not run `CREATE DATABASE` or `USE`; Railway's MySQL service supplies the selected database.
+
+## Railway
+
+The repository is configured as a single Railway service from the repository root:
+
+- Start command: `npm start`
+- Healthcheck: `/api/health`
+- Root directory: `/`
+- Frontend is served by the same Node/Express service.
+
+Required environment variables include:
 
 ```env
 NODE_ENV=production
-MYSQL_URL=${{MySQL.DATABASE_URL}}
-SESSION_SECRET=your-long-random-secret
-OPENAI_API_KEY=your-key
-OPENAI_MODEL=gpt-5.6-luna
+MYSQL_URL=...
+SESSION_SECRET=...
+OPENAI_API_KEY=...
 ```
 
-4. Do not commit `.env` or API keys.
+Optional:
 
-## Database
+```env
+OPENAI_MODEL=gpt-5.6-luna
+FRONTEND_URL=...
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+GOOGLE_CALLBACK_URL=...
+```
 
-Run `database/schema.sql` first, then `database/seed.sql` against the MySQL database already provided by Railway. These files do not create or select a separate database.
+Never commit real secrets.
 
-## Super Admin
+## Admin bootstrap
 
-After the tables exist, create the first Super Admin from the backend environment/command line:
+Use the included command after the database tables exist:
 
 ```bash
-npm --prefix backend run create-admin -- "Your Display Name" "A-Strong-Password"
+npm run create-admin
 ```
 
-Activation keys are stored as SHA-256 hashes and the raw key is returned only once when generated. User passwords are stored as bcrypt hashes.
+## Important
 
-## Frontend
-
-When the same Railway service serves the frontend, `frontend/config.js` can stay empty and the browser uses the same origin for `/api/*`.
-
-If the frontend is later moved to GitHub Pages, set `window.B4_API_URL` in `frontend/config.js` to the public backend URL and configure `FRONTEND_URL` in Railway to the exact frontend origin.
+Dynamic class data belongs in MySQL. The repository's SQL seed contains the official B4 roster and subject catalog; accounts, attendance, chat, assignments, resources, exams, announcements, notifications, permissions and logs are relational database data.
