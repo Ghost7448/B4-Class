@@ -13,6 +13,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
+if (process.env.NODE_ENV === 'production' && (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.length < 32)) {
+  throw new Error('SESSION_SECRET must be set to at least 32 characters in production');
+}
 const PORT = Number(process.env.PORT || 3000);
 
 const mysqlUrl = process.env.MYSQL_URL || process.env.DATABASE_URL;
@@ -173,6 +176,13 @@ app.post('/api/auth/activate', async (req, res) => {
       [displayName.trim()]
     );
     if (existing[0]) throw new Error('That display name is already in use');
+
+    const identityColumn = k.person_type === 'TEACHER' ? 'teacher_id' : 'student_id';
+    const [linked] = await conn.execute(
+      `SELECT id FROM users WHERE ${identityColumn}=? LIMIT 1`,
+      [k.person_type === 'TEACHER' ? k.teacher_id : k.student_id]
+    );
+    if (linked[0]) throw new Error('This B4 identity already has an account');
 
     const pw = await bcrypt.hash(password, 12);
     const [u] = await conn.execute(`
