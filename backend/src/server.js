@@ -20,7 +20,7 @@ const PORT = Number(process.env.PORT || 3000);
 
 const mysqlUrl = process.env.MYSQL_URL || process.env.DATABASE_URL;
 const pool = mysqlUrl
-  ? mysql.createPool(mysqlUrl)
+  ? mysql.createPool({ uri: mysqlUrl, charset: 'utf8mb4' })
   : mysql.createPool({
       host: process.env.MYSQLHOST,
       port: Number(process.env.MYSQLPORT || 3306),
