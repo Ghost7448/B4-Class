@@ -1,28 +1,44 @@
-# B4 Class Portal
+# B4 Class — Full Stack
 
-This package upgrades the original front-end into a B4 Telecommunication class portal and adds a production-oriented Node/Express + MySQL backend.
+B4 Telecommunication class portal using a Node.js/Express backend, Railway MySQL, secure sessions, activation keys and a frontend served by the same Railway service.
 
-## Included
-- `frontend/`: GitHub Pages-ready B4 frontend.
-- `backend/`: Node.js + Express API, secure password hashing, persistent MySQL sessions, activation keys, chat, profile/password APIs and B4 AI endpoint.
-- `database/schema.sql`: complete MySQL schema.
-- `database/seed.sql`: B4 roster (24 students) + starter subjects.
+## Railway deployment
 
-## Important
-- Do **not** commit `backend/.env`.
-- Put `OPENAI_API_KEY` only in backend environment variables. The frontend never receives it.
-- Activation keys are stored hashed; the raw key is returned only once when generated.
-- Passwords are stored as bcrypt hashes; Super Admin cannot view original passwords.
-- The schedule is intentionally not populated with fake data. Add the real B4 schedule later.
+1. Deploy this repository/service with the **Root Directory set to `/backend` only if the backend is deployed as a separate service**.
+2. If you want the backend to serve the frontend from the same service (the recommended setup in this package), set the Railway service Root Directory to `/` so the service can access both `backend/` and `frontend/`, then use the start command:
 
-## Local backend test
-1. Copy `backend/.env.example` to `backend/.env`.
-2. Fill the Railway MySQL variables and a long `SESSION_SECRET`.
-3. Run the SQL files in order: `schema.sql`, then `seed.sql`.
-4. In `backend/`: `npm install` then `npm run create-admin -- "Your Name" "A-Strong-Password"`.
-5. `npm start`.
-6. Set `window.B4_API_URL` or `localStorage.b4ApiUrl` in the frontend to the deployed backend URL.
+```bash
+npm --prefix backend start
+```
 
-## Frontend API URL
-For a static GitHub Pages frontend, edit `frontend/config.js` and set `window.B4_API_URL` to the deployed backend URL.
-The backend must allow the exact frontend origin with credentials.
+3. Add these Railway variables:
+
+```env
+NODE_ENV=production
+MYSQL_URL=${{MySQL.DATABASE_URL}}
+SESSION_SECRET=your-long-random-secret
+OPENAI_API_KEY=your-key
+OPENAI_MODEL=gpt-5.6-luna
+```
+
+4. Do not commit `.env` or API keys.
+
+## Database
+
+Run `database/schema.sql` first, then `database/seed.sql` against the MySQL database already provided by Railway. These files do not create or select a separate database.
+
+## Super Admin
+
+After the tables exist, create the first Super Admin from the backend environment/command line:
+
+```bash
+npm --prefix backend run create-admin -- "Your Display Name" "A-Strong-Password"
+```
+
+Activation keys are stored as SHA-256 hashes and the raw key is returned only once when generated. User passwords are stored as bcrypt hashes.
+
+## Frontend
+
+When the same Railway service serves the frontend, `frontend/config.js` can stay empty and the browser uses the same origin for `/api/*`.
+
+If the frontend is later moved to GitHub Pages, set `window.B4_API_URL` in `frontend/config.js` to the public backend URL and configure `FRONTEND_URL` in Railway to the exact frontend origin.
