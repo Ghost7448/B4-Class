@@ -89,61 +89,81 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
-app.get('/api/bootstrap', async (req, res) => {
+async function getBootstrap(req) {
+  const [students] = await q(`
+    SELECT s.id,s.student_code,s.official_name,
+           COALESCE(u.display_name,s.display_name) display_name,u.avatar_url
+    FROM students s
+    LEFT JOIN users u ON u.student_id=s.id AND u.status='ACTIVE'
+    WHERE s.class_name='B4'
+    ORDER BY s.display_name
+  `);
+  const [subjects] = await q(`SELECT id,name,teacher_name,progress FROM subjects WHERE class_name='B4' ORDER BY name`);
+  const [assignments] = await q(`
+    SELECT a.id,a.title,a.description,a.status,a.due_at,s.name subject_name
+    FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id
+    WHERE a.class_name='B4' ORDER BY a.due_at IS NULL,a.due_at
+  `);
+  const [announcements] = await q(`
+    SELECT id,title,body,category,created_at FROM announcements
+    WHERE class_name='B4' ORDER BY created_at DESC LIMIT 20
+  `);
+  const [schedule] = await q(`SELECT day_name,p1,p2,p3,p4 FROM schedule WHERE class_name='B4' ORDER BY day_order`);
+  const [resources] = await q(`
+    SELECT r.id,r.title,r.description,r.url,r.file_url,r.resource_type,r.subject_id,s.name subject_name
+    FROM resources r LEFT JOIN subjects s ON s.id=r.subject_id
+    WHERE r.class_name='B4' ORDER BY r.created_at DESC LIMIT 100
+  `);
+  const [exams] = await q(`
+    SELECT e.id,e.title,e.description,e.subject_id,s.name subject_name,e.starts_at,e.ends_at,e.duration_minutes,e.status
+    FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id
+    WHERE e.class_name='B4' ORDER BY e.starts_at IS NULL,e.starts_at
+  `);
+  let attendance=[],messages=[],notifications=[];
+  if(req.session.userId) {
+    [attendance]=await q(`SELECT date,status FROM attendance WHERE user_id=? ORDER BY date DESC LIMIT 60`,[req.session.userId]);
+  }
+  [messages]=await q(`
+    SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,
+           COALESCE(u.display_name,'Deleted user') display_name,u.avatar_url
+    FROM chat_messages m LEFT JOIN users u ON u.id=m.user_id
+    WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100
+  `);
+  messages.reverse();
+  if(req.session.userId) {
+    [notifications]=await q(`
+      SELECT id,title,body,read_at,created_at FROM notifications
+      WHERE user_id=? OR user_id IS NULL ORDER BY created_at DESC LIMIT 30
+    `,[req.session.userId]);
+  }
+  return {students,subjects,assignments,announcements,schedule,resources,exams,attendance,messages,notifications};
+}
+
+app.get('/api/bootstrap', async (req, res) =>
   try {
-    const [students] = await q(`
-      SELECT s.id,s.student_code,s.official_name,
-             COALESCE(u.display_name,s.display_name) display_name,u.avatar_url
-      FROM students s
-      LEFT JOIN users u ON u.student_id=s.id AND u.status='ACTIVE'
-      ORDER BY s.display_name
-    `);
-    const [subjects] = await q(`SELECT id,name,teacher_name,progress FROM subjects WHERE class_name='B4' ORDER BY name`);
-    const [assignments] = await q(`
-      SELECT a.id,a.title,a.description,a.status,a.due_at,s.name subject_name
-      FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id
-      WHERE a.class_name='B4' ORDER BY a.due_at IS NULL,a.due_at
-    `);
-    const [announcements] = await q(`
-      SELECT id,title,body,category,created_at FROM announcements
-      WHERE class_name='B4' ORDER BY created_at DESC LIMIT 20
-    `);
-    const [schedule] = await q(`SELECT day_name,p1,p2,p3,p4 FROM schedule WHERE class_name='B4' ORDER BY day_order`);
-    const [resources] = await q(`
-      SELECT r.id,r.title,r.description,r.url,r.file_url,r.resource_type,r.subject_id,s.name subject_name
-      FROM resources r LEFT JOIN subjects s ON s.id=r.subject_id
-      WHERE r.class_name='B4' ORDER BY r.created_at DESC LIMIT 100
-    `);
-    const [exams] = await q(`
-      SELECT e.id,e.title,e.description,e.subject_id,s.name subject_name,e.starts_at,e.ends_at,e.duration_minutes,e.status
-      FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id
-      WHERE e.class_name='B4' ORDER BY e.starts_at IS NULL,e.starts_at
-    `);
-
-    let attendance = [], messages = [], notifications = [];
-    if (req.session.userId) {
-      [attendance] = await q(`
-        SELECT date,status FROM attendance WHERE user_id=? ORDER BY date DESC LIMIT 60
-      `, [req.session.userId]);
-    }
-    [messages] = await q(`
-      SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,
-             COALESCE(u.display_name,'Deleted user') display_name,u.avatar_url
-      FROM chat_messages m LEFT JOIN users u ON u.id=m.user_id
-      WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100
-    `);
-    messages.reverse();
-    if (req.session.userId) {
-      [notifications] = await q(`
-        SELECT id,title,body,read_at,created_at FROM notifications
-        WHERE user_id=? OR user_id IS NULL ORDER BY created_at DESC LIMIT 30
-      `, [req.session.userId]);
-    }
-
-    res.json({ students, subjects, assignments, announcements, schedule, resources, exams, attendance, messages, notifications });
+    res.json(await getBootstrap(req));
   } catch (e) {
-    console.error('Bootstrap failed:', e.message);
-    res.status(500).json({ error: 'Could not load class data' });
+    console.error('Bootstrap failed:', e);
+    res.status(500).json({ error: 'Could not load class data', detail: process.env.NODE_ENV === 'production' ? undefined : e.message });
+  }
+});
+
+app.get('/api/students', async (req,res)=>{
+  try {
+    const [students]=await q(`SELECT s.id,s.student_code,s.official_name,COALESCE(u.display_name,s.display_name) display_name,u.avatar_url
+      FROM students s LEFT JOIN users u ON u.student_id=s.id AND u.status='ACTIVE'
+      WHERE s.class_name='B4' ORDER BY s.display_name`);
+    res.json({students});
+  } catch(e) {
+    console.error('Students API failed:',e);
+    res.status(500).json({error:'Could not load students',detail:process.env.NODE_ENV==='production'?undefined:e.message});
+  }
+});
+app.get('/api/class-data', async (req,res)=>{
+  try { res.json(await getBootstrap(req)); }
+  catch(e) {
+    console.error('Class data API failed:',e);
+    res.status(500).json({error:'Could not load class data',detail:process.env.NODE_ENV==='production'?undefined:e.message});
   }
 });
 
