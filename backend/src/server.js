@@ -139,7 +139,7 @@ async function getBootstrap(req) {
   return {students,subjects,assignments,announcements,schedule,resources,exams,attendance,messages,notifications};
 }
 
-app.get('/api/bootstrap', async (req, res) =>
+app.get('/api/bootstrap', async (req, res) => {
   try {
     res.json(await getBootstrap(req));
   } catch (e) {
