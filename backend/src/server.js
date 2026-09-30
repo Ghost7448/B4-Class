@@ -61,13 +61,62 @@ app.use(session({
 }));
 
 const q = (sql, args = []) => pool.execute(sql, args);
+
+const PERMISSION_DEFS = [
+  ['MANAGE_ADMINS','Manage admins'],
+  ['MANAGE_ACCOUNTS','Manage accounts'],
+  ['MANAGE_KEYS','Manage activation keys'],
+  ['MANAGE_STUDENTS','Manage students'],
+  ['MANAGE_ROLES','Manage roles & permissions'],
+  ['MANAGE_SUBJECTS','Manage subjects'],
+  ['MANAGE_SCHEDULE','Manage schedule'],
+  ['MANAGE_ASSIGNMENTS','Manage assignments'],
+  ['MANAGE_RESOURCES','Manage resources'],
+  ['MANAGE_EXAMS','Manage exams'],
+  ['MANAGE_ATTENDANCE','Manage attendance'],
+  ['MANAGE_ANNOUNCEMENTS','Manage announcements'],
+  ['MANAGE_CHAT','Moderate chat'],
+  ['VIEW_LOGS','View security/activity logs'],
+  ['USE_AI','Use B4 AI'],
+  ['VIEW_CLASS','View class']
+];
+
+async function ensurePermissionSchema() {
+  await q('CREATE TABLE IF NOT EXISTS user_permissions( user_id BIGINT UNSIGNED NOT NULL, permission_id INT UNSIGNED NOT NULL, granted_by BIGINT UNSIGNED NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,permission_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(permission_id) REFERENCES permissions(id) ON DELETE CASCADE, FOREIGN KEY(granted_by) REFERENCES users(id) ON DELETE SET NULL ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+  for (const [code,label] of PERMISSION_DEFS) await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',[code,label]);
+  await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'SUPER_ADMIN',id FROM permissions");
+}
+
+async function getPermissionCodes(userId) {
+  const [users] = await q('SELECT role,status FROM users WHERE id=? LIMIT 1',[userId]);
+  const user = users[0];
+  if (!user || user.status !== 'ACTIVE') return [];
+  if (user.role === 'SUPER_ADMIN') {
+    const [all] = await q('SELECT code FROM permissions ORDER BY code');
+    return all.map(x=>x.code);
+  }
+  const [rows] = await q('SELECT DISTINCT p.code FROM permissions p LEFT JOIN role_permissions rp ON rp.permission_id=p.id AND rp.role=? LEFT JOIN user_permissions up ON up.permission_id=p.id AND up.user_id=? WHERE rp.permission_id IS NOT NULL OR up.permission_id IS NOT NULL ORDER BY p.code',[user.role,userId]);
+  return rows.map(x=>x.code);
+}
+
 const requireAuth = (req, res, next) => req.session.userId
   ? next()
   : res.status(401).json({ error: 'Login required' });
-const requireRole = roles => (req, res, next) => {
-  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
-  if (!roles.includes(req.session.role)) return res.status(403).json({ error: 'Permission denied' });
-  next();
+const requirePermission = permission => async (req,res,next) => {
+  if (!req.session.userId) return res.status(401).json({error:'Login required'});
+  try {
+    const permissions=await getPermissionCodes(req.session.userId);
+    if(!permissions.includes(permission)) return res.status(403).json({error:'Permission denied',permission});
+    req.permissions=permissions; next();
+  } catch(e) { console.error('Permission check failed:',e.message); res.status(500).json({error:'Permission check failed'}); }
+};
+const requireAnyPermission = permissions => async (req,res,next) => {
+  if (!req.session.userId) return res.status(401).json({error:'Login required'});
+  try {
+    const granted=await getPermissionCodes(req.session.userId);
+    if(!permissions.some(p=>granted.includes(p))) return res.status(403).json({error:'Permission denied'});
+    req.permissions=granted; next();
+  } catch(e) { console.error('Permission check failed:',e.message); res.status(500).json({error:'Permission check failed'}); }
 };
 
 async function userById(id) {
@@ -76,7 +125,8 @@ async function userById(id) {
      FROM users WHERE id=? LIMIT 1`,
     [id]
   );
-  return r[0] || null;
+  if(!r[0]) return null;
+  return {...r[0],permissions:await getPermissionCodes(id)};
 }
 
 app.get('/api/health', async (req, res) => {
@@ -283,7 +333,50 @@ app.patch('/api/auth/profile', requireAuth, async (req, res) => {
   res.json({ ok: true, user: await userById(req.session.userId) });
 });
 
-app.get('/api/admin/activation-keys', requireRole(['SUPER_ADMIN']), async (req, res) => {
+app.get('/api/admin/permissions', requirePermission('MANAGE_ROLES'), async (req,res)=>{
+  const [permissions]=await q('SELECT id,code,label FROM permissions ORDER BY code');
+  res.json({permissions});
+});
+
+app.get('/api/admin/users', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
+  const [users]=await q('SELECT id,display_name,official_name,role,status,student_id,teacher_id FROM users ORDER BY display_name');
+  const result=[];
+  for(const u of users){
+    const [direct]=await q('SELECT p.code FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=? ORDER BY p.code',[u.id]);
+    result.push({...u,direct_permissions:direct.map(x=>x.code),effective_permissions:await getPermissionCodes(u.id)});
+  }
+  res.json({users:result});
+});
+
+app.put('/api/admin/users/:id/permissions', requirePermission('MANAGE_ROLES'), async (req,res)=>{
+  const targetId=Number(req.params.id);
+  const codes=Array.isArray(req.body?.permissionCodes)?[...new Set(req.body.permissionCodes.map(String))]:[];
+  if(!Number.isSafeInteger(targetId)) return res.status(400).json({error:'Invalid user id'});
+  const [targetRows]=await q('SELECT id,role,status FROM users WHERE id=? LIMIT 1',[targetId]);
+  const target=targetRows[0];
+  if(!target) return res.status(404).json({error:'User not found'});
+  if(target.role==='SUPER_ADMIN') return res.status(403).json({error:'Super Admin always has every permission'});
+  const [valid]=await q('SELECT id,code FROM permissions WHERE code IN (?)',[codes.length?codes:['__NONE__']]);
+  if(valid.length!==codes.length) return res.status(400).json({error:'One or more permissions are invalid'});
+  await q('DELETE FROM user_permissions WHERE user_id=?',[targetId]);
+  for(const p of valid) await q('INSERT INTO user_permissions(user_id,permission_id,granted_by) VALUES(?,?,?)',[targetId,p.id,req.session.userId]);
+  await q('INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)',[req.session.userId,'PERMISSIONS_UPDATED',JSON.stringify({target_user_id:targetId,permissions:codes})]);
+  res.json({ok:true,permissions:await getPermissionCodes(targetId)});
+});
+
+app.patch('/api/admin/users/:id/role', requirePermission('MANAGE_ADMINS'), async (req,res)=>{
+  const targetId=Number(req.params.id), role=String(req.body?.role||'').toUpperCase();
+  if(!Number.isSafeInteger(targetId)||!['STUDENT','TEACHER','ADMIN','SUPER_ADMIN'].includes(role)) return res.status(400).json({error:'Invalid user or role'});
+  const [actor]=await q('SELECT role FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+  const [target]=await q('SELECT role FROM users WHERE id=? LIMIT 1',[targetId]);
+  if(!target[0]) return res.status(404).json({error:'User not found'});
+  if((target[0].role==='SUPER_ADMIN'||role==='SUPER_ADMIN')&&actor[0]?.role!=='SUPER_ADMIN') return res.status(403).json({error:'Only Super Admin can manage Super Admin role'});
+  await q('UPDATE users SET role=? WHERE id=?',[role,targetId]);
+  await q('INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)',[req.session.userId,'ROLE_UPDATED',JSON.stringify({target_user_id:targetId,role})]);
+  res.json({ok:true,user:await userById(targetId)});
+});
+
+app.get('/api/admin/activation-keys', requirePermission('MANAGE_KEYS'), async (req, res) => {
   const [keys] = await q(`
     SELECT ak.id,ak.key_preview,ak.status,ak.created_at,ak.expires_at,
            COALESCE(s.display_name,t.display_name) person_name,ak.person_type
@@ -295,7 +388,7 @@ app.get('/api/admin/activation-keys', requireRole(['SUPER_ADMIN']), async (req, 
   res.json({ keys });
 });
 
-app.post('/api/admin/activation-keys', requireRole(['SUPER_ADMIN']), async (req, res) => {
+app.post('/api/admin/activation-keys', requirePermission('MANAGE_KEYS'), async (req, res) => {
   const { personType, personId } = req.body || {};
   if (!['STUDENT', 'TEACHER'].includes(personType)) {
     return res.status(400).json({ error: 'Invalid person type' });
@@ -324,13 +417,13 @@ app.post('/api/admin/activation-keys', requireRole(['SUPER_ADMIN']), async (req,
   res.json({ ok: true, key: raw });
 });
 
-app.get('/api/admin/people', requireRole(['SUPER_ADMIN']), async (req,res) => {
+app.get('/api/admin/people', requireAnyPermission(['MANAGE_ACCOUNTS','MANAGE_ADMINS','MANAGE_STUDENTS']), async (req,res) => {
   const [students] = await q(`SELECT id,student_code,official_name,display_name FROM students WHERE class_name='B4' ORDER BY display_name`);
   const [teachers] = await q(`SELECT id,teacher_code,official_name,display_name FROM teachers WHERE class_name='B4' ORDER BY display_name`);
   res.json({ students, teachers });
 });
 
-app.post('/api/admin/students', requireRole(['SUPER_ADMIN','ADMIN']), async (req,res) => {
+app.post('/api/admin/students', requirePermission('MANAGE_STUDENTS'), async (req,res) => {
   const { studentCode, officialName, displayName, specialization='Telecommunication' } = req.body || {};
   if (!studentCode || !officialName || !displayName) return res.status(400).json({error:'Student code, official name and display name are required'});
   try {
@@ -344,7 +437,7 @@ app.post('/api/admin/students', requireRole(['SUPER_ADMIN','ADMIN']), async (req
   }
 });
 
-app.post('/api/admin/assignments', requireRole(['SUPER_ADMIN','ADMIN','TEACHER']), async (req,res) => {
+app.post('/api/admin/assignments', requirePermission('MANAGE_ASSIGNMENTS'), async (req,res) => {
   const {title,description='',subjectId=null,dueAt=null} = req.body || {};
   if(!title?.trim()) return res.status(400).json({error:'Assignment title is required'});
   const [r]=await q(`INSERT INTO assignments(title,description,subject_id,class_name,due_at,created_by) VALUES(?,?,?,'B4',?,?)`,
@@ -352,7 +445,7 @@ app.post('/api/admin/assignments', requireRole(['SUPER_ADMIN','ADMIN','TEACHER']
   res.json({ok:true,id:r.insertId});
 });
 
-app.post('/api/admin/announcements', requireRole(['SUPER_ADMIN','ADMIN','TEACHER']), async (req,res) => {
+app.post('/api/admin/announcements', requirePermission('MANAGE_ANNOUNCEMENTS'), async (req,res) => {
   const {title,body,category='General'} = req.body || {};
   if(!title?.trim() || !body?.trim()) return res.status(400).json({error:'Title and body are required'});
   const [r]=await q(`INSERT INTO announcements(title,body,category,class_name,created_by) VALUES(?,?,?,'B4',?)`,
@@ -392,7 +485,7 @@ app.delete('/api/chat/messages/:id',requireAuth,async(req,res)=>{
   await q('INSERT INTO activity_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)',[req.session.userId,'CHAT_MESSAGE_DELETED','chat_message',id,'Message deleted']);
   res.json({ok:true});
 });
-app.get('/api/admin/chat/edit-logs',requireRole(['SUPER_ADMIN','ADMIN','TEACHER']),async(req,res)=>{
+app.get('/api/admin/chat/edit-logs',requirePermission('VIEW_LOGS'),async(req,res)=>{
   const [logs]=await q('SELECT e.id,e.message_id,e.old_body,e.new_body,e.created_at,u.display_name editor_name FROM chat_message_edits e LEFT JOIN users u ON u.id=e.editor_user_id ORDER BY e.created_at DESC LIMIT 200');
   res.json({logs});
 });
@@ -423,4 +516,4 @@ app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-app.listen(PORT, () => console.log('B4 backend + frontend listening on ' + PORT));
+ensurePermissionSchema().then(()=>app.listen(PORT,()=>console.log('B4 backend + frontend listening on '+PORT))).catch(e=>{console.error('Permission schema bootstrap failed:',e);process.exit(1)});
