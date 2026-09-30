@@ -28,7 +28,7 @@ function attendanceV(){return title(t('attendance'),'Present, absent, late and e
 function adminV(){
   if(!can('ADMIN_CENTER'))return '';
   const cards=[];
-  if(can('MANAGE_ADMINS')||can('MANAGE_ROLES'))cards.push('<div class="card"><div class="ico">⚙</div><h3>People & Permissions</h3><p class="muted">Give each account its own role and permissions.</p><button class="btn ghost" onclick="permissionsModal()">Manage →</button></div>');
+  if(can('MANAGE_ADMINS')||can('MANAGE_ROLES'))cards.push('<div class="card"><div class="ico">⚙</div><h3>People & Permissions</h3><p class="muted">Give each account its own role and permissions.</p><button class="btn ghost" onclick="go('permissions')">Open →</button></div>');
   if(can('MANAGE_STUDENTS'))cards.push('<div class="card"><div class="ico">♙</div><h3>Students</h3><p class="muted">Manage official B4 students.</p><button class="btn ghost" onclick="adminStudentModal()">Manage →</button></div>');
   if(can('MANAGE_KEYS'))cards.push('<div class="card"><div class="ico">🔑</div><h3>Activation Keys</h3><p class="muted">Create one-time account keys.</p><button class="btn ghost" onclick="activationModal(true)">Manage →</button></div>');
   if(can('MANAGE_ASSIGNMENTS'))cards.push('<div class="card"><div class="ico">✓</div><h3>Assignments</h3><p class="muted">Publish class assignments.</p><button class="btn ghost" onclick="assignmentModal()">Create →</button></div>');
@@ -64,6 +64,46 @@ async function deleteMessage(id){try{await api('/api/chat/messages/'+id,{method:
 async function send(e){e.preventDefault();const v=$('#chatInput')?.value.trim();if(!v||!S.me)return;try{const d=await api('/api/chat/messages',{method:'POST',body:JSON.stringify({body:v})});S.messages.push(d.message);$('#chatInput').value='';render();}catch(x){toast(x.message)}}
 function aiModal(){modal(`<div class="modalhead"><h2>✦ ${t('ai')}</h2><button class="close" onclick="close()">×</button></div><p class="muted">${S.lang==='ar'?'مساعد خاص بفصل B4، والـAPI Key يظل على الـBackend.':'B4-specific assistant. The OpenAI key stays on the backend.'}</p><div class="field"><label>Question</label><textarea id="aiq" rows="5" placeholder="${S.lang==='ar'?'مثلاً: اشرح TDM بطريقة بسيطة':'Example: Explain TDM simply'}"></textarea></div><button class="btn primary" onclick="answerAI()">Ask AI →</button><div id="air" style="margin-top:14px"></div>`)}
 async function answerAI(){if(!can('USE_AI'))return;const q=$('#aiq')?.value.trim();if(!q)return toast('Write a question first');const r=$('#air');r.innerHTML='<div class="card">Thinking…</div>';try{const d=await api('/api/ai',{method:'POST',body:JSON.stringify({message:q})});r.innerHTML=`<div class="card"><b>✦ B4 AI</b><p style="white-space:pre-wrap">${esc(d.answer)}</p></div>`}catch(x){r.innerHTML=`<div class="card notice">${esc(x.message)}</div>`}}
+
+function permissionCategory(code){
+  if(/^MANAGE_/.test(code))return 'Management';
+  if(/^VIEW_/.test(code))return 'View & Audit';
+  if(/^USE_/.test(code))return 'Features';
+  return 'Other';
+}
+function selectPermissionUser(id){window.__permissionSelectedUser=Number(id);render()}
+async function loadPermissionsPage(){
+  if(window.__permissionLoading)return;
+  window.__permissionLoading=true;
+  try{
+    const [pd,ud]=await Promise.all([api('/api/admin/permissions'),api('/api/admin/users')]);
+    window.__permissionDefs=pd.permissions||[];
+    window.__permissionUsers=ud.users||[];
+    if(!window.__permissionSelectedUser&&window.__permissionUsers[0])window.__permissionSelectedUser=Number(window.__permissionUsers[0].id);
+  }catch(e){toast(e.message)}
+  finally{window.__permissionLoading=false;render()}
+}
+function permissionsV(){
+  if(!can('MANAGE_ROLES')&&!can('MANAGE_ADMINS'))return '';
+  if(!window.__permissionUsers||!window.__permissionDefs){
+    if(!window.__permissionLoading)loadPermissionsPage();
+    return title('People & Permissions','Manage roles and individual permissions from one clean workspace.')+
+      '<div class="card permission-loading"><div class="ico">⚙</div><h3>Loading permissions…</h3><p class="muted">Loading people, roles and permission definitions.</p></div>';
+  }
+  const users=window.__permissionUsers||[],defs=window.__permissionDefs||[];
+  const selectedId=Number(window.__permissionSelectedUser||users[0]?.id||0);
+  const selected=users.find(u=>Number(u.id)===selectedId)||users[0];
+  if(!selected)return title('People & Permissions','No user accounts are available yet.')+'<div class="card empty">Create an account first.</div>';
+  const superAdmin=selected.role==='SUPER_ADMIN',direct=new Set(selected.direct_permissions||[]);
+  const people=users.map(u=>'<button type="button" class="person-card '+(Number(u.id)===Number(selected.id)?'selected':'')+'" onclick="selectPermissionUser('+Number(u.id)+')"><div class="person-avatar">'+esc((u.display_name||'?').slice(0,1).toUpperCase())+'</div><div class="grow"><b>'+esc(u.display_name||'Unnamed')+'</b><small>'+esc(u.role||'')+'</small></div><span class="badge">'+(u.role==='SUPER_ADMIN'?'ALL':String((u.direct_permissions||[]).length))+'</span></button>').join('');
+  const roleEditor=can('MANAGE_ADMINS')&&!superAdmin?'<div class="field"><label>Role</label><select id="permRole"><option value="STUDENT" '+(selected.role==='STUDENT'?'selected':'')+'>STUDENT</option><option value="TEACHER" '+(selected.role==='TEACHER'?'selected':'')+'>TEACHER</option><option value="ADMIN" '+(selected.role==='ADMIN'?'selected':'')+'>ADMIN</option></select></div>':'';
+  const groups={Management:[],'View & Audit':[],Features:[],Other:[]};
+  defs.forEach(p=>(groups[permissionCategory(p.code)]||groups.Other).push(p));
+  const groupHtml=Object.entries(groups).filter(([,items])=>items.length).map(([name,items])=>'<section class="permission-section"><div class="permission-section-head"><div><span class="eyebrow">'+esc(name)+'</span><h3>'+esc(name)+' permissions</h3></div><span class="badge">'+items.length+'</span></div><div class="permission-grid">'+items.map(p=>'<label class="permission-card"><input type="checkbox" data-perm="'+esc(p.code)+'" '+(direct.has(p.code)||superAdmin?'checked':'')+' '+(superAdmin?'disabled':'')+'><span><b>'+esc(p.label)+'</b><small>'+esc(p.code)+'</small></span></label>').join('')+'</div></section>').join('');
+  return title('People & Permissions','Select a person, then control exactly what they can access.')+
+    '<div class="permissions-page"><div class="card people-panel"><div class="head"><div><h3>People</h3><p class="muted">Every account in B4</p></div><span class="badge">'+users.length+' accounts</span></div><div class="people-list">'+people+'</div></div><div class="card permissions-panel"><div class="permission-profile"><div class="person-avatar large">'+esc((selected.display_name||'?').slice(0,1).toUpperCase())+'</div><div class="grow"><div class="eyebrow">SELECTED ACCOUNT</div><h2>'+esc(selected.display_name||'Unnamed')+'</h2><p class="muted">'+esc(selected.role||'')+' • '+(superAdmin?'Full access':'Individual permissions')+'</p></div><span class="badge '+(superAdmin?'good':'')+'">'+(superAdmin?'SUPER ADMIN':'CUSTOM')+'</span></div>'+roleEditor+'<div class="permission-notice">'+(superAdmin?'Super Admin automatically has every permission. Individual switches are locked.':'Permissions are independent. Turn on only what this account needs.')+'</div>'+groupHtml+(superAdmin?'':'<button class="btn primary save-permissions" onclick="savePermissions()">Save changes</button>')+'</div></div>';
+}
+
 async function permissionsModal(){
   if(!can('MANAGE_ROLES')&&!can('MANAGE_ADMINS'))return;
   try{const [pd,ud]=await Promise.all([api('/api/admin/permissions'),api('/api/admin/users')]);window.__permissionDefs=pd.permissions||[];window.__permissionUsers=ud.users||[];const opts=window.__permissionUsers.map(u=>`<option value="${u.id}">${esc(u.display_name)} • ${esc(u.role)}</option>`).join('');modal(`<div class="modalhead"><h2>People & Permissions</h2><button class="close" onclick="close()">×</button></div><div class="field"><label>Account</label><select id="permUser" onchange="renderPermissionEditor()">${opts}</select></div><div id="permEditor" style="margin-top:14px"></div>`);renderPermissionEditor();}catch(e){toast(e.message)}
@@ -76,12 +116,12 @@ function renderPermissionEditor(){
 }
 async function savePermissions(){
   const id=Number($('#permUser')?.value),codes=[...document.querySelectorAll('[data-perm]:checked')].map(x=>x.dataset.perm);
-  try{if($('#permRole')?.value)await api('/api/admin/users/'+id+'/role',{method:'PATCH',body:JSON.stringify({role:$('#permRole').value})});await api('/api/admin/users/'+id+'/permissions',{method:'PUT',body:JSON.stringify({permissionCodes:codes})});toast('Permissions saved ✓');const d=await api('/api/admin/users');window.__permissionUsers=d.users||[];renderPermissionEditor();}catch(e){toast(e.message)}
+  try{if($('#permRole')?.value)await api('/api/admin/users/'+id+'/role',{method:'PATCH',body:JSON.stringify({role:$('#permRole').value})});await api('/api/admin/users/'+id+'/permissions',{method:'PUT',body:JSON.stringify({permissionCodes:codes})});toast('Permissions saved ✓');const d=await api('/api/admin/users');window.__permissionUsers=d.users||[];if($('#permEditor'))renderPermissionEditor();else render();}catch(e){toast(e.message)}
 }
 function themes(){modal(`<div class="modalhead"><h2>Theme Studio</h2><button class="close" onclick="close()">×</button></div><div class="grid c3">${['#7c3aed','#6d28d9','#8b5cf6','#a855f7','#9333ea','#c084fc'].map(c=>`<button class="btn" style="height:65px;background:${c};color:white" onclick="accent('${c}')">${c}</button>`).join('')}</div>`)}function accent(c){document.documentElement.style.setProperty('--p',c);document.documentElement.style.setProperty('--p2',c);localStorage.b4Accent=c;toast('Theme updated ✓')}
 function commandCenter(){modal(`<div class="modalhead"><h2>Quick navigation</h2><button class="close" onclick="close()">×</button></div><input id="cmd" placeholder="Search pages..." oninput="filterCommands()"><div id="cmdList" class="list" style="margin-top:12px">${nav.filter(x=>x[0]!=='g').map(x=>`<button class="item quick cmditem" onclick="close();go('${x[0]}')">${x[1]} <span class="grow">${t(x[2])}</span>→</button>`).join('')}</div>`)}function filterCommands(){const q=($('#cmd')?.value||'').toLowerCase();document.querySelectorAll('.cmditem').forEach(x=>x.style.display=x.textContent.toLowerCase().includes(q)?'flex':'none')}
 function toggleTheme(){S.theme=S.theme==='dark'?'light':'dark';localStorage.b4Theme=S.theme;render()}function toggleLang(){S.lang=S.lang==='en'?'ar':'en';localStorage.b4Lang=S.lang;render()}function installApp(){if(window.__install){window.__install.prompt();window.__install=null}else toast(S.lang==='ar'?'استخدم قائمة المتصفح لتثبيت التطبيق':'Use the browser menu to install the app')}
-const views={dashboard,students:studentsV,subjects:subjectsV,schedule:scheduleV,assignments:tasksV,resources:resourcesV,exams:examsV,announcements:newsV,chat:chatV,attendance:attendanceV,admin:adminV,settings:settingsV,notifications:notificationsV};
+const views={dashboard,students:studentsV,subjects:subjectsV,schedule:scheduleV,assignments:tasksV,resources:resourcesV,exams:examsV,announcements:newsV,chat:chatV,attendance:attendanceV,admin:adminV,permissions:permissionsV,settings:settingsV,notifications:notificationsV};
 async function loadMe(){try{const d=await api('/api/auth/me');S.me=d.user;S.online=true}catch{S.me=null;S.online=false}await loadData();render()}
 async function loadData(){try{const d=await api('/api/bootstrap');S.students=d.students||[];S.subjects=d.subjects||[];S.tasks=d.assignments||[];S.announcements=d.announcements||[];S.schedule=d.schedule||[];S.resources=d.resources||[];S.exams=d.exams||[];S.attendance=d.attendance||[];S.messages=d.messages||[];S.notifications=d.notifications||[];S.dataError=''}catch(e){S.dataError=e.message||'Could not load class data';S.students=[];S.subjects=[];S.tasks=[];S.announcements=[];S.schedule=[];S.resources=[];S.exams=[];S.notifications=[];S.attendance=[];S.messages=[]}}
 function render(){
@@ -93,7 +133,7 @@ function render(){
   $('#content').innerHTML=`<div class="page">${views[S.view]()}</div>`;document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>go(b.dataset.v));
 }
 $('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#mobile').onclick=()=>$('#side').classList.toggle('open');$('#bell').onclick=()=>toast(S.lang==='ar'?'الإشعارات سيتم ربطها بالـBackend':'Notifications will be connected to the backend');$('#ai').onclick=aiModal;$('#profile').onclick=()=>S.me?go('settings'):loginModal();$('#back').onclick=e=>{if(e.target.id==='back')close()};$('#install').onclick=installApp;$('#search').oninput=e=>{const q=e.target.value.toLowerCase().trim();if(!q)return;const x=[...document.querySelectorAll('.card,.item')].find(a=>a.textContent.toLowerCase().includes(q));if(x){x.scrollIntoView({behavior:'smooth',block:'center'});x.animate([{transform:'scale(1)'},{transform:'scale(1.02)'},{transform:'scale(1)'}],{duration:450})}};document.addEventListener('mousemove',e=>{const g=$('#glow');if(g){g.style.left=e.clientX+'px';g.style.top=e.clientY+'px'}});let promptInstall;addEventListener('beforeinstallprompt',e=>{e.preventDefault();promptInstall=e;window.__install=e});const ac=localStorage.b4Accent;if(ac)accent(ac);if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
-(async()=>{await loadMe();const loader=$('#loader');if(loader)setTimeout(()=>loader.classList.add('hide'),500)})();
+(async()=>{try{if('serviceWorker' in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.unregister()));try{await caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k))))}catch{}}}catch{}await loadMe();const loader=$('#loader');if(loader)setTimeout(()=>loader.classList.add('hide'),500)})();
 
 
 /* B4 v2 UX + access-control enhancements */
@@ -112,11 +152,13 @@ function buildNav(){
 function render(){
   document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';document.documentElement.lang=S.lang;document.body.classList.toggle('ar',S.lang==='ar');document.body.classList.toggle('dark',S.theme==='dark');
   if(!S.me&&!['students','subjects','schedule'].includes(S.view))S.view='students';
-  if(S.me&&S.view==='admin'&&!can('ADMIN_CENTER'))S.view='dashboard';
+  if(S.me&&['admin','permissions'].includes(S.view)&&!can('ADMIN_CENTER'))S.view='dashboard';
   if(S.me&&S.view==='settings'&&!can('ACCOUNT'))S.view='dashboard';
   $('#nav').innerHTML=buildNav();$('#theme span').textContent=S.theme==='dark'?t('themeL'):t('themeD');$('#lang span').textContent=S.lang==='en'?'العربية':'English';$('#search').placeholder=t('search');$('#topName').textContent=S.me?.display_name||'Guest';
   if($('#ai'))$('#ai').style.display=can('USE_AI')?'':'none';
-  $('#content').innerHTML='<div class="page">'+views[S.view]()+'</div>';document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>go(b.dataset.v));
+  const pageView=views[S.view]||views.dashboard;
+  try{$('#content').innerHTML='<div class="page">'+pageView()+'</div>'}catch(e){console.error('B4 render error',e);$('#content').innerHTML='<div class="card notice"><b>Page failed to render.</b><div class="muted">'+esc(e.message||e)+'</div></div>'}
+  document.querySelectorAll('[data-v]').forEach(b=>b.onclick=()=>go(b.dataset.v));
 }
 async function loadMe(){
   try{const d=await api('/api/auth/me');S.me=d.user;S.online=true;const l=await api('/api/auth/linked').catch(()=>({linked:[]}));S.linked=l.linked||[];}
@@ -148,7 +190,7 @@ function renderExamQuestions(){const box=$('#examQuestions');if(!box)return;box.
 function removeExamQuestion(i){window.__examQuestions.splice(i,1);renderExamQuestions()}
 function collectExamQuestions(){return window.__examQuestions.map((q,i)=>{q.text=$('#eq_text_'+i).value.trim();q.type=$('#eq_type_'+i).value;q.correct=$('#eq_correct_'+i).value.trim();q.points=Number($('#eq_points_'+i).value)||1;q.options=q.type==='MCQ'?[0,1,2,3].map(j=>$('#eq_opt_'+i+'_'+j)?.value.trim()).filter(Boolean):[];return {questionText:q.text,questionType:q.type,options:q.options,correctAnswer:q.correct,points:q.points}})}
 async function createExam(e){e.preventDefault();try{const questions=collectExamQuestions();await api('/api/admin/exams',{method:'POST',body:JSON.stringify({title:$('#examTitle').value,description:$('#examDesc').value,subjectId:Number($('#examSubject').value)||null,startsAt:$('#examStart').value||null,endsAt:$('#examEnd').value||null,durationMinutes:Number($('#examDuration').value)||null,questions})});close();await loadData();render();toast('Exam published ✓')}catch(x){toast(x.message)}}
-function adminV(){if(!can('ADMIN_CENTER'))return '';const cards=[];if(can('MANAGE_ADMINS')||can('MANAGE_ROLES'))cards.push('<div class="card"><div class="ico">⚙</div><h3>People & Permissions</h3><p class="muted">Give each account its own role and permissions.</p><button class="btn ghost" onclick="permissionsModal()">Manage →</button></div>');if(can('MANAGE_STUDENTS'))cards.push('<div class="card"><div class="ico">♙</div><h3>Students</h3><p class="muted">Manage official B4 students.</p><button class="btn ghost" onclick="adminStudentModal()">Manage →</button></div>');if(can('MANAGE_KEYS'))cards.push('<div class="card"><div class="ico">🔑</div><h3>Activation Keys</h3><p class="muted">Create one-time account keys.</p><button class="btn ghost" onclick="activationModal(true)">Manage →</button></div>');if(can('MANAGE_ASSIGNMENTS'))cards.push('<div class="card"><div class="ico">✓</div><h3>Assignments</h3><p class="muted">Publish class assignments.</p><button class="btn ghost" onclick="assignmentModal()">Create →</button></div>');if(can('MANAGE_RESOURCES'))cards.push('<div class="card"><div class="ico">▤</div><h3>Resources & PDFs</h3><p class="muted">Publish study links, notes and PDF files.</p><button class="btn ghost" onclick="resourceModal()">Manage →</button></div>');if(can('MANAGE_EXAMS'))cards.push('<div class="card"><div class="ico">⌁</div><h3>Exam Center</h3><p class="muted">Create timed exams with a hard deadline.</p><button class="btn ghost" onclick="examModal()">Create →</button></div>');if(can('MANAGE_ANNOUNCEMENTS'))cards.push('<div class="card"><div class="ico">◈</div><h3>Announcements</h3><p class="muted">Publish official notices.</p><button class="btn ghost" onclick="announcementModal()">Create →</button></div>');if(can('VIEW_LOGS'))cards.push('<div class="card"><div class="ico">⌁</div><h3>Logs</h3><p class="muted">Review chat edit history.</p><button class="btn ghost" onclick="logsModal()">View →</button></div>');return title(t('admin'),'Manage class data, content, accounts and security.')+'<div class="grid c3">'+cards.join('')+'</div>';}
+function adminV(){if(!can('ADMIN_CENTER'))return '';const cards=[];if(can('MANAGE_ADMINS')||can('MANAGE_ROLES'))cards.push('<div class="card"><div class="ico">⚙</div><h3>People & Permissions</h3><p class="muted">Give each account its own role and permissions.</p><button class="btn ghost" onclick="go('permissions')">Open →</button></div>');if(can('MANAGE_STUDENTS'))cards.push('<div class="card"><div class="ico">♙</div><h3>Students</h3><p class="muted">Manage official B4 students.</p><button class="btn ghost" onclick="adminStudentModal()">Manage →</button></div>');if(can('MANAGE_KEYS'))cards.push('<div class="card"><div class="ico">🔑</div><h3>Activation Keys</h3><p class="muted">Create one-time account keys.</p><button class="btn ghost" onclick="activationModal(true)">Manage →</button></div>');if(can('MANAGE_ASSIGNMENTS'))cards.push('<div class="card"><div class="ico">✓</div><h3>Assignments</h3><p class="muted">Publish class assignments.</p><button class="btn ghost" onclick="assignmentModal()">Create →</button></div>');if(can('MANAGE_RESOURCES'))cards.push('<div class="card"><div class="ico">▤</div><h3>Resources & PDFs</h3><p class="muted">Publish study links, notes and PDF files.</p><button class="btn ghost" onclick="resourceModal()">Manage →</button></div>');if(can('MANAGE_EXAMS'))cards.push('<div class="card"><div class="ico">⌁</div><h3>Exam Center</h3><p class="muted">Create timed exams with a hard deadline.</p><button class="btn ghost" onclick="examModal()">Create →</button></div>');if(can('MANAGE_ANNOUNCEMENTS'))cards.push('<div class="card"><div class="ico">◈</div><h3>Announcements</h3><p class="muted">Publish official notices.</p><button class="btn ghost" onclick="announcementModal()">Create →</button></div>');if(can('VIEW_LOGS'))cards.push('<div class="card"><div class="ico">⌁</div><h3>Logs</h3><p class="muted">Review chat edit history.</p><button class="btn ghost" onclick="logsModal()">View →</button></div>');return title(t('admin'),'Manage class data, content, accounts and security.')+'<div class="grid c3">'+cards.join('')+'</div>';}
 function messageClick(e,id){if(e){e.preventDefault();e.stopPropagation()}messageMenu(e,id)}
 function messageMenu(e,id){if(e){e.preventDefault();e.stopPropagation()}const m=S.messages.find(x=>Number(x.id)===Number(id));if(!m||!S.me)return;const mine=Number(m.user_id)===Number(S.me.id);const canDelete=mine||can('MANAGE_CHAT');const reply='<button class="item quick" onclick="close();replyToMessage('+id+')">↩ <span class="grow">Reply</span>→</button>';const edit=mine?'<button class="item quick" onclick="close();editMessage('+id+')">✎ <span class="grow">Edit</span>→</button>':'';const del=canDelete?'<button class="item quick" onclick="close();deleteMessage('+id+')">⌫ <span class="grow">Delete</span>→</button>':'';modal('<div class="modalhead"><h2>Message</h2><button class="close" onclick="close()">×</button></div><div class="list">'+reply+edit+del+'</div>')}
 function replyToMessage(id){const m=S.messages.find(x=>Number(x.id)===Number(id));if(!m)return;S.replyTo=m;render();setTimeout(()=>$('#chatInput')?.focus(),50)}
@@ -236,7 +278,7 @@ function adminV(){
   if(!can('ADMIN_CENTER'))return accessDeniedCard();
   const cards=[];
   const add=(perm,icon,titleTxt,desc,fn)=>{if(can(perm))cards.push('<div class="admin-card"><div class="ico">'+icon+'</div><h3>'+titleTxt+'</h3><p class="muted">'+desc+'</p><button class="btn ghost" onclick="'+fn+'">Manage →</button></div>')};
-  if(can('MANAGE_ADMINS')||can('MANAGE_ROLES'))cards.push('<div class="admin-card"><div class="ico">⚙</div><h3>People & Permissions</h3><p class="muted">Roles and individual permissions, separated and easy to manage.</p><button class="btn ghost" onclick="permissionsModal()">Manage →</button></div>');
+  if(can('MANAGE_ADMINS')||can('MANAGE_ROLES'))cards.push('<div class="admin-card"><div class="ico">⚙</div><h3>People & Permissions</h3><p class="muted">Roles and individual permissions, separated and easy to manage.</p><button class="btn ghost" onclick="go('permissions')">Open →</button></div>');
   add('MANAGE_TEACHERS','🎓','Teachers','Create teachers and prepare their activation keys.','teacherModal()');
   add('MANAGE_STUDENTS','♙','Students','Manage official B4 students.','adminStudentModal()');
   add('MANAGE_KEYS','🔑','Activation Keys','Create one-time keys for students and teachers.','activationModal()');
@@ -269,7 +311,7 @@ function settingsV(){
 }
 async function unlinkGoogle(){if(!confirm('Unlink Google from this B4 account?'))return;try{await api('/api/auth/linked/GOOGLE',{method:'DELETE'});await loadMe();toast('Google unlinked ✓')}catch(e){toast(e.message)}}
 
-function activationModal(){
+async function activationModal(){
   if(!can('MANAGE_KEYS')){toast('Permission denied');return}
   let keys=[],people={students:[],teachers:[]};
   try{[keys,people]=[(await api('/api/admin/activation-keys')).keys||[],await api('/api/admin/people')]}catch(e){toast(e.message);return}
