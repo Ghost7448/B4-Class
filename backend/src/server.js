@@ -116,13 +116,17 @@ async function ensurePermissionSchema() {
   await q('CREATE TABLE IF NOT EXISTS user_permissions( user_id BIGINT UNSIGNED NOT NULL, permission_id INT UNSIGNED NOT NULL, granted_by BIGINT UNSIGNED NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,permission_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(permission_id) REFERENCES permissions(id) ON DELETE CASCADE, FOREIGN KEY(granted_by) REFERENCES users(id) ON DELETE SET NULL ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   for (const [code,label] of PERMISSION_DEFS) await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',[code,label]);
   await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'SUPER_ADMIN',id FROM permissions");
+  const teacherPerms=['VIEW_CLASS','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ANNOUNCEMENTS','MANAGE_SUBJECTS','MANAGE_ATTENDANCE','MANAGE_ANALYTICS','MANAGE_TEACHER_CHAT','USE_AI'];
+  for(const code of teacherPerms) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'TEACHER',id FROM permissions WHERE code=?",[code]);
+  for(const code of ['VIEW_CLASS','USE_AI']) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'STUDENT',id FROM permissions WHERE code=?",[code]);
 }
 
 async function getPermissionCodes(userId) {
   const [users] = await q('SELECT role,status FROM users WHERE id=? LIMIT 1',[userId]);
   const user = users[0];
   if (!user || user.status !== 'ACTIVE') return [];
-  if (user.role === 'SUPER_ADMIN') {
+  const [adminFlag] = await q("SELECT 1 FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=? AND p.code='ADMINISTRATOR' LIMIT 1",[userId]);
+  if (user.role === 'SUPER_ADMIN' || adminFlag[0]) {
     const [all] = await q('SELECT code FROM permissions ORDER BY code');
     return all.map(x=>x.code);
   }
@@ -493,6 +497,7 @@ app.post('/api/admin/students', requirePermission('MANAGE_STUDENTS'), async (req
 app.patch('/api/admin/students/:id',requirePermission('MANAGE_STUDENTS'),async(req,res)=>{const id=Number(req.params.id),{studentCode,officialName,displayName}=req.body||{};if(!studentCode||!officialName||!displayName)return res.status(400).json({error:'Student code, official name and display name are required'});try{const [r]=await q("UPDATE students SET student_code=?,official_name=?,display_name=? WHERE id=? AND class_name='B4'",[String(studentCode).trim(),String(officialName).trim(),String(displayName).trim(),id]);if(!r.affectedRows)return res.status(404).json({error:'Student not found'});await audit(req,'STUDENT_UPDATED','student',id);res.json({ok:true});}catch(e){res.status(400).json({error:e.code==='ER_DUP_ENTRY'?'Student code already exists':e.message})}});
 
 const imageUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:5*1024*1024},fileFilter:(req,file,cb)=>cb(null,['image/png','image/jpeg','image/webp'].includes(file.mimetype))});
+app.delete('/api/admin/students/:id',requirePermission('MANAGE_STUDENTS'),async(req,res)=>{const id=Number(req.params.id);const [r]=await q("DELETE FROM students WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Student not found'});await audit(req,'STUDENT_DELETED','student',id);res.json({ok:true});});
 async function saveAvatar(type,id,file){await q('INSERT INTO profile_images(entity_type,entity_id,mime_type,data) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE mime_type=VALUES(mime_type),data=VALUES(data)',[type,id,file.mimetype,file.buffer]);return '/api/profile-images/'+type+'/'+id;}
 app.get('/api/profile-images/:type/:id',async(req,res)=>{const type=String(req.params.type),id=Number(req.params.id);if(!['user','student','teacher'].includes(type)||!Number.isSafeInteger(id))return res.status(400).end();const [r]=await q('SELECT mime_type,data FROM profile_images WHERE entity_type=? AND entity_id=? LIMIT 1',[type,id]);if(!r[0])return res.status(404).end();res.setHeader('Content-Type',r[0].mime_type);res.setHeader('Cache-Control','public,max-age=300');res.send(r[0].data);});
 app.post('/api/auth/avatar',requireAuth,imageUpload.single('file'),async(req,res)=>{if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const url=await saveAvatar('user',req.session.userId,req.file);await q('UPDATE users SET avatar_url=? WHERE id=?',[url,req.session.userId]);await audit(req,'AVATAR_UPDATED','user',req.session.userId);res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
@@ -581,6 +586,8 @@ app.get('/api/admin/chat/edit-logs',requirePermission('VIEW_LOGS'),async(req,res
 app.post('/api/chat/typing',requireAuth,async(req,res)=>{const typing=!!req.body?.typing;if(typing)await q('INSERT INTO chat_typing(user_id,typing) VALUES(?,1) ON DUPLICATE KEY UPDATE typing=1,updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM chat_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
 app.get('/api/chat/typing',requireAuth,async(req,res)=>{await q('DELETE FROM chat_typing WHERE updated_at < (NOW() - INTERVAL 5 SECOND)');const [users]=await q("SELECT t.user_id,t.updated_at,u.display_name FROM chat_typing t JOIN users u ON u.id=t.user_id WHERE t.typing=1 AND u.status='ACTIVE' ORDER BY t.updated_at DESC");res.json({users});});
 app.post('/api/ai', requirePermission('USE_AI'), async (req, res) => {
+  const [aiUser]=await q('SELECT role FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+  if(aiUser[0]?.role!=='STUDENT' && aiUser[0]?.role!=='SUPER_ADMIN') return res.status(403).json({error:'AI is available to B4 students only'});
   const message = String(req.body?.message || '').trim();
   if (!message) return res.status(400).json({ error: 'Message required' });
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
