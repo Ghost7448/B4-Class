@@ -96,7 +96,7 @@ function startDeadlineTicker(){}
 document.documentElement.dataset.theme=S.theme;
 document.addEventListener('click',e=>{const n=e.target.closest?.('#nav [data-v]');if(n){e.preventDefault();go(n.dataset.v);}if(e.target.closest?.('#theme'))toggleTheme();if(e.target.closest?.('#lang'))toggleLang();if(e.target.closest?.('#install'))installApp();if(e.target.closest?.('#mobile'))$('#side')?.classList.toggle('open');if(e.target.closest?.('#profile'))S.me?go('settings'):loginModal();if(e.target.closest?.('#ai'))aiModal();if(e.target.closest?.('#bell'))go('notifications');});
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();window.__b4InstallPrompt=e;});
-views.dashboard=dashboard;views.students=studentsV;views.subjects=subjectsV;views.schedule=scheduleV;views.assignments=tasksV;views.resources=resourcesV;views.exams=examsV;views.announcements=newsV;views.chat=chatV;views.attendance=attendanceV;views.admin=adminV;views.settings=settingsV;
+views.dashboard=dashboard;views.students=studentsV;views.subjects=subjectsV;views.schedule=scheduleV;views.assignments=tasksV;views.resources=resourcesV;views.exams=examsV;views.announcements=newsV;views.chat=chatV;views.attendance=attendanceV;views.admin=adminV;views.settings=settingsV;views.notifications=notificationsV;views.permissions=permissionsV;
 
 document.addEventListener('click',e=>{
   const closeBtn=e.target.closest?.('.close'); if(closeBtn)e.stopPropagation();
