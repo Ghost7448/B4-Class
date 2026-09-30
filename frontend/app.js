@@ -356,4 +356,17 @@ async function activationModal(){
 }
 
 views.admin=adminV;views.settings=settingsV;views.assignments=tasksV;views.exams=examsV;
-render();deadlineTicker();
+
+// Stable boot: render immediately, then hydrate the session/data without blocking the UI.
+function b4BootError(message){
+  console.error('[B4 boot]',message);
+  const content=document.querySelector('#content');
+  if(content) content.innerHTML='<div class="card notice"><b>B4 could not finish loading.</b><div class="muted">'+esc(message||'Unknown error')+'</div><button class="btn ghost" style="margin-top:12px" onclick="location.reload()">Reload</button></div>';
+}
+window.addEventListener('error',e=>b4BootError(e.error?.message||e.message||'JavaScript error'));
+window.addEventListener('unhandledrejection',e=>b4BootError(e.reason?.message||String(e.reason||'Unhandled promise rejection')));
+
+document.documentElement.dataset.theme=S.theme;
+render();
+deadlineTicker();
+loadMe().catch(e=>b4BootError(e.message||e));
