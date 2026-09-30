@@ -333,7 +333,7 @@ app.patch('/api/auth/profile', requireAuth, async (req, res) => {
   res.json({ ok: true, user: await userById(req.session.userId) });
 });
 
-app.get('/api/admin/permissions', requirePermission('MANAGE_ROLES'), async (req,res)=>{
+app.get('/api/admin/permissions', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
   const [permissions]=await q('SELECT id,code,label FROM permissions ORDER BY code');
   res.json({permissions});
 });
@@ -478,7 +478,8 @@ app.delete('/api/chat/messages/:id',requireAuth,async(req,res)=>{
   const id=Number(req.params.id);
   const [rows]=await q('SELECT id,user_id,deleted_at FROM chat_messages WHERE id=? LIMIT 1',[id]);const m=rows[0];
   if(!m)return res.status(404).json({error:'Message not found'});
-  const canDelete=Number(m.user_id)===Number(req.session.userId)||['SUPER_ADMIN','ADMIN','TEACHER'].includes(req.session.role);
+  const permissions=await getPermissionCodes(req.session.userId);
+  const canDelete=Number(m.user_id)===Number(req.session.userId)||permissions.includes('MANAGE_CHAT');
   if(!canDelete)return res.status(403).json({error:'Permission denied'});
   if(m.deleted_at)return res.json({ok:true});
   await q('UPDATE chat_messages SET deleted_at=NOW(),deleted_by=? WHERE id=?',[req.session.userId,id]);
