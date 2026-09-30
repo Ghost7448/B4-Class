@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS resource_files(
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  resource_id BIGINT UNSIGNED NOT NULL,
+  filename VARCHAR(255) NOT NULL,
+  mime_type VARCHAR(120) NOT NULL DEFAULT 'application/pdf',
+  data MEDIUMBLOB NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE,
+  INDEX idx_resource_files_resource(resource_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
