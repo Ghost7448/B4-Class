@@ -450,7 +450,7 @@ app.post('/api/admin/subjects',requirePermission('MANAGE_SUBJECTS'),async(req,re
 app.patch('/api/admin/subjects/:id',requirePermission('MANAGE_SUBJECTS'),async(req,res)=>{const id=Number(req.params.id),{name,teacherName='',progress=0}=req.body||{};const [r]=await q("UPDATE subjects SET name=?,teacher_name=?,progress=? WHERE id=? AND class_name='B4'",[String(name||'').trim(),String(teacherName||'').trim()||null,Math.max(0,Math.min(100,Number(progress)||0)),id]);if(!r.affectedRows)return res.status(404).json({error:'Subject not found'});await audit(req,'SUBJECT_UPDATED','subject',id);res.json({ok:true});});
 app.delete('/api/admin/subjects/:id',requirePermission('MANAGE_SUBJECTS'),async(req,res)=>{const id=Number(req.params.id),[r]=await q("DELETE FROM subjects WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Subject not found'});await audit(req,'SUBJECT_DELETED','subject',id);res.json({ok:true});});
 
-app.get('/api/admin/people', requireAnyPermission(['MANAGE_ACCOUNTS','MANAGE_ADMINS','MANAGE_STUDENTS']), async (req,res) => {
+app.get('/api/admin/people', requireAnyPermission(['MANAGE_ACCOUNTS','MANAGE_ADMINS','MANAGE_STUDENTS','MANAGE_TEACHERS','MANAGE_KEYS']), async (req,res) => {
   const [students] = await q(`SELECT id,student_code,official_name,display_name FROM students WHERE class_name='B4' ORDER BY display_name`);
   const [teachers] = await q(`SELECT id,teacher_code,official_name,display_name FROM teachers WHERE class_name='B4' ORDER BY display_name`);
   res.json({ students, teachers });
