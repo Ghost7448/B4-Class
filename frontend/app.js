@@ -337,5 +337,23 @@ async function startExam(id){
 }
 
 views.assignments=tasksV;views.exams=examsV;views.admin=adminV;views.settings=settingsV;
-render();
-deadlineTicker();
+
+/* Allow every authorized key manager to issue student/teacher activation keys. */
+async function activationModal(){
+  if(!can('MANAGE_KEYS')){toast('You do not have permission to manage activation keys');return}
+  let keys=[],people={students:[],teachers:[]};
+  try{
+    keys=(await api('/api/admin/activation-keys')).keys||[];
+    people=await api('/api/admin/people');
+  }catch(e){toast(e.message);return}
+  const opts=[...(people.students||[]).map(p=>'<option value="STUDENT:'+p.id+'">Student • '+esc(p.display_name)+' ('+esc(p.student_code)+')</option>'),
+    ...(people.teachers||[]).map(p=>'<option value="TEACHER:'+p.id+'">Teacher • '+esc(p.display_name)+' ('+esc(p.teacher_code||'')+')</option>')].join('');
+  modal('<div class="modalhead"><h2>Activation Keys</h2><button class="close" onclick="close()">×</button></div>'+
+    '<p class="muted">Create a one-time key for a B4 student or teacher.</p>'+
+    '<form class="form" onsubmit="createKey(event)"><div class="field"><label>Person</label><select id="keyPerson" required>'+opts+'</select></div>'+
+    '<button class="btn primary">Generate one-time key</button></form><hr style="border:0;border-top:1px solid var(--line);margin:18px 0">'+
+    '<div class="list">'+(keys.map(k=>'<div class="item"><span class="grow"><b>'+esc(k.key_preview)+'</b><br><small class="muted">'+esc(k.person_name||'')+' • '+esc(k.person_type)+' • '+esc(k.status)+'</small></span><span class="badge">Hash only</span></div>').join('')||'<div class="empty">No active keys.</div>')+'</div>');
+}
+
+views.admin=adminV;views.settings=settingsV;views.assignments=tasksV;views.exams=examsV;
+render();deadlineTicker();
