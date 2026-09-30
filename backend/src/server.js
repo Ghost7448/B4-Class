@@ -96,6 +96,10 @@ const PERMISSION_DEFS = [
 ];
 
 async function ensurePermissionSchema() {
+  await q("CREATE TABLE IF NOT EXISTS profile_images(entity_type VARCHAR(20) NOT NULL,entity_id BIGINT UNSIGNED NOT NULL,mime_type VARCHAR(120) NOT NULL,data MEDIUMBLOB NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(entity_type,entity_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS chat_typing(user_id BIGINT UNSIGNED PRIMARY KEY,typing TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("ALTER TABLE students ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500) NULL");
+  await q("ALTER TABLE teachers ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500) NULL");
   await q('CREATE TABLE IF NOT EXISTS resource_files( id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, resource_id BIGINT UNSIGNED NOT NULL, filename VARCHAR(255) NOT NULL, mime_type VARCHAR(120) NOT NULL DEFAULT \'application/pdf\', data MEDIUMBLOB NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE, INDEX idx_resource_files_resource(resource_id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   await q('CREATE TABLE IF NOT EXISTS user_permissions( user_id BIGINT UNSIGNED NOT NULL, permission_id INT UNSIGNED NOT NULL, granted_by BIGINT UNSIGNED NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,permission_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(permission_id) REFERENCES permissions(id) ON DELETE CASCADE, FOREIGN KEY(granted_by) REFERENCES users(id) ON DELETE SET NULL ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   for (const [code,label] of PERMISSION_DEFS) await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',[code,label]);
@@ -157,12 +161,13 @@ app.get('/api/health', async (req, res) => {
 async function getBootstrap(req) {
   const [students] = await q(`
     SELECT s.id,s.student_code,s.official_name,
-           COALESCE(u.display_name,s.display_name) display_name,u.avatar_url
+           COALESCE(u.display_name,s.display_name) display_name,COALESCE(u.avatar_url,s.avatar_url) avatar_url
     FROM students s
     LEFT JOIN users u ON u.student_id=s.id AND u.status='ACTIVE'
     WHERE s.class_name='B4'
     ORDER BY s.display_name
   `);
+  const [teachers] = await q(`SELECT t.id,t.teacher_code,t.official_name,COALESCE(u.display_name,t.display_name) display_name,COALESCE(u.avatar_url,t.avatar_url) avatar_url FROM teachers t LEFT JOIN users u ON u.teacher_id=t.id AND u.status='ACTIVE' WHERE t.class_name='B4' ORDER BY t.display_name`);
   const [subjects] = await q(`SELECT id,name,teacher_name,progress FROM subjects WHERE class_name='B4' ORDER BY name`);
   const [assignments] = await q(`
     SELECT a.id,a.title,a.description,a.status,a.subject_id,a.due_at,a.created_by,s.name subject_name
@@ -207,8 +212,8 @@ async function getBootstrap(req) {
       WHERE user_id=? OR user_id IS NULL ORDER BY created_at DESC LIMIT 30
     `,[req.session.userId]);
   }
-  if(!req.session.userId) return {students,subjects,schedule,assignments:[],announcements:[],resources:[],exams:[],attendance:[],messages:[],notifications:[]};
-  return {students,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications};
+  if(!req.session.userId) return {students,teachers,subjects,schedule,assignments:[],announcements:[],resources:[],exams:[],attendance:[],messages:[],notifications:[]};
+  return {students,teachers,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications};
 }
 
 app.get('/api/bootstrap', async (req, res) => {
@@ -443,6 +448,8 @@ app.post('/api/admin/teachers',requirePermission('MANAGE_TEACHERS'),async(req,re
   const {teacherCode,officialName,displayName}=req.body||{};if(!teacherCode||!officialName||!displayName)return res.status(400).json({error:'Teacher code, official name and display name are required'});
   try{const [r]=await q("INSERT INTO teachers(teacher_code,official_name,display_name,class_name) VALUES(?,?,?,'B4')",[teacherCode.trim(),officialName.trim(),displayName.trim()]);await audit(req,'TEACHER_CREATED','teacher',r.insertId,{teacherCode:teacherCode.trim()});res.json({ok:true,id:r.insertId});}catch(e){res.status(400).json({error:e.code==='ER_DUP_ENTRY'?'Teacher code already exists':e.message});}
 });
+app.patch('/api/admin/teachers/:id',requirePermission('MANAGE_TEACHERS'),async(req,res)=>{const id=Number(req.params.id),{teacherCode,officialName,displayName}=req.body||{};if(!teacherCode||!officialName||!displayName)return res.status(400).json({error:'Teacher code, official name and display name are required'});try{const [r]=await q("UPDATE teachers SET teacher_code=?,official_name=?,display_name=? WHERE id=? AND class_name='B4'",[String(teacherCode).trim(),String(officialName).trim(),String(displayName).trim(),id]);if(!r.affectedRows)return res.status(404).json({error:'Teacher not found'});await audit(req,'TEACHER_UPDATED','teacher',id);res.json({ok:true});}catch(e){res.status(400).json({error:e.code==='ER_DUP_ENTRY'?'Teacher code already exists':e.message})}});
+app.delete('/api/admin/teachers/:id',requirePermission('MANAGE_TEACHERS'),async(req,res)=>{const id=Number(req.params.id);const [r]=await q("DELETE FROM teachers WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Teacher not found'});await audit(req,'TEACHER_DELETED','teacher',id);res.json({ok:true});});
 app.post('/api/admin/subjects',requirePermission('MANAGE_SUBJECTS'),async(req,res)=>{
   const {name,teacherName='',progress=0}=req.body||{};if(!name?.trim())return res.status(400).json({error:'Subject name is required'});
   try{const [r]=await q("INSERT INTO subjects(name,class_name,teacher_name,progress) VALUES(?,'B4',?,?)",[name.trim(),String(teacherName||'').trim()||null,Math.max(0,Math.min(100,Number(progress)||0))]);await audit(req,'SUBJECT_CREATED','subject',r.insertId,{name:name.trim()});res.json({ok:true,id:r.insertId});}catch(e){res.status(400).json({error:e.code==='ER_DUP_ENTRY'?'Subject already exists':e.message});}
@@ -451,8 +458,8 @@ app.patch('/api/admin/subjects/:id',requirePermission('MANAGE_SUBJECTS'),async(r
 app.delete('/api/admin/subjects/:id',requirePermission('MANAGE_SUBJECTS'),async(req,res)=>{const id=Number(req.params.id),[r]=await q("DELETE FROM subjects WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Subject not found'});await audit(req,'SUBJECT_DELETED','subject',id);res.json({ok:true});});
 
 app.get('/api/admin/people', requireAnyPermission(['MANAGE_ACCOUNTS','MANAGE_ADMINS','MANAGE_STUDENTS','MANAGE_TEACHERS','MANAGE_KEYS']), async (req,res) => {
-  const [students] = await q(`SELECT id,student_code,official_name,display_name FROM students WHERE class_name='B4' ORDER BY display_name`);
-  const [teachers] = await q(`SELECT id,teacher_code,official_name,display_name FROM teachers WHERE class_name='B4' ORDER BY display_name`);
+  const [students] = await q(`SELECT id,student_code,official_name,display_name,avatar_url FROM students WHERE class_name='B4' ORDER BY display_name`);
+  const [teachers] = await q(`SELECT id,teacher_code,official_name,display_name,avatar_url FROM teachers WHERE class_name='B4' ORDER BY display_name`);
   res.json({ students, teachers });
 });
 
@@ -464,12 +471,19 @@ app.post('/api/admin/students', requirePermission('MANAGE_STUDENTS'), async (req
       [studentCode.trim(),officialName.trim(),displayName.trim(),specialization.trim()]);
     await q(`INSERT INTO activity_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)`,
       [req.session.userId,'STUDENT_CREATED','student',r.insertId,studentCode.trim()]);
-    res.json({ok:true});
+    res.json({ok:true,id:r.insertId});
   } catch(e) {
     res.status(400).json({error:e.code==='ER_DUP_ENTRY'?'Student code already exists':e.message});
   }
 });
+app.patch('/api/admin/students/:id',requirePermission('MANAGE_STUDENTS'),async(req,res)=>{const id=Number(req.params.id),{studentCode,officialName,displayName}=req.body||{};if(!studentCode||!officialName||!displayName)return res.status(400).json({error:'Student code, official name and display name are required'});try{const [r]=await q("UPDATE students SET student_code=?,official_name=?,display_name=? WHERE id=? AND class_name='B4'",[String(studentCode).trim(),String(officialName).trim(),String(displayName).trim(),id]);if(!r.affectedRows)return res.status(404).json({error:'Student not found'});await audit(req,'STUDENT_UPDATED','student',id);res.json({ok:true});}catch(e){res.status(400).json({error:e.code==='ER_DUP_ENTRY'?'Student code already exists':e.message})}});
 
+const imageUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:5*1024*1024},fileFilter:(req,file,cb)=>cb(null,['image/png','image/jpeg','image/webp'].includes(file.mimetype))});
+async function saveAvatar(type,id,file){await q('INSERT INTO profile_images(entity_type,entity_id,mime_type,data) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE mime_type=VALUES(mime_type),data=VALUES(data)',[type,id,file.mimetype,file.buffer]);return '/api/profile-images/'+type+'/'+id;}
+app.get('/api/profile-images/:type/:id',async(req,res)=>{const type=String(req.params.type),id=Number(req.params.id);if(!['user','student','teacher'].includes(type)||!Number.isSafeInteger(id))return res.status(400).end();const [r]=await q('SELECT mime_type,data FROM profile_images WHERE entity_type=? AND entity_id=? LIMIT 1',[type,id]);if(!r[0])return res.status(404).end();res.setHeader('Content-Type',r[0].mime_type);res.setHeader('Cache-Control','public,max-age=300');res.send(r[0].data);});
+app.post('/api/auth/avatar',requireAuth,imageUpload.single('file'),async(req,res)=>{if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const url=await saveAvatar('user',req.session.userId,req.file);await q('UPDATE users SET avatar_url=? WHERE id=?',[url,req.session.userId]);await audit(req,'AVATAR_UPDATED','user',req.session.userId);res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
+app.post('/api/admin/students/:id/avatar',requirePermission('MANAGE_STUDENTS'),imageUpload.single('file'),async(req,res)=>{const id=Number(req.params.id);if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const [r]=await q("SELECT id FROM students WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!r[0])return res.status(404).json({error:'Student not found'});const url=await saveAvatar('student',id,req.file);await q('UPDATE students SET avatar_url=? WHERE id=?',[url,id]);await audit(req,'AVATAR_UPDATED','student',id);res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
+app.post('/api/admin/teachers/:id/avatar',requirePermission('MANAGE_TEACHERS'),imageUpload.single('file'),async(req,res)=>{const id=Number(req.params.id);if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const [r]=await q("SELECT id FROM teachers WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!r[0])return res.status(404).json({error:'Teacher not found'});const url=await saveAvatar('teacher',id,req.file);await q('UPDATE teachers SET avatar_url=? WHERE id=?',[url,id]);await audit(req,'AVATAR_UPDATED','teacher',id);res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
 app.post('/api/admin/assignments', requirePermission('MANAGE_ASSIGNMENTS'), async (req,res) => {
   const {title,description='',subjectId=null,dueAt=null} = req.body || {};
   if(!title?.trim()) return res.status(400).json({error:'Assignment title is required'});
@@ -550,6 +564,8 @@ app.get('/api/admin/chat/edit-logs',requirePermission('VIEW_LOGS'),async(req,res
   res.json({logs});
 });
 
+app.post('/api/chat/typing',requireAuth,async(req,res)=>{const typing=!!req.body?.typing;if(typing)await q('INSERT INTO chat_typing(user_id,typing) VALUES(?,1) ON DUPLICATE KEY UPDATE typing=1,updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM chat_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
+app.get('/api/chat/typing',requireAuth,async(req,res)=>{await q('DELETE FROM chat_typing WHERE updated_at < (NOW() - INTERVAL 5 SECOND)');const [users]=await q("SELECT t.user_id,t.updated_at,u.display_name FROM chat_typing t JOIN users u ON u.id=t.user_id WHERE t.typing=1 AND u.status='ACTIVE' ORDER BY t.updated_at DESC");res.json({users});});
 app.post('/api/ai', requirePermission('USE_AI'), async (req, res) => {
   const message = String(req.body?.message || '').trim();
   if (!message) return res.status(400).json({ error: 'Message required' });
