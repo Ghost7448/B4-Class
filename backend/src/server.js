@@ -103,9 +103,16 @@ const PERMISSION_DEFS = [
 async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS profile_images(entity_type VARCHAR(20) NOT NULL,entity_id BIGINT UNSIGNED NOT NULL,mime_type VARCHAR(120) NOT NULL,data MEDIUMBLOB NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(entity_type,entity_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS chat_typing(user_id BIGINT UNSIGNED PRIMARY KEY,typing TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-  await q("ALTER TABLE students ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500) NULL");
-  await q("ALTER TABLE teachers ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500) NULL");
-  await q("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INT NOT NULL DEFAULT 1");
+  // MySQL does not support ADD COLUMN IF NOT EXISTS on all supported 8.x builds.
+  // Check INFORMATION_SCHEMA first so bootstrap is safe and idempotent.
+  const [studentAvatarCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='students' AND COLUMN_NAME='avatar_url' LIMIT 1");
+  if (!studentAvatarCol.length) await q("ALTER TABLE students ADD COLUMN avatar_url VARCHAR(500) NULL");
+
+  const [teacherAvatarCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='teachers' AND COLUMN_NAME='avatar_url' LIMIT 1");
+  if (!teacherAvatarCol.length) await q("ALTER TABLE teachers ADD COLUMN avatar_url VARCHAR(500) NULL");
+
+  const [sessionVersionCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='session_version' LIMIT 1");
+  if (!sessionVersionCol.length) await q("ALTER TABLE users ADD COLUMN session_version INT NOT NULL DEFAULT 1");
   await q("CREATE TABLE IF NOT EXISTS b4_attendance(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,attendance_date DATE NOT NULL,status ENUM('PRESENT','ABSENT') NOT NULL DEFAULT 'PRESENT',marked_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE KEY uq_attendance(user_id,attendance_date),INDEX idx_attendance_date(attendance_date)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_badges(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,description VARCHAR(500) NULL,icon_mime VARCHAR(120) NULL,icon_data MEDIUMBLOB NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_user_badges(user_id BIGINT UNSIGNED NOT NULL,badge_id BIGINT UNSIGNED NOT NULL,assigned_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(user_id,badge_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
