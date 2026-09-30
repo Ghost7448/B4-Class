@@ -636,7 +636,7 @@ app.get('/api/auth/google/callback',async(req,res)=>{
     const [owner]=await q("SELECT user_id FROM linked_accounts WHERE provider='GOOGLE' AND provider_user_id=? LIMIT 1",[String(info.sub)]);
     if(mode==='login'){
       if(!owner[0])return res.redirect('/?google=not-linked');
-      const [u]=await q('SELECT id,role,status FROM users WHERE id=? LIMIT 1',[owner[0].user_id]);
+      const [u]=await q('SELECT id,role,status,session_version FROM users WHERE id=? LIMIT 1',[owner[0].user_id]);
       if(!u[0]||u[0].status!=='ACTIVE')return res.redirect('/?google=disabled');
       req.session.userId=u[0].id;req.session.role=u[0].role;req.session.sessionVersion=Number(u[0].session_version||1);await audit(req,'GOOGLE_LOGIN','user',u[0].id,{email:info.email||null});
       delete req.session.googleOAuthState;delete req.session.googleOAuthMode;return res.redirect('/?google=login');
