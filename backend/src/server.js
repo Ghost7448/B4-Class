@@ -92,7 +92,12 @@ const PERMISSION_DEFS = [
   ['MANAGE_CHAT','Moderate chat'],
   ['VIEW_LOGS','View security/activity logs'],
   ['USE_AI','Use B4 AI'],
-  ['VIEW_CLASS','View class']
+  ['VIEW_CLASS','View class'],
+  ['MANAGE_BADGES','Manage badges'],
+  ['MANAGE_DEVELOPERS','Manage developers'],
+  ['MANAGE_TEACHER_CHAT','Teacher chat'],
+  ['MANAGE_ANALYTICS','View attendance analytics'],
+  ['ADMINISTRATOR','Administrator']
 ];
 
 async function ensurePermissionSchema() {
@@ -100,6 +105,13 @@ async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS chat_typing(user_id BIGINT UNSIGNED PRIMARY KEY,typing TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("ALTER TABLE students ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500) NULL");
   await q("ALTER TABLE teachers ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(500) NULL");
+  await q("ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INT NOT NULL DEFAULT 1");
+  await q("CREATE TABLE IF NOT EXISTS b4_attendance(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,attendance_date DATE NOT NULL,status ENUM('PRESENT','ABSENT') NOT NULL DEFAULT 'PRESENT',marked_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE KEY uq_attendance(user_id,attendance_date),INDEX idx_attendance_date(attendance_date)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS b4_badges(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,description VARCHAR(500) NULL,icon_mime VARCHAR(120) NULL,icon_data MEDIUMBLOB NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS b4_user_badges(user_id BIGINT UNSIGNED NOT NULL,badge_id BIGINT UNSIGNED NOT NULL,assigned_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(user_id,badge_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS b4_developers(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,image_mime VARCHAR(120) NULL,image_data MEDIUMBLOB NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS b4_teacher_messages(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,body TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_teacher_chat(created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS b4_teacher_typing(user_id BIGINT UNSIGNED PRIMARY KEY,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q('CREATE TABLE IF NOT EXISTS resource_files( id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, resource_id BIGINT UNSIGNED NOT NULL, filename VARCHAR(255) NOT NULL, mime_type VARCHAR(120) NOT NULL DEFAULT \'application/pdf\', data MEDIUMBLOB NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE, INDEX idx_resource_files_resource(resource_id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   await q('CREATE TABLE IF NOT EXISTS user_permissions( user_id BIGINT UNSIGNED NOT NULL, permission_id INT UNSIGNED NOT NULL, granted_by BIGINT UNSIGNED NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,permission_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(permission_id) REFERENCES permissions(id) ON DELETE CASCADE, FOREIGN KEY(granted_by) REFERENCES users(id) ON DELETE SET NULL ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   for (const [code,label] of PERMISSION_DEFS) await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',[code,label]);
@@ -118,11 +130,10 @@ async function getPermissionCodes(userId) {
   return rows.map(x=>x.code);
 }
 
-const requireAuth = (req, res, next) => req.session.userId
-  ? next()
-  : res.status(401).json({ error: 'Login required' });
+const requireAuth = async (req,res,next) => { if(!req.session.userId) return res.status(401).json({error:'Login required'}); try { const [r]=await q('SELECT session_version,status FROM users WHERE id=? LIMIT 1',[req.session.userId]); if(!r[0]||r[0].status!=='ACTIVE'||Number(r[0].session_version)!==Number(req.session.sessionVersion||0)){req.session.destroy(()=>{});return res.status(401).json({error:'Session expired. Please log in again'});} next(); } catch(e){res.status(500).json({error:'Authentication check failed'});} };
 const requirePermission = permission => async (req,res,next) => {
   if (!req.session.userId) return res.status(401).json({error:'Login required'});
+  const [sv]=await q('SELECT session_version,status FROM users WHERE id=? LIMIT 1',[req.session.userId]); if(!sv[0]||sv[0].status!=='ACTIVE'||Number(sv[0].session_version)!==Number(req.session.sessionVersion||0)){req.session.destroy(()=>{});return res.status(401).json({error:'Session expired. Please log in again'});}
   try {
     const permissions=await getPermissionCodes(req.session.userId);
     if(!permissions.includes(permission)) return res.status(403).json({error:'Permission denied',permission});
@@ -131,6 +142,7 @@ const requirePermission = permission => async (req,res,next) => {
 };
 const requireAnyPermission = permissions => async (req,res,next) => {
   if (!req.session.userId) return res.status(401).json({error:'Login required'});
+  const [sv]=await q('SELECT session_version,status FROM users WHERE id=? LIMIT 1',[req.session.userId]); if(!sv[0]||sv[0].status!=='ACTIVE'||Number(sv[0].session_version)!==Number(req.session.sessionVersion||0)){req.session.destroy(()=>{});return res.status(401).json({error:'Session expired. Please log in again'});}
   try {
     const granted=await getPermissionCodes(req.session.userId);
     if(!permissions.some(p=>granted.includes(p))) return res.status(403).json({error:'Permission denied'});
@@ -323,6 +335,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
   req.session.userId = u.id;
   req.session.role = u.role;
+  req.session.sessionVersion = Number(u.session_version||1);
   await audit(req,'LOGIN','user',u.id);
   res.json({ ok: true, user: await userById(u.id) });
 });
@@ -393,13 +406,14 @@ app.put('/api/admin/users/:id/permissions', requireAnyPermission(['MANAGE_ROLES'
 
 app.patch('/api/admin/users/:id/role', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
   const targetId=Number(req.params.id), role=String(req.body?.role||'').toUpperCase();
-  if(!Number.isSafeInteger(targetId)||!['STUDENT','TEACHER','ADMIN','SUPER_ADMIN'].includes(role)) return res.status(400).json({error:'Invalid user or role'});
+  if(!Number.isSafeInteger(targetId)||!['STUDENT','TEACHER','SUPER_ADMIN'].includes(role)) return res.status(400).json({error:'Role must be STUDENT or TEACHER'});
   const [actor]=await q('SELECT role FROM users WHERE id=? LIMIT 1',[req.session.userId]);
-  const [target]=await q('SELECT role FROM users WHERE id=? LIMIT 1',[targetId]);
+  const [target]=await q('SELECT id,role,student_id,teacher_id FROM users WHERE id=? LIMIT 1',[targetId]);
   if(!target[0]) return res.status(404).json({error:'User not found'});
   if((target[0].role==='SUPER_ADMIN'||role==='SUPER_ADMIN')&&actor[0]?.role!=='SUPER_ADMIN') return res.status(403).json({error:'Only Super Admin can manage Super Admin role'});
+  if(role==='TEACHER' && !target[0].teacher_id) return res.status(400).json({error:'This account is not linked to a teacher profile'});
+  if(role==='STUDENT' && !target[0].student_id) return res.status(400).json({error:'This account is not linked to a student profile'});
   await q('UPDATE users SET role=? WHERE id=?',[role,targetId]);
-  await q('INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)',[req.session.userId,'ROLE_UPDATED',JSON.stringify({target_user_id:targetId,role})]);
   await audit(req,'ROLE_UPDATED','user',targetId,{role});
   res.json({ok:true,user:await userById(targetId)});
 });
@@ -617,7 +631,7 @@ app.get('/api/auth/google/callback',async(req,res)=>{
       if(!owner[0])return res.redirect('/?google=not-linked');
       const [u]=await q('SELECT id,role,status FROM users WHERE id=? LIMIT 1',[owner[0].user_id]);
       if(!u[0]||u[0].status!=='ACTIVE')return res.redirect('/?google=disabled');
-      req.session.userId=u[0].id;req.session.role=u[0].role;await audit(req,'GOOGLE_LOGIN','user',u[0].id,{email:info.email||null});
+      req.session.userId=u[0].id;req.session.role=u[0].role;req.session.sessionVersion=Number(u[0].session_version||1);await audit(req,'GOOGLE_LOGIN','user',u[0].id,{email:info.email||null});
       delete req.session.googleOAuthState;delete req.session.googleOAuthMode;return res.redirect('/?google=login');
     }
     if(!req.session.userId)return res.redirect('/?google=login-required');
@@ -725,6 +739,79 @@ app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
   }
   await q('UPDATE exam_attempts SET status=\'SUBMITTED\',score=?,submitted_at=NOW() WHERE id=?',[score,attempt.id]);const total=questions.reduce((n,x)=>n+Number(x.points||0),0);const percent=total?Math.round(score/total*100):0;await audit(req,'EXAM_SUBMITTED','exam',id,{score,total,percent});res.json({ok:true,score,total,percent});
 });
+
+
+/* ===== B4 RESET / ACCOUNTS / ATTENDANCE / BADGES / DEVELOPERS / TEACHER CHAT ===== */
+app.post('/api/auth/forgot-password',async(req,res)=>{res.json({ok:true,whatsapp:'https://wa.me/201023019916'});});
+
+app.get('/api/admin/accounts',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
+  const [rows]=await q(`SELECT u.id,u.display_name,u.official_name,u.role,u.status,u.student_id,u.teacher_id,u.avatar_url,
+    EXISTS(SELECT 1 FROM linked_accounts l WHERE l.user_id=u.id AND l.provider='GOOGLE') google_linked,
+    COALESCE(s.student_code,t.teacher_code) identity_code,COALESCE(ak.key_preview,'') activation_key_preview
+    FROM users u LEFT JOIN students s ON s.id=u.student_id LEFT JOIN teachers t ON t.id=u.teacher_id
+    LEFT JOIN activation_keys ak ON ak.used_user_id=u.id ORDER BY u.display_name`);
+  res.json({accounts:rows});
+});
+app.post('/api/admin/accounts/:id/reset-password',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
+  const id=Number(req.params.id); const [u]=await q('SELECT id FROM users WHERE id=? LIMIT 1',[id]); if(!u[0])return res.status(404).json({error:'Account not found'});
+  const temp='B4-'+crypto.randomBytes(6).toString('base64url'); await q('UPDATE users SET password_hash=?,session_version=session_version+1 WHERE id=?',[await bcrypt.hash(temp,12),id]); await audit(req,'PASSWORD_RESET','user',id); res.json({ok:true,tempPassword:temp});
+});
+app.post('/api/admin/accounts/:id/end-session',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
+  const id=Number(req.params.id); const [r]=await q('UPDATE users SET session_version=session_version+1 WHERE id=?',[id]); if(!r.affectedRows)return res.status(404).json({error:'Account not found'}); await audit(req,'SESSION_ENDED','user',id); res.json({ok:true});
+});
+
+app.get('/api/admin/attendance',requirePermission('MANAGE_ATTENDANCE'),async(req,res)=>{
+  const date=String(req.query.date||new Date().toISOString().slice(0,10)); 
+  const [rows]=await q(`SELECT u.id,u.display_name,u.role,u.student_id,s.student_code,COALESCE(a.status,'PRESENT') status
+    FROM users u JOIN students s ON s.id=u.student_id LEFT JOIN b4_attendance a ON a.user_id=u.id AND a.attendance_date=?
+    WHERE u.role='STUDENT' AND u.status='ACTIVE' ORDER BY u.display_name`,[date]);
+  const [summary]=await q(`SELECT SUM(status='PRESENT') present_count,SUM(status='ABSENT') absent_count,COUNT(*) total_count FROM b4_attendance WHERE attendance_date=?`,[date]);
+  res.json({date,students:rows,summary:summary[0]||{}});
+});
+app.post('/api/admin/attendance',requirePermission('MANAGE_ATTENDANCE'),async(req,res)=>{
+  const date=String(req.body?.date||new Date().toISOString().slice(0,10)); const uid=Number(req.body?.userId); const status=req.body?.status==='ABSENT'?'ABSENT':'PRESENT';
+  if(!Number.isSafeInteger(uid))return res.status(400).json({error:'Invalid student'});
+  await q(`INSERT INTO b4_attendance(user_id,attendance_date,status,marked_by) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE status=VALUES(status),marked_by=VALUES(marked_by)`,[uid,date,status,req.session.userId,req.session.userId]);
+  await audit(req,'ATTENDANCE_MARKED','user',uid,{date,status}); res.json({ok:true});
+});
+app.get('/api/attendance/analysis',requireAuth,async(req,res)=>{
+  const [rows]=await q(`SELECT u.id,u.display_name,COUNT(a.id) marked_days,SUM(a.status='PRESENT') present_days,SUM(a.status='ABSENT') absent_days
+    FROM users u JOIN students s ON s.id=u.student_id LEFT JOIN b4_attendance a ON a.user_id=u.id
+    WHERE u.role='STUDENT' AND u.status='ACTIVE' GROUP BY u.id ORDER BY u.display_name`);
+  res.json({students:rows.map(x=>({...x,present_rate:x.marked_days?Math.round(Number(x.present_days||0)/Number(x.marked_days)*100):0}))});
+});
+
+app.get('/api/admin/badges',requirePermission('MANAGE_BADGES'),async(req,res)=>{
+  const [badges]=await q('SELECT id,name,description,created_at FROM b4_badges ORDER BY created_at DESC');
+  const [people]=await q(`SELECT u.id,u.display_name,u.role,ub.badge_id FROM users u LEFT JOIN b4_user_badges ub ON ub.user_id=u.id WHERE u.status='ACTIVE' ORDER BY u.display_name`);
+  res.json({badges,people});
+});
+app.post('/api/admin/badges',requirePermission('MANAGE_BADGES'),async(req,res)=>{
+  const name=String(req.body?.name||'').trim(),description=String(req.body?.description||'').trim();if(!name)return res.status(400).json({error:'Badge name is required'});
+  const [r]=await q('INSERT INTO b4_badges(name,description) VALUES(?,?)',[name,description||null]); await audit(req,'BADGE_CREATED','badge',r.insertId);res.json({ok:true,id:r.insertId});
+});
+app.post('/api/admin/badges/:id/icon',requirePermission('MANAGE_BADGES'),imageUpload.single('file'),async(req,res)=>{
+  if(!req.file)return res.status(400).json({error:'Image required'}); const id=Number(req.params.id);
+  await q('UPDATE b4_badges SET icon_mime=?,icon_data=? WHERE id=?',[req.file.mimetype,req.file.buffer,id]);res.json({ok:true});
+});
+app.get('/api/badges/:id/icon',async(req,res)=>{const [r]=await q('SELECT icon_mime,icon_data FROM b4_badges WHERE id=? LIMIT 1',[Number(req.params.id)]);if(!r[0]||!r[0].icon_data)return res.status(404).end();res.setHeader('Content-Type',r[0].icon_mime);res.setHeader('Cache-Control','public,max-age=300');res.send(r[0].icon_data);});
+app.post('/api/admin/badges/assign',requirePermission('MANAGE_BADGES'),async(req,res)=>{const uid=Number(req.body?.userId),bid=Number(req.body?.badgeId);await q('INSERT IGNORE INTO b4_user_badges(user_id,badge_id,assigned_by) VALUES(?,?,?)',[uid,bid,req.session.userId]);await audit(req,'BADGE_ASSIGNED','user',uid,{badgeId:bid});res.json({ok:true});});
+app.delete('/api/admin/badges/assign',requirePermission('MANAGE_BADGES'),async(req,res)=>{await q('DELETE FROM b4_user_badges WHERE user_id=? AND badge_id=?',[Number(req.body?.userId),Number(req.body?.badgeId)]);res.json({ok:true});});
+
+app.get('/api/admin/developers',requirePermission('MANAGE_DEVELOPERS'),async(req,res)=>{const [developers]=await q('SELECT id,name,created_at FROM b4_developers ORDER BY id DESC');res.json({developers});});
+app.post('/api/admin/developers',requirePermission('MANAGE_DEVELOPERS'),async(req,res)=>{const name=String(req.body?.name||'').trim();if(!name)return res.status(400).json({error:'Developer name required'});const [r]=await q('INSERT INTO b4_developers(name) VALUES(?)',[name]);await audit(req,'DEVELOPER_CREATED','developer',r.insertId);res.json({ok:true,id:r.insertId});});
+app.patch('/api/admin/developers/:id',requirePermission('MANAGE_DEVELOPERS'),async(req,res)=>{const id=Number(req.params.id),name=String(req.body?.name||'').trim();if(!name)return res.status(400).json({error:'Name required'});await q('UPDATE b4_developers SET name=? WHERE id=?',[name,id]);res.json({ok:true});});
+app.delete('/api/admin/developers/:id',requirePermission('MANAGE_DEVELOPERS'),async(req,res)=>{await q('DELETE FROM b4_developers WHERE id=?',[Number(req.params.id)]);res.json({ok:true});});
+app.post('/api/admin/developers/:id/avatar',requirePermission('MANAGE_DEVELOPERS'),imageUpload.single('file'),async(req,res)=>{if(!req.file)return res.status(400).json({error:'Image required'});await q('UPDATE b4_developers SET image_mime=?,image_data=? WHERE id=?',[req.file.mimetype,req.file.buffer,Number(req.params.id)]);res.json({ok:true});});
+app.get('/api/developers/:id/avatar',async(req,res)=>{const [r]=await q('SELECT image_mime,image_data FROM b4_developers WHERE id=?',[Number(req.params.id)]);if(!r[0]||!r[0].image_data)return res.status(404).end();res.setHeader('Content-Type',r[0].image_mime);res.send(r[0].image_data);});
+
+async function teacherOnly(req,res,next){if(!req.session.userId)return res.status(401).json({error:'Login required'});const [u]=await q('SELECT role,status FROM users WHERE id=?',[req.session.userId]);if(!u[0]||u[0].status!=='ACTIVE')return res.status(401).json({error:'Account disabled'});if(u[0].role!=='TEACHER'&&!['SUPER_ADMIN'].includes(u[0].role)&&!(await getPermissionCodes(req.session.userId)).includes('MANAGE_TEACHER_CHAT'))return res.status(403).json({error:'Teacher chat only'});next();}
+app.get('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const [rows]=await q(`SELECT m.id,m.body,m.created_at,m.user_id,u.display_name,u.avatar_url FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id ORDER BY m.created_at DESC LIMIT 100`);rows.reverse();res.json({messages:rows});});
+app.post('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const body=String(req.body?.body||'').trim();if(!body||body.length>4000)return res.status(400).json({error:'Invalid message'});const [r]=await q('INSERT INTO b4_teacher_messages(user_id,body) VALUES(?,?)',[req.session.userId,body]);await audit(req,'TEACHER_CHAT_MESSAGE','teacher_chat',r.insertId);res.json({ok:true});});
+app.post('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{if(req.body?.typing)await q('INSERT INTO b4_teacher_typing(user_id) VALUES(?) ON DUPLICATE KEY UPDATE updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM b4_teacher_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
+app.get('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{await q('DELETE FROM b4_teacher_typing WHERE updated_at<(NOW()-INTERVAL 5 SECOND)');const [rows]=await q('SELECT t.user_id,u.display_name FROM b4_teacher_typing t JOIN users u ON u.id=t.user_id ORDER BY t.updated_at DESC');res.json({users:rows});});
+
+app.get('/api/admin/developers/public',async(req,res)=>{const [developers]=await q('SELECT id,name,created_at,IF(image_data IS NULL,NULL,CONCAT("/api/developers/",id,"/avatar")) avatar_url FROM b4_developers ORDER BY id DESC');res.json({developers});});
 
 // Serve frontend assets explicitly before the SPA fallback.
 // This supports both the normal root paths (/app.js, /style.css) and the
