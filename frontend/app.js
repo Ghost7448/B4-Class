@@ -193,6 +193,7 @@ function collectExamQuestions(){
   }));
 }
 
+function editResourceModal(id){const x=S.resources.find(r=>Number(r.id)===Number(id));if(x)resourceModal(x)}async function deleteResource(id){if(!confirm('Delete this resource?'))return;try{await api('/api/admin/resources/'+id,{method:'DELETE'});close();await loadData();render();toast('Resource deleted ✓')}catch(x){toast(x.message)}}
 function resourceModal(existing=null){
   if(!can('MANAGE_RESOURCES'))return;
   const x=existing||{};
@@ -390,10 +391,11 @@ function examsV(){
       deadlineMarkup(e.starts_at,e.ends_at)+
       '<div class="meter"><span>Duration</span><b>'+(e.duration_minutes?esc(e.duration_minutes)+' min':'No limit')+'</b></div>'+
       '<div class="actions-row"><button class="btn primary" onclick="startExam('+e.id+')">Open exam →</button>'+
-      (edit?'<button class="btn ghost" onclick="editExamModal('+e.id+')">Edit</button><button class="btn danger" onclick="deleteExam('+e.id+')">Delete</button>':'')+'</div></article>';
+      (edit?'<button class="btn ghost" onclick="editExamModal('+e.id+')">Edit</button><button class="btn ghost" onclick="examSubmissions('+e.id+')">Submissions</button><button class="btn danger" onclick="deleteExam('+e.id+')">Delete</button>':'')+'</div></article>';
   }).join('')||'<div class="card empty">No exams have been published yet.</div>')+'</div>';
 }
 
+async function examSubmissions(id){try{const d=await api('/api/admin/exams/'+id+'/submissions');const rows=d.submissions||[];modal('<div class="modalhead"><h2>Exam submissions</h2><button class="close" onclick="close()">×</button></div><div class="grid c2">'+(rows.map(x=>'<div class="card"><div class="head"><b>'+esc(x.display_name)+'</b><span class="badge '+(x.status==='SUBMITTED'?'good':'warn')+'">'+esc(x.status)+'</span></div><div class="score-small"><b>'+esc(x.percent)+'%</b> • '+esc(x.score||0)+' / '+esc(x.total||0)+'</div><p class="muted">'+esc(x.submitted_at||'Not submitted')+'</p></div>').join('')||'<div class="empty">No submissions yet.</div>')+'</div>')}catch(x){toast(x.message)}}
 function showExamResult(result){
   const pct=Math.max(0,Math.min(100,Number(result.percent)||0));
   const r=50,c=2*Math.PI*r,dash=c*pct/100;
