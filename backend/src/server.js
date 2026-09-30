@@ -695,10 +695,13 @@ app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
   await q('UPDATE exam_attempts SET status=\'SUBMITTED\',score=?,submitted_at=NOW() WHERE id=?',[score,attempt.id]);const total=questions.reduce((n,x)=>n+Number(x.points||0),0);const percent=total?Math.round(score/total*100):0;await audit(req,'EXAM_SUBMITTED','exam',id,{score,total,percent});res.json({ok:true,score,total,percent});
 });
 
-// Serve the B4 frontend from the same Railway service.
-// API routes above always win; all non-API routes fall back to index.html.
+// Serve frontend assets explicitly before the SPA fallback.
+// This supports both the normal root paths (/app.js, /style.css) and the
+// older /frontend/* paths that may still exist in a local browser cache.
 const frontendPath = path.resolve(__dirname, '../../frontend');
+app.use('/frontend', express.static(frontendPath, { extensions: ['html'] }));
 app.use(express.static(frontendPath, { extensions: ['html'] }));
+
 app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
