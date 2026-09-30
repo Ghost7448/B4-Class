@@ -400,6 +400,25 @@ function showExamResult(result){
     '<div class="score-wrap"><div class="score-ring"><svg viewBox="0 0 120 120"><circle class="score-bg" cx="60" cy="60" r="50"></circle><circle class="score-value" cx="60" cy="60" r="50" stroke-dasharray="'+dash+' '+c+'"></circle></svg><div class="score-number">'+pct+'<small>/100</small></div></div>'+
     '<h2 style="text-align:center;margin:12px 0 4px">'+esc(result.score)+' / '+esc(result.total)+'</h2><p class="muted" style="text-align:center">Your exam score</p></div>');
 }
+
+let examTimerHandle=null;
+function startExamTimer(deadlineMs){
+  if(examTimerHandle)clearInterval(examTimerHandle);
+  const el=$('#examTimer');
+  if(!el)return;
+  const tick=()=>{
+    if(!deadlineMs||!Number.isFinite(deadlineMs)||deadlineMs<=0){
+      el.textContent='No time limit';el.className='badge good';return;
+    }
+    const left=Math.max(0,deadlineMs-Date.now());
+    const sec=Math.floor(left/1000),h=Math.floor(sec/3600),m=Math.floor((sec%3600)/60),s=sec%60;
+    el.textContent=(h?String(h).padStart(2,'0')+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+    el.className='badge '+(left<60000?'red':left<300000?'warn':'good');
+    if(left<=0){clearInterval(examTimerHandle);examTimerHandle=null;toast('Time is over. Submitting exam…');submitExam(true);}
+  };
+  tick();examTimerHandle=setInterval(tick,1000);
+}
+
 async function submitExam(auto=false){
   if(!window.__examRun)return;
   const answers={};
