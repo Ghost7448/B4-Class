@@ -6,7 +6,8 @@ import MySQLStoreFactory from 'express-mysql-session';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import mysql from 'mysql2/promise';
-import OpenAI from 'openai';
+import { GoogleGenAI } from '@google/genai';
+import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -40,6 +41,7 @@ const corsOptions = frontend
 app.set('trust proxy', 1);
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
+const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 }, fileFilter: (req,file,cb) => cb(null, file.mimetype === 'application/pdf') });
 
 const MySQLStore = MySQLStoreFactory(session);
 app.use(session({
@@ -82,6 +84,7 @@ const PERMISSION_DEFS = [
 ];
 
 async function ensurePermissionSchema() {
+  await q('CREATE TABLE IF NOT EXISTS resource_files( id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, resource_id BIGINT UNSIGNED NOT NULL, filename VARCHAR(255) NOT NULL, mime_type VARCHAR(120) NOT NULL DEFAULT \'application/pdf\', data MEDIUMBLOB NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE, INDEX idx_resource_files_resource(resource_id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   await q('CREATE TABLE IF NOT EXISTS user_permissions( user_id BIGINT UNSIGNED NOT NULL, permission_id INT UNSIGNED NOT NULL, granted_by BIGINT UNSIGNED NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,permission_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(permission_id) REFERENCES permissions(id) ON DELETE CASCADE, FOREIGN KEY(granted_by) REFERENCES users(id) ON DELETE SET NULL ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   for (const [code,label] of PERMISSION_DEFS) await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',[code,label]);
   await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'SUPER_ADMIN',id FROM permissions");
@@ -160,8 +163,11 @@ async function getBootstrap(req) {
   `);
   const [schedule] = await q(`SELECT day_name,p1,p2,p3,p4 FROM schedule WHERE class_name='B4' ORDER BY day_order`);
   const [resources] = await q(`
-    SELECT r.id,r.title,r.description,r.url,r.file_url,r.resource_type,r.subject_id,s.name subject_name
+    SELECT r.id,r.title,r.description,r.url,
+           COALESCE(r.file_url,CASE WHEN rf.id IS NOT NULL THEN CONCAT('/api/resources/files/',rf.id) END) file_url,
+           rf.filename,r.resource_type,r.subject_id,s.name subject_name
     FROM resources r LEFT JOIN subjects s ON s.id=r.subject_id
+    LEFT JOIN resource_files rf ON rf.resource_id=r.id
     WHERE r.class_name='B4' ORDER BY r.created_at DESC LIMIT 100
   `);
   const [exams] = await q(`
@@ -174,9 +180,12 @@ async function getBootstrap(req) {
     [attendance]=await q(`SELECT date,status FROM attendance WHERE user_id=? ORDER BY date DESC LIMIT 60`,[req.session.userId]);
   }
   [messages]=await q(`
-    SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,
-           COALESCE(u.display_name,'Deleted user') display_name,u.avatar_url
+    SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,
+           COALESCE(u.display_name,'Deleted user') display_name,u.avatar_url,
+           rm.body reply_body,ru.display_name reply_display_name
     FROM chat_messages m LEFT JOIN users u ON u.id=m.user_id
+    LEFT JOIN chat_messages rm ON rm.id=m.reply_to_id
+    LEFT JOIN users ru ON ru.id=rm.user_id
     WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100
   `);
   messages.reverse();
@@ -186,7 +195,8 @@ async function getBootstrap(req) {
       WHERE user_id=? OR user_id IS NULL ORDER BY created_at DESC LIMIT 30
     `,[req.session.userId]);
   }
-  return {students,subjects,assignments,announcements,schedule,resources,exams,attendance,messages,notifications};
+  if(!req.session.userId) return {students,subjects,schedule,assignments:[],announcements:[],resources:[],exams:[],attendance:[],messages:[],notifications:[]};
+  return {students,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications};
 }
 
 app.get('/api/bootstrap', async (req, res) => {
@@ -455,9 +465,11 @@ app.post('/api/admin/announcements', requirePermission('MANAGE_ANNOUNCEMENTS'), 
 
 app.post('/api/chat/messages',requireAuth,async(req,res)=>{
   const body=String(req.body?.body||'').trim();
+  const replyToId=req.body?.replyToId?Number(req.body.replyToId):null;
   if(!body||body.length>4000)return res.status(400).json({error:'Message is empty or too long'});
-  const [r]=await q('INSERT INTO chat_messages(user_id,body) VALUES(?,?)',[req.session.userId,body]);
-  const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,u.display_name,u.avatar_url FROM chat_messages m JOIN users u ON u.id=m.user_id WHERE m.id=?',[r.insertId]);
+  if(replyToId){const [reply]=await q('SELECT id FROM chat_messages WHERE id=? AND deleted_at IS NULL LIMIT 1',[replyToId]);if(!reply[0])return res.status(400).json({error:'Reply target not found'});}
+  const [r]=await q('INSERT INTO chat_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);
+  const [rows]=await q(`SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM chat_messages m JOIN users u ON u.id=m.user_id LEFT JOIN chat_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?`,[r.insertId]);
   res.json({message:rows[0]});
 });
 app.patch('/api/chat/messages/:id',requireAuth,async(req,res)=>{
@@ -491,22 +503,152 @@ app.get('/api/admin/chat/edit-logs',requirePermission('VIEW_LOGS'),async(req,res
   res.json({logs});
 });
 
-app.post('/api/ai', requireAuth, async (req, res) => {
+app.post('/api/ai', requirePermission('USE_AI'), async (req, res) => {
   const message = String(req.body?.message || '').trim();
   if (!message) return res.status(400).json({ error: 'Message required' });
-  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'AI is not configured on the backend yet' });
+  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) return res.status(503).json({ error: 'Gemini AI is not configured on the backend yet' });
   try {
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await client.responses.create({
-      model: process.env.OPENAI_MODEL || 'gpt-5.6-luna',
-      instructions: 'You are B4 AI Assistant for a secondary-school Telecommunication class. Explain academic topics clearly and safely. Do not pretend to know private class data unless it is provided. Prefer Arabic Egyptian explanations when the student asks in Arabic, and English when asked in English.',
-      input: message
+    const ai = new GoogleGenAI({ apiKey });
+    const interaction = await ai.interactions.create({
+      model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+      input: [
+        { type: 'user_input', content: [{ type: 'text', text: 'You are B4 AI Assistant for a secondary-school Telecommunication class. Explain academic topics clearly and safely. Do not invent private class data. Prefer Egyptian Arabic when the student asks in Arabic and English when asked in English.' }] },
+        { type: 'user_input', content: [{ type: 'text', text: message }] }
+      ]
     });
-    res.json({ answer: response.output_text || 'No answer returned.' });
+    res.json({ answer: interaction.output_text || 'No answer returned.' });
   } catch (e) {
-    console.error('OpenAI request failed:', e.message);
+    console.error('Gemini request failed:', e.message);
     res.status(502).json({ error: 'AI request failed' });
   }
+});
+
+
+app.get('/api/auth/linked', requireAuth, async (req,res)=>{
+  const [rows]=await q('SELECT provider,provider_email,created_at FROM linked_accounts WHERE user_id=? ORDER BY provider',[req.session.userId]);
+  res.json({linked:rows});
+});
+
+app.get('/api/auth/google/start', requireAuth, async (req,res)=>{
+  const clientId=process.env.GOOGLE_CLIENT_ID, redirectUri=process.env.GOOGLE_REDIRECT_URI;
+  if(!clientId||!redirectUri) return res.status(503).json({error:'Google linking is not configured'});
+  const state=crypto.randomBytes(32).toString('hex'); req.session.googleOAuthState=state;
+  const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  u.searchParams.set('client_id',clientId); u.searchParams.set('redirect_uri',redirectUri); u.searchParams.set('response_type','code');
+  u.searchParams.set('scope','openid email profile'); u.searchParams.set('state',state); u.searchParams.set('access_type','online'); u.searchParams.set('prompt','select_account');
+  res.redirect(u.toString());
+});
+
+app.get('/api/auth/google/callback', async (req,res)=>{
+  try{
+    if(req.query.error) return res.redirect('/?google=cancelled');
+    if(!req.query.code||req.query.state!==req.session.googleOAuthState) return res.status(400).send('Google OAuth state mismatch.');
+    const clientId=process.env.GOOGLE_CLIENT_ID, clientSecret=process.env.GOOGLE_CLIENT_SECRET, redirectUri=process.env.GOOGLE_REDIRECT_URI;
+    if(!clientId||!clientSecret||!redirectUri) return res.status(503).send('Google linking is not configured.');
+    const tokenRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({code:String(req.query.code),client_id:clientId,client_secret:clientSecret,redirect_uri:redirectUri,grant_type:'authorization_code'})});
+    const tokens=await tokenRes.json(); if(!tokenRes.ok||!tokens.access_token) throw new Error('Google token exchange failed');
+    const infoRes=await fetch('https://openidconnect.googleapis.com/v1/userinfo',{headers:{Authorization:'Bearer '+tokens.access_token}});
+    const info=await infoRes.json(); if(!infoRes.ok||!info.sub) throw new Error('Google user info failed');
+    const [owner]=await q('SELECT user_id FROM linked_accounts WHERE provider=\'GOOGLE\' AND provider_user_id=? LIMIT 1',[String(info.sub)]);
+    if(owner[0]&&Number(owner[0].user_id)!==Number(req.session.userId)) return res.redirect('/?google=already-linked');
+    if(!owner[0]) await q('INSERT INTO linked_accounts(user_id,provider,provider_user_id,provider_email) VALUES(?,\'GOOGLE\',?,?)',[req.session.userId,String(info.sub),info.email||null]);
+    delete req.session.googleOAuthState;
+    res.redirect('/?google=linked');
+  }catch(e){console.error('Google linking failed:',e.message);res.redirect('/?google=error');}
+});
+
+app.post('/api/admin/resources', requirePermission('MANAGE_RESOURCES'), async(req,res)=>{
+  const {title,description='',url='',subjectId=null,resourceType='LINK'}=req.body||{};
+  if(!title?.trim()) return res.status(400).json({error:'Resource title is required'});
+  const [r]=await q('INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,\'B4\',?,?)',[title.trim(),description.trim(),url.trim()||null,resourceType,subjectId||null,req.session.userId]);
+  res.json({ok:true,id:r.insertId});
+});
+
+app.post('/api/admin/resources/pdf', requirePermission('MANAGE_RESOURCES'), pdfUpload.single('file'), async(req,res)=>{
+  if(!req.file) return res.status(400).json({error:'PDF file is required'});
+  const title=String(req.body?.title||req.file.originalname).trim();
+  const description=String(req.body?.description||'').trim();
+  const subjectId=req.body?.subjectId?Number(req.body.subjectId):null;
+  const [r]=await q('INSERT INTO resources(title,description,resource_type,subject_id,class_name,created_by) VALUES(?,?,\'FILE\',?,\'B4\',?)',[title,description,subjectId||null,req.session.userId]);
+  await q('INSERT INTO resource_files(resource_id,filename,mime_type,data) VALUES(?,?,?,?)',[r.insertId,req.file.originalname,'application/pdf',req.file.buffer]);
+  res.json({ok:true,id:r.insertId,fileUrl:'/api/resources/files/'+r.insertId});
+});
+
+app.get('/api/resources/files/:id', requireAuth, async(req,res)=>{
+  const id=Number(req.params.id); if(!Number.isSafeInteger(id)) return res.status(400).end();
+  const [rows]=await q('SELECT rf.filename,rf.mime_type,rf.data FROM resource_files rf JOIN resources r ON r.id=rf.resource_id WHERE rf.id=? AND r.class_name=\'B4\' LIMIT 1',[id]);
+  if(!rows[0]) return res.status(404).end();
+  res.setHeader('Content-Type',rows[0].mime_type);
+  res.setHeader('Content-Disposition','inline; filename*=UTF-8\'\''+encodeURIComponent(rows[0].filename));
+  res.send(rows[0].data);
+});
+
+app.post('/api/admin/exams', requirePermission('MANAGE_EXAMS'), async(req,res)=>{
+  const {title,description='',subjectId=null,startsAt=null,endsAt=null,durationMinutes=null,questions=[]}=req.body||{};
+  if(!title?.trim()) return res.status(400).json({error:'Exam title is required'});
+  if(!Array.isArray(questions)||!questions.length) return res.status(400).json({error:'Add at least one question'});
+  if(startsAt&&endsAt&&new Date(endsAt)<=new Date(startsAt)) return res.status(400).json({error:'Deadline must be after start time'});
+  const conn=await pool.getConnection();
+  try{
+    await conn.beginTransaction();
+    const [e]=await conn.execute('INSERT INTO exams(title,description,subject_id,class_name,starts_at,ends_at,duration_minutes,status,created_by) VALUES(?,?,?,?,?,?,?,\'SCHEDULED\',?)',[title.trim(),description.trim(),subjectId||null,'B4',startsAt||null,endsAt||null,durationMinutes?Number(durationMinutes):null,req.session.userId]);
+    for(let i=0;i<questions.length;i++){
+      const qn=questions[i]; if(!String(qn.questionText||'').trim()) continue;
+      const type=['MCQ','TRUE_FALSE','SHORT'].includes(qn.questionType)?qn.questionType:'MCQ';
+      const opts=type==='MCQ'?(Array.isArray(qn.options)?qn.options.filter(Boolean).slice(0,8):[]):null;
+      await conn.execute('INSERT INTO exam_questions(exam_id,question_text,question_type,options_json,correct_answer,points,sort_order) VALUES(?,?,?,?,?,?,?)',[e.insertId,String(qn.questionText).trim(),type,opts?JSON.stringify(opts):null,String(qn.correctAnswer||'').trim()||null,Number(qn.points)||1,i]);
+    }
+    await conn.commit(); res.json({ok:true,id:e.insertId});
+  }catch(e){await conn.rollback();res.status(400).json({error:e.message})}finally{conn.release();}
+});
+
+app.get('/api/exams/:id', requireAuth, async(req,res)=>{
+  const id=Number(req.params.id); if(!Number.isSafeInteger(id)) return res.status(400).json({error:'Invalid exam'});
+  const [ex]=await q('SELECT e.*,s.name subject_name FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id WHERE e.id=? AND e.class_name=\'B4\' LIMIT 1',[id]);
+  if(!ex[0]) return res.status(404).json({error:'Exam not found'});
+  const [attempt]=await q('SELECT id,status,started_at,submitted_at,score FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
+  res.json({exam:ex[0],attempt:attempt[0]||null});
+});
+
+app.post('/api/exams/:id/start', requireAuth, async(req,res)=>{
+  const id=Number(req.params.id); const now=new Date();
+  const [ex]=await q('SELECT * FROM exams WHERE id=? AND class_name=\'B4\' LIMIT 1',[id]); const exam=ex[0];
+  if(!exam) return res.status(404).json({error:'Exam not found'});
+  if(exam.starts_at&&now<new Date(exam.starts_at)) return res.status(403).json({error:'Exam has not started yet'});
+  if(exam.ends_at&&now>=new Date(exam.ends_at)) return res.status(403).json({error:'Exam deadline has passed'});
+  const [existing]=await q('SELECT * FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
+  if(existing[0]){if(existing[0].status!=='STARTED')return res.status(403).json({error:'You have already submitted this exam'});return sendExamStart(res,exam,existing[0]);}
+  const [r]=await q('INSERT INTO exam_attempts(exam_id,user_id,status) VALUES(?,?,\'STARTED\')',[id,req.session.userId]);
+  const [a]=await q('SELECT * FROM exam_attempts WHERE id=?',[r.insertId]);
+  return sendExamStart(res,exam,a[0]);
+});
+
+async function sendExamStart(res,exam,attempt){
+  const [questions]=await q('SELECT id,question_text,question_type,options_json,points,sort_order FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[exam.id]);
+  const start=new Date(attempt.started_at).getTime();
+  const durationDeadline=exam.duration_minutes?start+Number(exam.duration_minutes)*60000:null;
+  const endDeadline=exam.ends_at?new Date(exam.ends_at).getTime():null;
+  const deadlines=[durationDeadline,endDeadline].filter(Boolean);
+  const deadline=deadlines.length?new Date(Math.min(...deadlines)).toISOString():null;
+  res.json({exam,attempt:{id:attempt.id,started_at:attempt.started_at,deadline},questions:questions.map(q=>({...q,options_json:q.options_json||[]}))});
+}
+
+app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
+  const id=Number(req.params.id),answers=req.body?.answers||{};
+  const [rows]=await q('SELECT a.*,e.ends_at,e.duration_minutes FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);
+  const attempt=rows[0]; if(!attempt)return res.status(404).json({error:'Exam attempt not found'});
+  if(attempt.status!=='STARTED')return res.status(400).json({error:'Exam already submitted'});
+  const started=new Date(attempt.started_at).getTime(),deadline=Math.min(...[attempt.ends_at?new Date(attempt.ends_at).getTime():Infinity,attempt.duration_minutes?started+Number(attempt.duration_minutes)*60000:Infinity]);
+  if(Date.now()>deadline){await q('UPDATE exam_attempts SET status=\'SUBMITTED\',submitted_at=NOW() WHERE id=?',[attempt.id]);return res.status(403).json({error:'Time is over. The exam was closed automatically.'});}
+  const [questions]=await q('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[id]);
+  let score=0;
+  for(const qn of questions){
+    const answer=String(answers[String(qn.id)]??'').trim(); let correct=null,awarded=0;
+    if(qn.question_type!=='SHORT'&&qn.correct_answer!==null){correct=answer.toLowerCase()===String(qn.correct_answer).trim().toLowerCase();awarded=correct?Number(qn.points):0;}
+    await q('INSERT INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE answer_text=VALUES(answer_text),is_correct=VALUES(is_correct),points_awarded=VALUES(points_awarded)',[attempt.id,qn.id,answer,correct,awarded]); score+=awarded;
+  }
+  await q('UPDATE exam_attempts SET status=\'SUBMITTED\',score=?,submitted_at=NOW() WHERE id=?',[score,attempt.id]); res.json({ok:true,score});
 });
 
 // Serve the B4 frontend from the same Railway service.
