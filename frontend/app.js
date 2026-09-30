@@ -2,7 +2,7 @@ const $=s=>document.querySelector(s);const views={};const esc=x=>String(x??'').r
 const API_BASE=(window.B4_API_URL||localStorage.b4ApiUrl||'').replace(/\/$/,'');
 const api=async(path,opts={})=>{const r=await fetch(API_BASE+path,{credentials:'include',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.error||'Request failed');return d};
 const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'light',view:'dashboard',me:null,students:[],subjects:[],tasks:[],announcements:[],messages:[],attendance:[],notifications:[],schedule:[],resources:[],exams:[],activationKeys:[],online:false,dataError:'',linked:[]};
-const can=p=>{if(p==='ADMIN_CENTER')return !!S.me&&(['MANAGE_ADMINS','MANAGE_ROLES','MANAGE_ACCOUNTS','MANAGE_STUDENTS','MANAGE_KEYS','MANAGE_SUBJECTS','MANAGE_SCHEDULE','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ATTENDANCE','MANAGE_ANNOUNCEMENTS','MANAGE_CHAT','VIEW_LOGS'].some(x=>(S.me.permissions||[]).includes(x)));if(p==='ACCOUNT')return !!S.me;if(!p)return true;return !S.me?p==='VIEW_CLASS':S.me.role==='SUPER_ADMIN'||(S.me.permissions||[]).includes(p)};
+const can=p=>{if(p==='ADMIN_CENTER')return !!S.me&&(['MANAGE_ADMINS','MANAGE_ROLES','MANAGE_ACCOUNTS','MANAGE_TEACHERS','MANAGE_STUDENTS','MANAGE_KEYS','MANAGE_SUBJECTS','MANAGE_SCHEDULE','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ATTENDANCE','MANAGE_ANNOUNCEMENTS','MANAGE_CHAT','VIEW_LOGS','USE_AI'].some(x=>(S.me.permissions||[]).includes(x)));if(p==='ACCOUNT')return !!S.me;if(!p)return true;return !S.me?p==='VIEW_CLASS':S.me.role==='SUPER_ADMIN'||(S.me.permissions||[]).includes(p)};
 const L={en:{dash:'Dashboard',students:'Students',subjects:'Subjects',schedule:'Schedule',tasks:'Assignments',resources:'Resources',exams:'Exam Center',news:'Announcements',chat:'Class Chat',attendance:'Attendance',admin:'Admin Center',settings:'Settings',academic:'ACADEMICS',community:'COMMUNITY',more:'MORE',themeD:'Dark mode',themeL:'Light mode',install:'Install App',search:'Search everything...',welcome:'Welcome to B4 👋',sub:'Telecommunication • your class, academics and communication in one place.',add:'Add',view:'View all',login:'Login',logout:'Logout',activate:'Activation Key',account:'Account',linked:'Linked Accounts',save:'Save',password:'Password',display:'Display name',ai:'B4 AI Assistant'},ar:{dash:'الرئيسية',students:'الطلاب',subjects:'المواد',schedule:'الجدول',tasks:'المهام',resources:'المصادر',exams:'مركز الامتحانات',news:'الإعلانات',chat:'شات الفصل',attendance:'الحضور',admin:'مركز الإدارة',settings:'الإعدادات',academic:'الدراسة',community:'المجتمع',more:'المزيد',themeD:'الوضع الليلي',themeL:'الوضع النهاري',install:'تثبيت التطبيق',search:'ابحث في كل حاجة...',welcome:'أهلاً بك في B4 👋',sub:'اتصالات • دراستك وفصلك وتواصلك في مكان واحد.',add:'إضافة',view:'عرض الكل',login:'تسجيل الدخول',logout:'تسجيل الخروج',activate:'مفتاح التفعيل',account:'الحساب',linked:'الحسابات المرتبطة',save:'حفظ',password:'كلمة المرور',display:'اسم العرض',ai:'مساعد B4 الذكي'}};const t=k=>L[S.lang][k]||k;
 const nav=[['dashboard','⌂','dash',null],['g','','academic',null],['students','♙','students','VIEW_CLASS'],['subjects','▣','subjects','VIEW_CLASS'],['schedule','◫','schedule','VIEW_CLASS'],['assignments','✓','tasks','VIEW_CLASS'],['resources','▤','resources','VIEW_CLASS'],['exams','⌁','exams','VIEW_CLASS'],['g','','community',null],['announcements','◈','news','VIEW_CLASS'],['chat','◌','chat','VIEW_CLASS'],['g','','more',null],['attendance','◉','attendance','VIEW_CLASS'],['admin','⚙','admin','ADMIN_CENTER'],['settings','⚙','settings','ACCOUNT']];
 function toast(m){const e=document.createElement('div');e.className='toast';e.textContent=m;document.body.append(e);setTimeout(()=>e.remove(),2600)}function close(){$('#back').classList.remove('show')}function modal(h){$('#modal').innerHTML=`<div class="modal">${h}</div>`;$('#back').classList.add('show')}function go(v){S.view=v;render();window.scrollTo({top:0,behavior:'smooth'});$('#side').classList.remove('open')}
@@ -22,7 +22,7 @@ function tasksV(){return title(t('tasks'),'Assignments from the real backend.',c
 function resourcesV(){return title(t('resources'),S.lang==='ar'?'مصادر الدراسة والملفات المشتركة.':'Shared lessons, files and study links.')+`<div class="grid c3">${S.resources.map(r=>`<article class="card"><div class="head"><span class="badge">${esc(r.resource_type||'RESOURCE')}</span><span class="muted">${esc(r.subject_name||'B4')}</span></div><h3>${esc(r.title)}</h3><p class="muted">${esc(r.description||'')}</p>${r.url?`<a class="btn primary" href="${esc(r.url)}" target="_blank" rel="noopener">Open resource →</a>`:r.file_url?`<a class="btn primary" href="${esc(r.file_url)}" target="_blank" rel="noopener">Open file →</a>`:''}</article>`).join('')||'<div class="card empty">No resources have been published yet.</div>'}</div>`}
 function examsV(){return title(t('exams'),S.lang==='ar'?'الامتحانات المنشورة من الإدارة والمدرسين.':'Published exams and exam schedules.')+`<div class="grid c2">${S.exams.map(e=>`<article class="card"><div class="head"><span class="badge ${e.status==='OPEN'?'good':e.status==='CLOSED'?'red':'warn'}">${esc(e.status)}</span><span class="muted">${esc(e.subject_name||'')}</span></div><h3>${esc(e.title)}</h3><p class="muted">${esc(e.description||'')}</p><div class="meter"><span>Starts</span><b>${esc(e.starts_at||'Not scheduled')}</b></div><div class="meter"><span>Duration</span><b>${e.duration_minutes?esc(e.duration_minutes)+' min':'—'}</b></div></article>`).join('')||'<div class="card empty">No exams have been published yet.</div>'}</div><div class="card" style="margin-top:15px"><h3>Practice with B4 AI</h3><p class="muted">Use the assistant for explanations and revision before an exam.</p><button class="btn primary" onclick="aiModal()">✦ Ask B4 AI</button></div>`}
 function newsV(){return title(t('news'),'Official class announcements.',can('MANAGE_ANNOUNCEMENTS')?`<button class="btn primary" onclick="announcementModal()">＋ ${t('add')}</button>`:'')+`<div class="grid">${S.announcements.map(a=>`<div class="card"><div class="head"><span class="badge">${esc(a.category||'General')}</span><span class="muted">${esc(a.created_at||'')}</span></div><h3>${esc(a.title)}</h3><p class="muted">${esc(a.body)}</p></div>`).join('')||'<div class="card empty">No announcements yet.</div>'}</div>`}
-function chatV(){return title(t('chat'),S.lang==='ar'?'اضغط مطولاً على رسالتك للتعديل أو الحذف.':'Long-press your message to edit or delete.')+`<div class="card chat"><div class="messages" id="messages">${S.messages.map(m=>{const mine=S.me&&m.user_id===S.me.id;const edited=m.edited_at?' <span class="edited">Edited</span>':'';return `<div class="msg ${mine?'me':''}" data-message-id="${m.id}" oncontextmenu="messageMenu(event,${m.id})" ontouchstart="startMessagePress(event,${m.id})" ontouchend="endMessagePress()" ontouchcancel="cancelMessagePress()"><img class="avatar" src="${esc(m.avatar_url||('https://ui-avatars.com/api/?name='+encodeURIComponent(m.display_name||'User')+'&background=b91c1c&color=fff'))}"><div><b style="font-size:10px">${esc(m.display_name)}</b><div class="bubble">${esc(m.body)}</div><small class="muted">${esc(m.created_at||'')}${edited}</small></div></div>`}).join('')||'<div class="empty">No messages yet.</div>'}</div><form class="chatform" onsubmit="send(event)"><input id="chatInput" placeholder="${S.lang==='ar'?'اكتب رسالة...':'Write a message...'}" ${S.me?'':'disabled'}><button class="btn primary" ${S.me?'':'disabled'}>➤</button></form></div>`}
+function chatV(){return title(t('chat'),S.lang==='ar'?'اضغط مطولاً على رسالتك للتعديل أو الحذف.':'Long-press your message to edit or delete.')+`<div class="card chat"><div class="messages" id="messages">${S.messages.map(m=>{const mine=S.me&&m.user_id===S.me.id;const edited=m.edited_at?' <span class="edited">Edited</span>':'';return `<div class="msg ${mine?'me':''}" data-message-id="${m.id}" oncontextmenu="messageMenu(event,${m.id})" ontouchstart="startMessagePress(event,${m.id})" ontouchend="endMessagePress()" ontouchcancel="cancelMessagePress()"><img class="avatar" src="${esc(m.avatar_url||('https://ui-avatars.com/api/?name='+encodeURIComponent(m.display_name||'User')+'&background=b91c1c&color=fff'))}"><div><b style="font-size:10px">${esc(m.display_name)}</b>${m.reply_to_id&&m.reply_body?`<div class="reply-preview"><b>↩ ${esc(m.reply_display_name||"Reply")}</b><span>${esc(m.reply_body)}</span></div>`:""}<div class="bubble">${esc(m.body)}</div><small class="muted">${esc(m.created_at||'')}${edited}</small></div></div>`}).join('')||'<div class="empty">No messages yet.</div>'}</div><form class="chatform" onsubmit="send(event)"><input id="chatInput" placeholder="${S.lang==='ar'?'اكتب رسالة...':'Write a message...'}" ${S.me?'':'disabled'}><button class="btn primary" ${S.me?'':'disabled'}>➤</button></form></div>`}
 function attendanceRate(){if(!S.attendance.length)return 0;const p=S.attendance.filter(x=>x.status==='PRESENT').length;return Math.round(p/S.attendance.length*100)}
 function attendanceV(){return title(t('attendance'),'Present, absent, late and excused records.')+`<div class="grid c2"><div class="card"><h2>${attendanceRate()}%</h2><p class="muted">Present rate</p><div class="barline"><span style="width:${attendanceRate()}%"></span></div></div><div class="card"><div class="list">${S.attendance.slice(0,12).map(a=>`<div class="item"><b class="grow">${esc(a.date)}</b><span class="badge ${a.status==='PRESENT'?'good':a.status==='ABSENT'?'red':'warn'}">${esc(a.status)}</span></div>`).join('')||'<div class="empty">No attendance records yet.</div>'}</div></div></div>`}
 function adminV(){
@@ -92,7 +92,7 @@ function toggleTheme(){S.theme=S.theme==='dark'?'light':'dark';localStorage.b4Th
 function toggleLang(){S.lang=S.lang==='ar'?'en':'ar';localStorage.b4Lang=S.lang;render();}
 async function installApp(){if(window.__b4InstallPrompt){window.__b4InstallPrompt.prompt();window.__b4InstallPrompt=null;}else toast('Use the browser menu to install B4 as an app.');}
 function commandCenter(){modal('<div class="modalhead"><h2>More</h2><button class="close" onclick="close()">×</button></div><div class="list"><button class="item quick" onclick="close();go(\'students\')">♙ Students →</button><button class="item quick" onclick="close();go(\'subjects\')">▣ Subjects →</button><button class="item quick" onclick="close();go(\'schedule\')">◫ Schedule →</button><button class="item quick" onclick="close();go(\'resources\')">▤ Resources →</button><button class="item quick" onclick="close();go(\'settings\')">⚙ Settings →</button></div>');}
-function startDeadlineTicker(){}
+let deadlineTimer=null; function startDeadlineTicker(){ if(deadlineTimer) clearInterval(deadlineTimer); deadlineTicker(); deadlineTimer=setInterval(deadlineTicker,1000); }
 document.documentElement.dataset.theme=S.theme;
 document.addEventListener('click',e=>{const n=e.target.closest?.('#nav [data-v]');if(n){e.preventDefault();go(n.dataset.v);}if(e.target.closest?.('#theme'))toggleTheme();if(e.target.closest?.('#lang'))toggleLang();if(e.target.closest?.('#install'))installApp();if(e.target.closest?.('#mobile'))$('#side')?.classList.toggle('open');if(e.target.closest?.('#profile'))S.me?go('settings'):loginModal();if(e.target.closest?.('#ai'))aiModal();if(e.target.closest?.('#bell'))go('notifications');});
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();window.__b4InstallPrompt=e;});
@@ -101,9 +101,135 @@ views.dashboard=dashboard;views.students=studentsV;views.subjects=subjectsV;view
 document.addEventListener('click',e=>{
   const closeBtn=e.target.closest?.('.close'); if(closeBtn)e.stopPropagation();
 });
+window.aiModal=aiModal;window.askAI=askAI;window.messageMenu=messageMenu;window.startMessagePress=startMessagePress;window.endMessagePress=endMessagePress;window.cancelMessagePress=cancelMessagePress;window.send=send;window.replyToMessage=replyToMessage;window.sendReply=sendReply;window.editMessage=editMessage;window.saveMessageEdit=saveMessageEdit;window.deleteMessage=deleteMessage;window.addExamQuestion=addExamQuestion;window.removeExamQuestion=removeExamQuestion;window.collectExamQuestions=collectExamQuestions;window.resourceModal=resourceModal;window.createResource=createResource;window.updateResource=updateResource;window.linkedGoogle=linkedGoogle;window.reload=reload;window.startExam=startExam;window.submitExam=submitExam;
 startDeadlineTicker();
 
 
+
+
+/* ===== B4 STABILITY / MISSING FEATURES ===== */
+function aiModal(){
+  if(!S.me){ loginModal(); toast('Login is required to use B4 AI'); return; }
+  if(!can('USE_AI')){ toast('You do not have permission to use B4 AI'); return; }
+  modal('<div class="modalhead"><h2>✦ B4 AI Assistant</h2><button class="close" onclick="close()">×</button></div>'+
+    '<p class="muted">Ask about your Telecommunication lessons, assignments or revision.</p>'+
+    '<form class="form" onsubmit="askAI(event)"><div class="field"><label>Message</label><textarea id="aiPrompt" rows="5" required placeholder="Ask something..."></textarea></div><button class="btn primary">Ask B4 AI →</button></form><div id="aiAnswer"></div>');
+}
+async function askAI(e){
+  e.preventDefault();
+  const box=$('#aiAnswer'); if(box) box.innerHTML='<div class="notice">Thinking…</div>';
+  try{
+    const d=await api('/api/ai',{method:'POST',body:JSON.stringify({message:$('#aiPrompt').value.trim()})});
+    if(box) box.innerHTML='<div class="card" style="margin-top:14px"><div class="eyebrow">B4 AI</div><p style="white-space:pre-wrap">'+esc(d.answer||d.output_text||'No answer returned.')+'</p></div>';
+  }catch(x){if(box)box.innerHTML='<div class="notice">'+esc(x.message)+'</div>';}
+}
+
+let messagePressTimer=null;
+function startMessagePress(e,id){ if(messagePressTimer)clearTimeout(messagePressTimer); messagePressTimer=setTimeout(()=>messageMenu(e,id),550); }
+function endMessagePress(){ if(messagePressTimer){clearTimeout(messagePressTimer);messagePressTimer=null;} }
+function cancelMessagePress(){endMessagePress();}
+function messageMenu(e,id){
+  if(e?.preventDefault)e.preventDefault();
+  const m=S.messages.find(x=>Number(x.id)===Number(id)); if(!m)return;
+  const mine=Number(S.me?.id)===Number(m.user_id);
+  const canModerate=can('MANAGE_CHAT');
+  if(!mine&&!canModerate){ modal('<div class="modalhead"><h2>Message</h2><button class="close" onclick="close()">×</button></div><button class="btn primary" onclick="replyToMessage('+id+')">↩ Reply</button>'); return; }
+  modal('<div class="modalhead"><h2>Message actions</h2><button class="close" onclick="close()">×</button></div>'+
+    '<div class="list"><button class="item quick" onclick="replyToMessage('+id+')">↩ Reply</button>'+
+    (mine?'<button class="item quick" onclick="editMessage('+id+')">✎ Edit</button>':'')+
+    (mine||canModerate?'<button class="item quick" onclick="deleteMessage('+id+')">⌫ Delete</button>':'')+
+    '</div>');
+}
+function replyToMessage(id){
+  const m=S.messages.find(x=>Number(x.id)===Number(id)); if(!m)return;
+  modal('<div class="modalhead"><h2>Reply</h2><button class="close" onclick="close()">×</button></div>'+
+    '<div class="notice"><b>'+esc(m.display_name)+'</b><div>'+esc(m.body)+'</div></div>'+
+    '<form class="form" onsubmit="sendReply(event,'+id+')"><textarea id="replyText" rows="4" required placeholder="Write your reply..."></textarea><button class="btn primary">Reply →</button></form>');
+}
+async function sendReply(e,id){
+  e.preventDefault();
+  try{await api('/api/chat/messages',{method:'POST',body:JSON.stringify({body:$('#replyText').value.trim(),replyToId:id})});close();await loadData();render();go('chat');toast('Reply sent ✓');}
+  catch(x){toast(x.message);}
+}
+function editMessage(id){
+  const m=S.messages.find(x=>Number(x.id)===Number(id));if(!m)return;
+  modal('<div class="modalhead"><h2>Edit message</h2><button class="close" onclick="close()">×</button></div><form class="form" onsubmit="saveMessageEdit(event,'+id+')"><textarea id="editMessageText" rows="4" required>'+esc(m.body)+'</textarea><button class="btn primary">Save changes ✓</button></form>');
+}
+async function saveMessageEdit(e,id){
+  e.preventDefault();
+  try{await api('/api/chat/messages/'+id,{method:'PATCH',body:JSON.stringify({body:$('#editMessageText').value.trim()})});close();await loadData();render();go('chat');toast('Message edited ✓');}
+  catch(x){toast(x.message);}
+}
+async function deleteMessage(id){
+  if(!confirm('Delete this message?'))return;
+  try{await api('/api/chat/messages/'+id,{method:'DELETE'});close();await loadData();render();go('chat');toast('Message deleted ✓');}
+  catch(x){toast(x.message);}
+}
+async function send(e){
+  e.preventDefault();
+  const input=$('#chatInput');if(!input||!input.value.trim())return;
+  try{await api('/api/chat/messages',{method:'POST',body:JSON.stringify({body:input.value.trim()})});input.value='';await loadData();render();go('chat');}
+  catch(x){toast(x.message);}
+}
+
+function addExamQuestion(){
+  window.__examQuestions=window.__examQuestions||[];
+  window.__examQuestions.push({type:'MCQ',text:'',options:['','','',''],correct:'',points:1});
+  renderExamQuestions();
+}
+function removeExamQuestion(i){
+  if(!window.__examQuestions||window.__examQuestions.length<=1)return;
+  window.__examQuestions.splice(i,1);renderExamQuestions();
+}
+function collectExamQuestions(){
+  for(let i=0;i<(window.__examQuestions||[]).length;i++)syncExamQuestion(i);
+  return (window.__examQuestions||[]).map(q=>({
+    questionText:String(q.text||'').trim(),
+    questionType:q.type||'MCQ',
+    options:Array.isArray(q.options)?q.options.filter(Boolean):[],
+    correctAnswer:String(q.correct||'').trim(),
+    points:Number(q.points)||1
+  }));
+}
+
+function resourceModal(existing=null){
+  if(!can('MANAGE_RESOURCES'))return;
+  const x=existing||{};
+  modal('<div class="modalhead"><h2>'+(existing?'Edit resource':'Publish resource')+'</h2><button class="close" onclick="close()">×</button></div>'+
+    '<form class="form" onsubmit="'+(existing?'updateResource(event,'+x.id+')':'createResource(event)')+'">'+
+    '<div class="field"><label>Title</label><input id="resourceTitle" value="'+esc(x.title||'')+'" required></div>'+
+    '<div class="field"><label>Subject</label><select id="resourceSubject">'+S.subjects.map(s=>'<option value="'+s.id+'" '+(Number(s.id)===Number(x.subject_id)?'selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></div>'+
+    '<div class="field"><label>Description</label><textarea id="resourceDescription" rows="3">'+esc(x.description||'')+'</textarea></div>'+
+    '<div class="field"><label>Resource URL</label><input id="resourceUrl" type="url" value="'+esc(x.url||'')+'" placeholder="https://..."></div>'+
+    (!existing?'<div class="field"><label>Or upload PDF</label><input id="resourcePdf" type="file" accept="application/pdf"></div>':'')+
+    '<button class="btn primary">'+(existing?'Save changes ✓':'Publish resource →')+'</button></form>');
+}
+async function createResource(e){
+  e.preventDefault();
+  try{
+    const file=$('#resourcePdf')?.files?.[0];
+    if(file){
+      const fd=new FormData();
+      fd.append('file',file);fd.append('title',$('#resourceTitle').value.trim());fd.append('description',$('#resourceDescription').value.trim());fd.append('subjectId',$('#resourceSubject').value||'');
+      const r=await fetch(API_BASE+'/api/admin/resources/pdf',{method:'POST',credentials:'include',body:fd});
+      const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'PDF upload failed');
+    }else{
+      await api('/api/admin/resources',{method:'POST',body:JSON.stringify({title:$('#resourceTitle').value.trim(),description:$('#resourceDescription').value.trim(),url:$('#resourceUrl').value.trim(),subjectId:Number($('#resourceSubject').value)||null,resourceType:'LINK'})});
+    }
+    close();await loadData();render();toast('Resource published ✓');
+  }catch(x){toast(x.message);}
+}
+async function updateResource(e,id){
+  e.preventDefault();
+  try{await api('/api/admin/resources/'+id,{method:'PATCH',body:JSON.stringify({title:$('#resourceTitle').value.trim(),description:$('#resourceDescription').value.trim(),url:$('#resourceUrl').value.trim(),subjectId:Number($('#resourceSubject').value)||null})});close();await loadData();render();toast('Resource updated ✓');}
+  catch(x){toast(x.message);}
+}
+
+async function linkedGoogle(){
+  if(!S.me){loginModal();return;}
+  location.href=API_BASE+'/api/auth/google/start';
+}
+function reload(){location.reload();}
 
 /* ===== B4 FINAL CLASSROOM UI ===== */
 function teacherModal(){
