@@ -144,7 +144,7 @@ async function uploadPdf(e){e.preventDefault();const file=$('#pdfFile').files[0]
 window.__examQuestions=[];
 function examModal(){if(!can('MANAGE_EXAMS'))return;window.__examQuestions=[];addExamQuestion();modal('<div class="modalhead"><h2>Create Exam</h2><button class="close" onclick="window.close()">×</button></div><form class="form" onsubmit="createExam(event)"><div class="field"><label>Title</label><input id="examTitle" required></div><div class="field"><label>Subject</label><select id="examSubject">'+S.subjects.map(x=>'<option value="'+x.id+'">'+esc(x.name)+'</option>').join('')+'</select></div><div class="grid c2"><div class="field"><label>Start</label><input id="examStart" type="datetime-local"></div><div class="field"><label>Deadline</label><input id="examEnd" type="datetime-local"></div></div><div class="field"><label>Time limit (minutes)</label><input id="examDuration" type="number" min="1" placeholder="e.g. 30"></div><div class="field"><label>Description</label><textarea id="examDesc" rows="3"></textarea></div><div class="head"><h3>Questions</h3><button type="button" class="btn ghost" onclick="addExamQuestion()">＋ Add question</button></div><div id="examQuestions"></div><button class="btn primary">Publish exam →</button></form>');renderExamQuestions();}
 function addExamQuestion(){window.__examQuestions.push({type:'MCQ',text:'',options:['','','',''],correct:'',points:1});if($('#examQuestions'))renderExamQuestions()}
-function renderExamQuestions(){const box=$('#examQuestions');if(!box)return;box.innerHTML=window.__examQuestions.map((q,i)=>'<div class="card" style="margin:10px 0"><div class="head"><b>Question '+(i+1)+'</b>'+(i?'<button type="button" class="btn danger" onclick="removeExamQuestion('+i+')">Remove</button>':'')+'</div><div class="field"><label>Question</label><textarea id="eq_text_'+i+'" rows="2" required>'+esc(q.text)+'</textarea></div><div class="field"><label>Type</label><select id="eq_type_'+i+'" onchange="renderExamQuestions()"><option value="MCQ" '+(q.type==='MCQ'?'selected':'')+'>MCQ</option><option value="TRUE_FALSE" '+(q.type==='TRUE_FALSE'?'selected':'')+'>True / False</option><option value="SHORT" '+(q.type==='SHORT'?'selected':'')+'>Short answer</option></select></div>'+(q.type==='MCQ'?'<div class="grid c2">'+q.options.map((o,j)=>'<input id="eq_opt_'+i+'_'+j+'" placeholder="Option '+(j+1)+'" value="'+esc(o)+'">').join('')+'</div>':'')+'<div class="grid c2"><div class="field"><label>Correct answer</label><input id="eq_correct_'+i+'" value="'+esc(q.correct)+'" required></div><div class="field"><label>Points</label><input id="eq_points_'+i+'" type="number" min="0.5" step="0.5" value="'+q.points+'"></div></div></div>').join('');}
+function renderExamQuestions(){const box=$('#examQuestions');if(!box)return;box.innerHTML=window.__examQuestions.map((q,i)=>'<div class="card" style="margin:10px 0"><div class="head"><b>Question '+(i+1)+'</b>'+(i?'<button type="button" class="btn danger" onclick="removeExamQuestion('+i+')">Remove</button>':'')+'</div><div class="field"><label>Question</label><textarea id="eq_text_'+i+'" rows="2" required>'+esc(q.text)+'</textarea></div><div class="field"><label>Type</label><select id="eq_type_'+i+'" onchange="renderExamQuestions()"><option value="MCQ" '+(q.type==='MCQ'?'selected':'')+'>MCQ</option><option value="TRUE_FALSE" '+(q.type==='TRUE_FALSE'?'selected':'')+'>True / False</option><option value="SHORT" '+(q.type==='SHORT'?'selected':'')+'>Short answer</option></select></div>'+(q.type==='MCQ'?'<div class="grid c2">'+q.options.map((o,j)=>'<input id="eq_opt_'+i+'_'+j+'" oninput="updateExamOption('+i+','+j+',this.value)" placeholder="Option '+(j+1)+'" value="'+esc(o)+'">').join('')+'</div>':'')+'<div class="grid c2"><div class="field"><label>Correct answer</label><input id="eq_correct_'+i+'" value="'+esc(q.correct)+'" required></div><div class="field"><label>Points</label><input id="eq_points_'+i+'" type="number" min="0.5" step="0.5" value="'+q.points+'"></div></div></div>').join('');}
 function removeExamQuestion(i){window.__examQuestions.splice(i,1);renderExamQuestions()}
 function collectExamQuestions(){return window.__examQuestions.map((q,i)=>{q.text=$('#eq_text_'+i).value.trim();q.type=$('#eq_type_'+i).value;q.correct=$('#eq_correct_'+i).value.trim();q.points=Number($('#eq_points_'+i).value)||1;q.options=q.type==='MCQ'?[0,1,2,3].map(j=>$('#eq_opt_'+i+'_'+j)?.value.trim()).filter(Boolean):[];return {questionText:q.text,questionType:q.type,options:q.options,correctAnswer:q.correct,points:q.points}})}
 async function createExam(e){e.preventDefault();try{const questions=collectExamQuestions();await api('/api/admin/exams',{method:'POST',body:JSON.stringify({title:$('#examTitle').value,description:$('#examDesc').value,subjectId:Number($('#examSubject').value)||null,startsAt:$('#examStart').value||null,endsAt:$('#examEnd').value||null,durationMinutes:Number($('#examDuration').value)||null,questions})});window.close();await loadData();render();toast('Exam published ✓')}catch(x){toast(x.message)}}
@@ -159,3 +159,255 @@ async function startExam(id){try{const d=await api('/api/exams/'+id+'/start',{me
 let examTimerHandle=null;function startExamTimer(deadline){clearInterval(examTimerHandle);const tick=()=>{const ms=Math.max(0,deadline-Date.now());const sec=Math.floor(ms/1000);const el=$('#examTimer');if(el)el.textContent=Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');if(ms<=0){clearInterval(examTimerHandle);submitExam(true)}};tick();examTimerHandle=setInterval(tick,1000)}
 async function submitExam(auto=false){if(!window.__examRun)return;const answers={};for(const q of window.__examRun.questions||[]){if(q.question_type==='SHORT')answers[q.id]=$('#short_'+q.id)?.value||'';else answers[q.id]=document.querySelector('input[name="q_'+q.id+'"]:checked')?.value||''}try{const d=await api('/api/exams/'+window.__examRun.exam.id+'/submit',{method:'POST',body:JSON.stringify({answers})});clearInterval(examTimerHandle);window.close();toast((auto?'Time ended. ':'')+'Exam submitted. Score: '+d.score);await loadData();render()}catch(x){toast(x.message);if(auto){window.close()}}}
 function aiModal(){modal('<div class="modalhead"><h2>✦ '+t('ai')+'</h2><button class="close" onclick="window.close()">×</button></div><p class="muted">'+(S.lang==='ar'?'مساعد B4 يعمل من الـBackend باستخدام Gemini. المفتاح لا يظهر للطلاب.':'B4 AI runs through the backend using Gemini. The key never reaches students.')+'</p><div class="field"><label>Question</label><textarea id="aiq" rows="5" placeholder="'+(S.lang==='ar'?'مثلاً: اشرح TDM بطريقة بسيطة':'Example: Explain TDM simply')+'"></textarea></div><button class="btn primary" onclick="answerAI()">Ask AI →</button><div id="air" style="margin-top:14px"></div>')}
+
+
+/* B4 FINAL PLATFORM POLISH */
+const canEditOwned = x => !!S.me && (S.me.role==='SUPER_ADMIN' || S.me.role==='ADMIN' || Number(x?.created_by)===Number(S.me.id));
+
+function accessDeniedCard(){return '<div class="card notice"><b>Access restricted</b><p class="muted">You do not have permission to view this section.</p></div>';}
+
+function buildNav(){
+  const all=[
+    ['dashboard','⌂','dash',null],['students','♙','students','VIEW_CLASS'],['subjects','▣','subjects','VIEW_CLASS'],['schedule','◫','schedule','VIEW_CLASS'],
+    ['assignments','✓','tasks','VIEW_CLASS'],['resources','▤','resources','VIEW_CLASS'],['exams','⌁','exams','VIEW_CLASS'],
+    ['announcements','◈','news','VIEW_CLASS'],['chat','◌','chat','VIEW_CLASS'],['attendance','◉','attendance','VIEW_CLASS'],
+    ['admin','⚙','admin','ADMIN_CENTER'],['settings','⚙','settings','ACCOUNT']
+  ];
+  const visible=all.filter(x=>x[3]===null||can(x[3]));
+  return visible.map(x=>'<button data-v="'+x[0]+'" class="'+(S.view===x[0]?'active':'')+'">'+x[1]+' <span>'+t(x[2])+'</span>'+(x[0]==='assignments'&&S.tasks.length?'<em>'+S.tasks.length+'</em>':'')+'</button>').join('');
+}
+
+function deadlineBar(endsAt, startsAt){
+  if(!endsAt)return '';
+  const end=new Date(endsAt).getTime(), start=startsAt?new Date(startsAt).getTime():Date.now(), now=Date.now();
+  const total=Math.max(1,end-start), left=Math.max(0,end-now), pct=Math.max(0,Math.min(100,left/total*100));
+  const cls=left<=0?'red':pct<=25?'red':pct<=55?'warn':'good';
+  return '<div class="deadline-wrap" data-deadline="'+end+'" data-start="'+start+'"><div class="deadline-head"><span>Deadline</span><b class="deadline-text">'+(left>0?'Calculating…':'Closed')+'</b></div><div class="deadline-track '+cls+'"><span style="width:'+pct+'%"></span></div></div>';
+}
+function startDeadlineTicker(){
+  clearInterval(window.__deadlineTicker);
+  window.__deadlineTicker=setInterval(()=>{
+    document.querySelectorAll('.deadline-wrap').forEach(el=>{
+      const end=Number(el.dataset.deadline),start=Number(el.dataset.start||Date.now()),now=Date.now(),left=Math.max(0,end-now),total=Math.max(1,end-start),pct=Math.max(0,Math.min(100,left/total*100));
+      const text=el.querySelector('.deadline-text'),bar=el.querySelector('.deadline-track span'),track=el.querySelector('.deadline-track');
+      if(text)text.textContent=left>0?formatCountdown(left):'Closed';
+      if(bar)bar.style.width=pct+'%';
+      if(track)track.classList.toggle('good',pct>55),track.classList.toggle('warn',pct<=55&&pct>25),track.classList.toggle('red',pct<=25);
+    });
+  },1000);
+}
+function formatCountdown(ms){
+  const sec=Math.floor(ms/1000),d=Math.floor(sec/86400),h=Math.floor(sec%86400/3600),m=Math.floor(sec%3600/60),s=sec%60;
+  return (d?d+'d ':'')+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+}
+
+function tasksV(){
+  return title(t('tasks'),'Assignments from teachers and administrators.',can('MANAGE_ASSIGNMENTS')?'<button class="btn primary" onclick="assignmentModal()">＋ '+t('add')+'</button>':'')+
+  '<div class="grid c2">'+S.tasks.map(x=>'<article class="card"><div class="head"><div><span class="badge">'+esc(x.subject_name||'B4')+'</span><h3>'+esc(x.title)+'</h3></div><span class="badge '+(x.status==='DONE'?'good':x.status==='CLOSED'?'red':'warn')+'">'+esc(x.status||'OPEN')+'</span></div>'+
+  (x.description?'<p class="muted">'+esc(x.description)+'</p>':'')+deadlineBar(x.due_at,x.created_at)+
+  '<div class="row-actions">'+(canEditOwned(x)?'<button class="btn ghost" onclick="assignmentModal('+x.id+')">Edit</button><button class="btn danger" onclick="deleteAssignment('+x.id+')">Delete</button>':'')+'</div></article>').join('')+
+  (S.tasks.length?'':'<div class="card empty">No assignments yet.</div>')+'</div>';
+}
+
+function resourcesV(){
+  return title(t('resources'),'Shared lessons, links and PDF files.',can('MANAGE_RESOURCES')?'<button class="btn primary" onclick="resourceModal()">＋ Add resource</button>':'')+
+  '<div class="grid c3">'+S.resources.map(r=>'<article class="card"><div class="head"><span class="badge">'+esc(r.resource_type||'RESOURCE')+'</span><span class="muted">'+esc(r.subject_name||'B4')+'</span></div><h3>'+esc(r.title)+'</h3><p class="muted">'+esc(r.description||'')+'</p>'+
+  (r.url?'<a class="btn primary" href="'+esc(r.url)+'" target="_blank" rel="noopener">Open link →</a>':r.file_url?'<a class="btn primary" href="'+esc(r.file_url)+'" target="_blank" rel="noopener">Open PDF →</a>':'')+
+  (canEditOwned(r)?'<div class="row-actions"><button class="btn ghost" onclick="resourceEditModal('+r.id+')">Edit</button><button class="btn danger" onclick="deleteResource('+r.id+')">Delete</button></div>':'')+
+  '</article>').join('')+(S.resources.length?'':'<div class="card empty">No resources yet.</div>')+'</div>';
+}
+
+function examsV(){
+  return title(t('exams'),'Timed exams with automatic scoring.',can('MANAGE_EXAMS')?'<button class="btn primary" onclick="examModal()">＋ Create exam</button>':'')+
+  '<div class="grid c2">'+S.exams.map(e=>'<article class="card exam-card"><div class="head"><div><span class="badge '+(e.status==='OPEN'?'good':e.status==='CLOSED'?'red':'warn')+'">'+esc(e.status)+'</span><h3>'+esc(e.title)+'</h3></div><span class="muted">'+esc(e.subject_name||'')+'</span></div><p class="muted">'+esc(e.description||'')+'</p>'+
+  '<div class="meter"><span>Start</span><b>'+esc(e.starts_at||'Now')+'</b></div><div class="meter"><span>Time limit</span><b>'+esc(e.duration_minutes||'—')+(e.duration_minutes?' min':'')+'</b></div>'+deadlineBar(e.ends_at,e.starts_at)+
+  '<div class="row-actions"><button class="btn primary" onclick="openExam('+e.id+')">Open exam</button>'+(canEditOwned(e)?'<button class="btn ghost" onclick="examEditModal('+e.id+')">Edit</button><button class="btn danger" onclick="deleteExam('+e.id+')">Delete</button>':'')+'</div></article>').join('')+
+  (S.exams.length?'':'<div class="card empty">No exams have been published yet.</div>')+'</div>';
+}
+
+function scheduleV(){
+  return title(t('schedule'),'Official B4 schedule.',can('MANAGE_SCHEDULE')?'<button class="btn primary" onclick="scheduleModal()">✎ Edit schedule</button>':'')+
+  '<div class="card tablewrap"><table class="table"><thead><tr><th>DAY</th><th>PERIOD 1</th><th>PERIOD 2</th><th>PERIOD 3</th><th>PERIOD 4</th></tr></thead><tbody>'+
+  S.schedule.map(r=>'<tr><td><b>'+esc(r.day_name)+'</b></td><td><div class="classblock">'+esc(r.p1||'—')+'</div></td><td><div class="classblock">'+esc(r.p2||'—')+'</div></td><td><div class="classblock">'+esc(r.p3||'—')+'</div></td><td><div class="classblock">'+esc(r.p4||'—')+'</div></td></tr>').join('')+
+  (S.schedule.length?'':'<tr><td colspan="5" class="empty">Schedule will be added by the admin.</td></tr>')+'</tbody></table></div>';
+}
+
+function adminV(){
+  if(!can('ADMIN_CENTER'))return accessDeniedCard();
+  const cards=[];
+  const add=(perm,icon,titleTxt,desc,fn)=>{if(can(perm))cards.push('<div class="admin-card"><div class="ico">'+icon+'</div><h3>'+titleTxt+'</h3><p class="muted">'+desc+'</p><button class="btn ghost" onclick="'+fn+'">Manage →</button></div>')};
+  if(can('MANAGE_ADMINS')||can('MANAGE_ROLES'))cards.push('<div class="admin-card"><div class="ico">⚙</div><h3>People & Permissions</h3><p class="muted">Roles and individual permissions, separated and easy to manage.</p><button class="btn ghost" onclick="permissionsModal()">Manage →</button></div>');
+  add('MANAGE_TEACHERS','🎓','Teachers','Create teachers and prepare their activation keys.','teacherModal()');
+  add('MANAGE_STUDENTS','♙','Students','Manage official B4 students.','adminStudentModal()');
+  add('MANAGE_KEYS','🔑','Activation Keys','Create one-time keys for students and teachers.','activationModal()');
+  add('MANAGE_SUBJECTS','▣','Subjects','Manage the B4 curriculum.','subjectModal()');
+  add('MANAGE_SCHEDULE','◫','Schedule','Edit all periods and days.','scheduleModal()');
+  add('MANAGE_ASSIGNMENTS','✓','Assignments','Create and edit assignments.','assignmentModal()');
+  add('MANAGE_RESOURCES','▤','Resources & PDFs','Publish links, notes and PDF files.','resourceModal()');
+  add('MANAGE_EXAMS','⌁','Exam Center','Create, edit and review timed exams.','examModal()');
+  add('MANAGE_ANNOUNCEMENTS','◈','Announcements','Publish class notices.','announcementModal()');
+  add('VIEW_LOGS','⌁','Activity & Security Logs','Every important action, not just chat edits.','logsModal()');
+  return title(t('admin'),'Everything is separated by permission.')+'<div class="admin-grid">'+cards.join('')+'</div>';
+}
+
+function loginModal(){
+  modal('<div class="modalhead"><h2>'+t('login')+'</h2><button class="close" onclick="window.close()">×</button></div>'+
+  '<form class="form" onsubmit="login(event)"><div class="field"><label>Display name / Login</label><input id="loginName" required autocomplete="username"></div><div class="field"><label>'+t('password')+'</label><input id="loginPassword" type="password" required autocomplete="current-password"></div><button class="btn primary">'+t('login')+' →</button></form>'+
+  '<div class="login-divider"><span>or</span></div><button class="google-btn" onclick="googleLogin()">Continue with Google</button>'+
+  '<div class="notice" style="margin-top:14px">Google login works only if this Google account is already linked to an existing B4 account.</div>'+
+  '<button class="btn ghost" style="margin-top:10px" onclick="activationUserModal()">First time? Use Activation Key</button>');
+}
+function googleLogin(){location.href=API_BASE+'/api/auth/google/login'}
+
+function settingsV(){
+  const google=S.linked.find(x=>x.provider==='GOOGLE');
+  return title(t('settings'),'Personal preferences and account security.')+
+  '<div class="grid c2"><div class="card"><h3>'+t('account')+'</h3><div class="form"><div class="field"><label>'+t('display')+'</label><input id="displayName" value="'+esc(S.me?.display_name||'')+'"></div><button class="btn primary" onclick="saveProfile()">'+t('save')+'</button><button class="btn ghost" onclick="passwordModal()">Change password</button></div></div>'+
+  '<div class="card"><h3>Preferences</h3><div class="list"><button class="item quick" onclick="toggleTheme()"><span class="grow">Appearance</span><b>'+S.theme+'</b></button><button class="item quick" onclick="toggleLang()"><span class="grow">Language</span><b>'+S.lang+'</b></button><button class="item quick" onclick="installApp()"><span class="grow">'+t('install')+'</span>→</button></div></div>'+
+  '<div class="card"><h3>'+t('linked')+'</h3><p class="muted">Linked accounts never create a new B4 account.</p><div class="list"><div class="item"><span class="grow">Google</span>'+(google?'<span class="badge good">Linked</span><button class="btn danger" onclick="unlinkGoogle()">Unlink</button>':'<button class="btn primary" onclick="linkedGoogle()">Link Google</button>')+'</div><div class="item"><span class="grow">Discord</span><span class="badge">Not Available</span></div><div class="item"><span class="grow">Facebook</span><span class="badge">Not Available</span></div></div></div>'+
+  '<div class="card"><h3>Session</h3><p class="muted">Persistent secure session.</p><button class="btn danger" onclick="logout()">'+t('logout')+'</button></div></div>';
+}
+async function unlinkGoogle(){if(!confirm('Unlink Google from this B4 account?'))return;try{await api('/api/auth/linked/GOOGLE',{method:'DELETE'});await loadMe();toast('Google unlinked ✓')}catch(e){toast(e.message)}}
+
+function activationModal(){
+  if(!can('MANAGE_KEYS')){toast('Permission denied');return}
+  let keys=[],people={students:[],teachers:[]};
+  try{[keys,people]=[(await api('/api/admin/activation-keys')).keys||[],await api('/api/admin/people')]}catch(e){toast(e.message);return}
+  const opts=[...people.students.map(p=>'<option value="STUDENT:'+p.id+'">Student • '+esc(p.display_name)+' ('+esc(p.student_code)+')</option>'),...people.teachers.map(p=>'<option value="TEACHER:'+p.id+'">Teacher • '+esc(p.display_name)+' ('+esc(p.teacher_code||'')+')</option>')].join('');
+  modal('<div class="modalhead"><h2>Activation Keys</h2><button class="close" onclick="window.close()">×</button></div><p class="muted">One key = one B4 identity = one account.</p><form class="form" onsubmit="createKey(event)"><div class="field"><label>Person</label><select id="keyPerson" required>'+opts+'</select></div><button class="btn primary">Generate one-time key</button></form><hr style="border:0;border-top:1px solid var(--line);margin:18px 0"><div class="list">'+keys.map(k=>'<div class="item"><span class="grow"><b>'+esc(k.key_preview)+'</b><br><small class="muted">'+esc(k.person_name||'')+' • '+esc(k.person_type)+' • '+esc(k.status)+'</small></span><span class="badge">Hash only</span></div>').join('')+'</div>');
+}
+async function teacherModal(){
+  if(!can('MANAGE_TEACHERS'))return;
+  const people=await api('/api/admin/people').catch(()=>({teachers:[]}));
+  modal('<div class="modalhead"><h2>Teachers</h2><button class="close" onclick="window.close()">×</button></div>'+
+  '<div class="grid c2"><form class="form" onsubmit="createTeacher(event)"><h3>Add teacher</h3><div class="field"><label>Teacher Code</label><input id="teacherCode" placeholder="T-01" required></div><div class="field"><label>Official name</label><input id="teacherOfficial" required></div><div class="field"><label>Display name</label><input id="teacherDisplay" required></div><button class="btn primary">Add teacher →</button></form>'+
+  '<div><h3>Teachers</h3><div class="list">'+(people.teachers||[]).map(tch=>'<div class="item"><span class="grow"><b>'+esc(tch.display_name)+'</b><small class="muted">'+esc(tch.teacher_code||'')+'</small></span><span class="badge">Teacher</span></div>').join('')+'</div></div></div>');
+}
+async function createTeacher(e){e.preventDefault();try{await api('/api/admin/teachers',{method:'POST',body:JSON.stringify({teacherCode:$('#teacherCode').value,officialName:$('#teacherOfficial').value,displayName:$('#teacherDisplay').value})});await teacherModal();toast('Teacher added ✓')}catch(x){toast(x.message)}}
+
+function assignmentModal(id=null){
+  if(!can('MANAGE_ASSIGNMENTS'))return;
+  const x=id?S.tasks.find(a=>Number(a.id)===Number(id)):null;
+  modal('<div class="modalhead"><h2>'+(x?'Edit assignment':'Create assignment')+'</h2><button class="close" onclick="window.close()">×</button></div><form class="form" onsubmit="saveAssignment(event,'+(id||'null')+')"><div class="field"><label>Title</label><input id="assignmentTitle" value="'+esc(x?.title||'')+'" required></div><div class="field"><label>Subject</label><select id="assignmentSubject">'+S.subjects.map(s=>'<option value="'+s.id+'" '+(Number(x?.subject_id)===Number(s.id)?'selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></div><div class="field"><label>Description</label><textarea id="assignmentDescription" rows="4">'+esc(x?.description||'')+'</textarea></div><div class="field"><label>Deadline</label><input id="assignmentDue" type="datetime-local" value="'+toLocalInput(x?.due_at)+'"></div><button class="btn primary">'+(x?'Save changes':'Publish assignment')+' →</button></form>');
+}
+function toLocalInput(v){if(!v)return '';const d=new Date(v);if(Number.isNaN(d.getTime()))return String(v).slice(0,16);const pad=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes())}
+async function saveAssignment(e,id){e.preventDefault();const body={title:$('#assignmentTitle').value,description:$('#assignmentDescription').value,subjectId:Number($('#assignmentSubject').value)||null,dueAt:$('#assignmentDue').value||null};try{await api(id?'/api/admin/assignments/'+id:'/api/admin/assignments',{method:id?'PATCH':'POST',body:JSON.stringify(body)});window.close();await loadData();render();toast(id?'Assignment updated ✓':'Assignment published ✓')}catch(x){toast(x.message)}}
+async function deleteAssignment(id){if(!confirm('Delete this assignment?'))return;try{await api('/api/admin/assignments/'+id,{method:'DELETE'});await loadData();render();toast('Assignment deleted ✓')}catch(x){toast(x.message)}}
+
+function resourceEditModal(id){const r=S.resources.find(x=>Number(x.id)===Number(id));if(!r)return;modal('<div class="modalhead"><h2>Edit resource</h2><button class="close" onclick="window.close()">×</button></div><form class="form" onsubmit="saveResource(event,'+id+')"><div class="field"><label>Title</label><input id="editResTitle" value="'+esc(r.title)+'" required></div><div class="field"><label>Subject</label><select id="editResSubject">'+S.subjects.map(s=>'<option value="'+s.id+'" '+(Number(r.subject_id)===Number(s.id)?'selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></div><div class="field"><label>URL</label><input id="editResUrl" value="'+esc(r.url||'')+'"></div><div class="field"><label>Description</label><textarea id="editResDesc" rows="4">'+esc(r.description||'')+'</textarea></div><button class="btn primary">Save changes</button></form>')}
+async function saveResource(e,id){e.preventDefault();try{await api('/api/admin/resources/'+id,{method:'PATCH',body:JSON.stringify({title:$('#editResTitle').value,description:$('#editResDesc').value,url:$('#editResUrl').value,subjectId:Number($('#editResSubject').value)||null})});window.close();await loadData();render();toast('Resource updated ✓')}catch(x){toast(x.message)}}
+async function deleteResource(id){if(!confirm('Delete this resource?'))return;try{await api('/api/admin/resources/'+id,{method:'DELETE'});await loadData();render();toast('Resource deleted ✓')}catch(x){toast(x.message)}}
+
+window.__examQuestions=[];
+function syncExamQuestionInputs(){
+  (window.__examQuestions||[]).forEach((q,i)=>{
+    const text=$('#eq_text_'+i),type=$('#eq_type_'+i),points=$('#eq_points_'+i),correct=$('#eq_correct_'+i);
+    if(text)q.text=text.value;
+    if(points)q.points=Number(points.value)||1;
+    if(correct)q.correct=correct.value;
+    if(type)q.type=type.value;
+    q.options=(q.options||[]).map((v,j)=>$('#eq_opt_'+i+'_'+j)?.value??v);
+  });
+}
+function examModal(id=null){
+  if(!can('MANAGE_EXAMS'))return;
+  const ex=id?S.exams.find(x=>Number(x.id)===Number(id)):null;
+  window.__examQuestions=ex?[]:[{type:'MCQ',text:'',options:['','','',''],correct:'',points:1}];
+  modal('<div class="modalhead"><h2>'+(ex?'Edit exam':'Create exam')+'</h2><button class="close" onclick="window.close()">×</button></div><form class="form" onsubmit="saveExam(event,'+(id||'null')+')"><div class="field"><label>Title</label><input id="examTitle" value="'+esc(ex?.title||'')+'" required></div><div class="field"><label>Subject</label><select id="examSubject">'+S.subjects.map(x=>'<option value="'+x.id+'" '+(Number(ex?.subject_id)===Number(x.id)?'selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select></div><div class="grid c2"><div class="field"><label>Start</label><input id="examStart" type="datetime-local" value="'+toLocalInput(ex?.starts_at)+'"></div><div class="field"><label>Deadline</label><input id="examEnd" type="datetime-local" value="'+toLocalInput(ex?.ends_at)+'"></div></div><div class="field"><label>Time limit (minutes)</label><input id="examDuration" type="number" min="1" value="'+esc(ex?.duration_minutes||'')+'"></div><div class="field"><label>Description</label><textarea id="examDesc" rows="3">'+esc(ex?.description||'')+'</textarea></div><div class="head"><h3>Questions</h3><button type="button" class="btn ghost" onclick="addExamQuestion()">＋ Add question</button></div><div id="examQuestions"></div><button class="btn primary">'+(ex?'Save exam':'Publish exam')+' →</button></form>');
+  if(ex)loadExamQuestionsForEditor(id);else renderExamQuestions();
+}
+async function loadExamQuestionsForEditor(id){try{const d=await api('/api/exams/'+id+'/edit');window.__examQuestions=(d.questions||[]).map(q=>({type:q.question_type,text:q.question_text,options:q.options_json||['','','',''],correct:q.correct_answer||'',points:Number(q.points)||1}));renderExamQuestions()}catch(e){toast(e.message)}}
+function addExamQuestion(){syncExamQuestionInputs();window.__examQuestions.push({type:'MCQ',text:'',options:['','','',''],correct:'',points:1});renderExamQuestions()}
+function removeExamQuestion(i){syncExamQuestionInputs();window.__examQuestions.splice(i,1);if(!window.__examQuestions.length)window.__examQuestions.push({type:'MCQ',text:'',options:['','','',''],correct:'',points:1});renderExamQuestions()}
+function updateExamOption(i,j,value){if(!window.__examQuestions[i])return;window.__examQuestions[i].options[j]=value;const sel=$('#eq_correct_'+i);if(sel){const current=sel.value;sel.innerHTML=window.__examQuestions[i].options.map(o=>'<option value="'+esc(o)+'">'+esc(o||'Choose an option')+'</option>').join('');if(window.__examQuestions[i].options.includes(current))sel.value=current;}}
+function changeExamType(i,type){syncExamQuestionInputs();window.__examQuestions[i].type=type;window.__examQuestions[i].correct=type==='TRUE_FALSE'?'TRUE':'';if(type!=='MCQ')window.__examQuestions[i].options=[];else window.__examQuestions[i].options=['','','',''];renderExamQuestions()}
+function renderExamQuestions(){
+  const box=$('#examQuestions');if(!box)return;
+  box.innerHTML=(window.__examQuestions||[]).map((q,i)=>{
+    const opts=(q.options||[]).map((o,j)=>'<input id="eq_opt_'+i+'_'+j+'" placeholder="Option '+(j+1)+'" value="'+esc(o)+'">').join('');
+    const correct=q.type==='MCQ'?'<select id="eq_correct_'+i+'" required>'+((q.options||[]).map(o=>'<option value="'+esc(o)+'" '+(o&&o===q.correct?'selected':'')+'>'+esc(o||'Choose an option')+'</option>').join(''))+'</select>':q.type==='TRUE_FALSE'?'<select id="eq_correct_'+i+'"><option value="TRUE" '+(q.correct==='TRUE'?'selected':'')+'>True</option><option value="FALSE" '+(q.correct==='FALSE'?'selected':'')+'>False</option></select>':'<input id="eq_correct_'+i+'" placeholder="Correct answer (optional for manual grading)">';
+    return '<div class="card question-editor"><div class="head"><b>Question '+(i+1)+'</b>'+(window.__examQuestions.length>1?'<button type="button" class="btn danger" onclick="removeExamQuestion('+i+')">Remove</button>':'')+'</div><div class="field"><label>Question</label><textarea id="eq_text_'+i+'" rows="2" required>'+esc(q.text)+'</textarea></div><div class="field"><label>Type</label><select id="eq_type_'+i+'" onchange="changeExamType('+i+',this.value)"><option value="MCQ" '+(q.type==='MCQ'?'selected':'')+'>MCQ</option><option value="TRUE_FALSE" '+(q.type==='TRUE_FALSE'?'selected':'')+'>True / False</option><option value="SHORT" '+(q.type==='SHORT'?'selected':'')+'>Short answer</option></select></div>'+(q.type==='MCQ'?'<div class="grid c2">'+opts+'</div>':'')+'<div class="grid c2"><div class="field"><label>Correct answer</label>'+correct+'</div><div class="field"><label>Points</label><input id="eq_points_'+i+'" type="number" min="0.5" step="0.5" value="'+q.points+'"></div></div></div>';
+  }).join('');
+}
+async function saveExam(e,id){e.preventDefault();syncExamQuestionInputs();const questions=window.__examQuestions.map(q=>({questionText:q.text,questionType:q.type,options:q.type==='MCQ'?q.options:[],correctAnswer:q.correct,points:Number(q.points)||1}));try{await api(id?'/api/admin/exams/'+id:'/api/admin/exams',{method:id?'PATCH':'POST',body:JSON.stringify({title:$('#examTitle').value,description:$('#examDesc').value,subjectId:Number($('#examSubject').value)||null,startsAt:$('#examStart').value||null,endsAt:$('#examEnd').value||null,durationMinutes:Number($('#examDuration').value)||null,questions})});window.close();await loadData();render();toast(id?'Exam updated ✓':'Exam published ✓')}catch(x){toast(x.message)}}
+function examEditModal(id){return examModal(id)}
+async function deleteExam(id){if(!confirm('Delete this exam?'))return;try{await api('/api/admin/exams/'+id,{method:'DELETE'});await loadData();render();toast('Exam deleted ✓')}catch(x){toast(x.message)}}
+
+async function openExam(id){
+  try{
+    const d=await api('/api/exams/'+id);
+    if(d.attempt?.status==='SUBMITTED'){return showExamResult(id)}
+    const now=Date.now(),start=d.exam.starts_at?new Date(d.exam.starts_at).getTime():0,end=d.exam.ends_at?new Date(d.exam.ends_at).getTime():Infinity;
+    if(start&&now<start){toast('Exam has not started yet');return}
+    if(end&&now>=end){toast('Exam deadline has passed');return}
+    const s=await api('/api/exams/'+id+'/start');showExamRunner(s);
+  }catch(e){toast(e.message)}
+}
+function showExamRunner(d){
+  clearInterval(window.__examTimer);
+  let answers={};
+  const renderQ=()=>d.questions.map((q,i)=>{
+    const options=q.options_json||[];
+    let input=q.question_type==='MCQ'?options.map(o=>'<label class="answer-option"><input type="radio" name="q'+q.id+'" value="'+esc(o)+'"><span>'+esc(o)+'</span></label>').join(''):q.question_type==='TRUE_FALSE'?'<label class="answer-option"><input type="radio" name="q'+q.id+'" value="TRUE"><span>True</span></label><label class="answer-option"><input type="radio" name="q'+q.id+'" value="FALSE"><span>False</span></label>':'<textarea class="exam-answer" id="ans_'+q.id+'" rows="3"></textarea>';
+    return '<div class="card exam-question"><div class="question-number">Question '+(i+1)+' • '+esc(q.points)+' pt</div><h3>'+esc(q.question_text)+'</h3><div class="answer-list">'+input+'</div></div>';
+  }).join('');
+  modal('<div class="modalhead"><div><h2>'+esc(d.exam.title)+'</h2><div class="muted">'+esc(d.exam.subject_name||'')+'</div></div><button class="close" onclick="window.close()">×</button></div><div class="exam-timer" id="examTimer">--:--:--</div><form class="form" onsubmit="submitExam(event,'+d.exam.id+')">'+renderQ()+'<button class="btn primary">Submit exam</button></form>');
+  const deadline=d.attempt.deadline?new Date(d.attempt.deadline).getTime():null;
+  window.__examTimer=setInterval(()=>{const left=deadline?Math.max(0,deadline-Date.now()):0;$('#examTimer').textContent=deadline?formatCountdown(left):'No time limit';if(deadline&&left<=0){clearInterval(window.__examTimer);submitExam(null,d.exam.id,true)}},1000);
+}
+async function submitExam(e,id,auto=false){if(e)e.preventDefault();const answers={};document.querySelectorAll('.exam-question').forEach(card=>{const qid=card.querySelector('[name^="q"]')?.name?.slice(1)||card.querySelector('textarea')?.id?.slice(4);if(!qid)return;const checked=card.querySelector('input:checked');answers[qid]=checked?checked.value:(card.querySelector('textarea')?.value||'')});try{const d=await api('/api/exams/'+id+'/submit',{method:'POST',body:JSON.stringify({answers})});clearInterval(window.__examTimer);showScoreCircle(id,d.score,d.percent,d.total);if(auto)toast('Time is over — exam submitted automatically')}catch(x){toast(x.message)}}
+async function showExamResult(id){try{const d=await api('/api/exams/'+id+'/result');showScoreCircle(id,d.attempt.score,d.percent,d.total)}catch(e){toast(e.message)}}
+function showScoreCircle(id,score,percent,total){percent=percent??Math.round(Number(score||0)/(Number(total||score||1)||1)*100);const p=Math.max(0,Math.min(100,percent));modal('<div class="modalhead"><h2>Exam result</h2><button class="close" onclick="window.close()">×</button></div><div class="score-circle" style="--score:'+p+'"><div><b>'+p+'%</b><span>'+esc(score)+' points</span></div></div><p class="muted" style="text-align:center">Your exam has been submitted and scored automatically.</p><button class="btn primary" style="width:100%" onclick="window.close()">Done</button>');setTimeout(()=>{const c=document.querySelector('.score-circle');if(c)c.classList.add('animate')},40)}
+
+async function scheduleModal(){
+  if(!can('MANAGE_SCHEDULE'))return;
+  const rows=[...S.schedule];while(rows.length<5)rows.push({day_name:['Saturday','Sunday','Monday','Tuesday','Wednesday'][rows.length]||'Day '+(rows.length+1),p1:'',p2:'',p3:'',p4:''});
+  modal('<div class="modalhead"><h2>Edit schedule</h2><button class="close" onclick="window.close()">×</button></div><form class="form" onsubmit="saveSchedule(event)">'+rows.slice(0,7).map((r,i)=>'<div class="card schedule-editor"><b>'+esc(r.day_name)+'</b><div class="grid c4"><input data-day="'+i+'" class="sch-day" value="'+esc(r.day_name||'')+'"><input data-p1="'+i+'" value="'+esc(r.p1||'')" placeholder="Period 1"><input data-p2="'+i+'" value="'+esc(r.p2||'')" placeholder="Period 2"><input data-p3="'+i+'" value="'+esc(r.p3||'')" placeholder="Period 3"><input data-p4="'+i+'" value="'+esc(r.p4||'')" placeholder="Period 4"></div></div>').join('')+'<button class="btn primary">Save schedule</button></form>');
+}
+async function saveSchedule(e){e.preventDefault();const rows=[...document.querySelectorAll('.schedule-editor')].map((_,i)=>({day_name:document.querySelector('[data-day="'+i+'"]').value,p1:document.querySelector('[data-p1="'+i+'"]').value,p2:document.querySelector('[data-p2="'+i+'"]').value,p3:document.querySelector('[data-p3="'+i+'"]').value,p4:document.querySelector('[data-p4="'+i+'"]').value}));try{await api('/api/admin/schedule',{method:'PUT',body:JSON.stringify({schedule:rows})});window.close();await loadData();render();toast('Schedule updated ✓')}catch(x){toast(x.message)}}
+
+function subjectModal(){
+  if(!can('MANAGE_SUBJECTS'))return;
+  modal('<div class="modalhead"><h2>Subjects</h2><button class="close" onclick="window.close()">×</button></div><form class="form" onsubmit="createSubject(event)"><div class="field"><label>Subject name</label><input id="subjectName" required></div><div class="field"><label>Teacher</label><input id="subjectTeacher"></div><button class="btn primary">Add subject</button></form>');
+}
+async function createSubject(e){e.preventDefault();try{await api('/api/admin/subjects',{method:'POST',body:JSON.stringify({name:$('#subjectName').value,teacherName:$('#subjectTeacher').value})});window.close();await loadData();render();toast('Subject added ✓')}catch(x){toast(x.message)}}
+
+async function permissionsModal(){
+  if(!can('MANAGE_ROLES')&&!can('MANAGE_ADMINS'))return;
+  try{
+    const [pd,ud]=await Promise.all([api('/api/admin/permissions'),api('/api/admin/users')]);
+    window.__permissionDefs=pd.permissions||[];window.__permissionUsers=ud.users||[];
+    const opts=window.__permissionUsers.map(u=>'<option value="'+u.id+'">'+esc(u.display_name)+' • '+esc(u.role)+'</option>').join('');
+    modal('<div class="modalhead"><h2>People & Permissions</h2><button class="close" onclick="window.close()">×</button></div><div class="permission-layout"><div class="field"><label>Account</label><select id="permUser" onchange="renderPermissionEditor()">'+opts+'</select></div><div id="permEditor"></div></div>');
+    renderPermissionEditor();
+  }catch(e){toast(e.message)}
+}
+function renderPermissionEditor(){
+  const u=window.__permissionUsers?.find(x=>Number(x.id)===Number($('#permUser')?.value));if(!u)return;
+  const superAdmin=u.role==='SUPER_ADMIN',direct=new Set(u.direct_permissions||[]);
+  const roleEditor=can('MANAGE_ADMINS')&&!superAdmin?'<div class="field"><label>Role</label><select id="permRole"><option value="STUDENT" '+(u.role==='STUDENT'?'selected':'')+'>STUDENT</option><option value="TEACHER" '+(u.role==='TEACHER'?'selected':'')+'>TEACHER</option><option value="ADMIN" '+(u.role==='ADMIN'?'selected':'')+'>ADMIN</option></select></div>':'';
+  const boxes=(window.__permissionDefs||[]).map(p=>'<label class="permission-card"><input type="checkbox" data-perm="'+esc(p.code)+'" '+(direct.has(p.code)||superAdmin?'checked':'')+' '+(superAdmin?'disabled':'')+'><span><b>'+esc(p.label)+'</b><small>'+esc(p.code)+'</small></span></label>').join('');
+  $('#permEditor').innerHTML='<div class="role-summary"><span class="badge">'+esc(u.role)+'</span><span class="muted">'+esc(u.display_name)+'</span></div>'+roleEditor+'<div class="permission-grid">'+boxes+'</div>'+(superAdmin?'':'<button class="btn primary" style="margin-top:16px;width:100%" onclick="savePermissions()">Save changes</button>');
+}
+
+async function logsModal(){
+  try{
+    const d=await api('/api/admin/logs');
+    const rows=[...(d.activity||[]).map(x=>({...x,kind:'Activity'})),...(d.security||[]).map(x=>({...x,kind:'Security'}))].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    modal('<div class="modalhead"><h2>Activity & Security Logs</h2><button class="close" onclick="window.close()">×</button></div><p class="muted">All important account, admin, content, permission and security actions.</p><div class="log-list">'+rows.map(x=>'<div class="log-row"><div class="log-icon">'+(x.kind==='Security'?'🔒':'•')+'</div><div class="grow"><b>'+esc(x.action)+'</b><small class="muted">'+esc(x.actor_name||'System')+' • '+esc(x.created_at||'')+'</small><div class="muted">'+esc(x.entity_type||'')+(x.entity_id?' #'+esc(x.entity_id):'')+(x.details?' • '+esc(x.details):'')+'</div></div><span class="badge">'+esc(x.kind)+'</span></div>').join('')||'<div class="empty">No logs yet.</div>')+'</div>');
+  }catch(x){toast(x.message)}
+}
+
+// The backend needs the editor endpoint used by examModal().
+async function loadData(){
+  try{
+    const d=await api('/api/bootstrap');
+    S.students=d.students||[];S.subjects=d.subjects||[];S.tasks=d.assignments||[];S.announcements=d.announcements||[];S.schedule=d.schedule||[];S.resources=d.resources||[];S.exams=d.exams||[];S.attendance=d.attendance||[];S.messages=d.messages||[];S.notifications=d.notifications||[];S.dataError='';
+  }catch(e){S.dataError=e.message||'Could not load class data';S.students=[];S.subjects=[];S.tasks=[];S.announcements=[];S.schedule=[];S.resources=[];S.exams=[];S.notifications=[];S.attendance=[];S.messages=[]}
+}
+views.dashboard=dashboard;views.students=studentsV;views.subjects=subjectsV;views.schedule=scheduleV;views.assignments=tasksV;views.resources=resourcesV;views.exams=examsV;views.announcements=newsV;views.chat=chatV;views.attendance=attendanceV;views.admin=adminV;views.settings=settingsV;
+
+document.addEventListener('click',e=>{
+  const closeBtn=e.target.closest?.('.close'); if(closeBtn)e.stopPropagation();
+});
+startDeadlineTicker();

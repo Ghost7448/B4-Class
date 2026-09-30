@@ -64,10 +64,22 @@ app.use(session({
 
 const q = (sql, args = []) => pool.execute(sql, args);
 
+async function audit(req, action, entityType = null, entityId = null, details = null) {
+  try { await q('INSERT INTO activity_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)',[req.session?.userId||null,action,entityType,entityId,details==null?null:(typeof details==='string'?details:JSON.stringify(details))]); }
+  catch(e){ console.error('Audit log failed:',e.message); }
+}
+async function assertTeacherOwner(req, table, id) {
+  const [actor]=await q('SELECT role FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+  if(actor[0]?.role!=='TEACHER') return;
+  const [rows]=await q(`SELECT created_by FROM ${table} WHERE id=? LIMIT 1`,[id]);
+  if(!rows[0]||Number(rows[0].created_by)!==Number(req.session.userId)) throw Object.assign(new Error('Teachers can only manage their own content'),{statusCode:403});
+}
+
 const PERMISSION_DEFS = [
   ['MANAGE_ADMINS','Manage admins'],
   ['MANAGE_ACCOUNTS','Manage accounts'],
   ['MANAGE_KEYS','Manage activation keys'],
+  ['MANAGE_TEACHERS','Manage teachers'],
   ['MANAGE_STUDENTS','Manage students'],
   ['MANAGE_ROLES','Manage roles & permissions'],
   ['MANAGE_SUBJECTS','Manage subjects'],
@@ -153,17 +165,17 @@ async function getBootstrap(req) {
   `);
   const [subjects] = await q(`SELECT id,name,teacher_name,progress FROM subjects WHERE class_name='B4' ORDER BY name`);
   const [assignments] = await q(`
-    SELECT a.id,a.title,a.description,a.status,a.due_at,s.name subject_name
+    SELECT a.id,a.title,a.description,a.status,a.subject_id,a.due_at,a.created_by,s.name subject_name
     FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id
     WHERE a.class_name='B4' ORDER BY a.due_at IS NULL,a.due_at
   `);
   const [announcements] = await q(`
-    SELECT id,title,body,category,created_at FROM announcements
+    SELECT id,title,body,category,created_at,created_by FROM announcements
     WHERE class_name='B4' ORDER BY created_at DESC LIMIT 20
   `);
   const [schedule] = await q(`SELECT day_name,p1,p2,p3,p4 FROM schedule WHERE class_name='B4' ORDER BY day_order`);
   const [resources] = await q(`
-    SELECT r.id,r.title,r.description,r.url,
+    SELECT r.id,r.title,r.description,r.url,r.created_by,
            COALESCE(r.file_url,CASE WHEN rf.id IS NOT NULL THEN CONCAT('/api/resources/files/',rf.id) END) file_url,
            rf.filename,r.resource_type,r.subject_id,s.name subject_name
     FROM resources r LEFT JOIN subjects s ON s.id=r.subject_id
@@ -171,7 +183,7 @@ async function getBootstrap(req) {
     WHERE r.class_name='B4' ORDER BY r.created_at DESC LIMIT 100
   `);
   const [exams] = await q(`
-    SELECT e.id,e.title,e.description,e.subject_id,s.name subject_name,e.starts_at,e.ends_at,e.duration_minutes,e.status
+    SELECT e.id,e.title,e.description,e.subject_id,e.created_by,s.name subject_name,e.starts_at,e.ends_at,e.duration_minutes,e.status
     FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id
     WHERE e.class_name='B4' ORDER BY e.starts_at IS NULL,e.starts_at
   `);
@@ -282,10 +294,8 @@ app.post('/api/auth/activate', async (req, res) => {
       `UPDATE activation_keys SET status='USED',used_at=NOW(),used_user_id=? WHERE id=?`,
       [u.insertId, k.id]
     );
-    await conn.execute(
-      `INSERT INTO security_logs(actor_user_id,action,details) VALUES(NULL,'ACTIVATION_USED',?)`,
-      [`Account ${u.insertId} activated`]
-    );
+    await conn.execute(`INSERT INTO security_logs(actor_user_id,action,details) VALUES(NULL,'ACTIVATION_USED',?)`,[`Account ${u.insertId} activated`]);
+    await conn.execute(`INSERT INTO activity_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(NULL,'ACCOUNT_ACTIVATED','user',?,?)`,[u.insertId,JSON.stringify({person_type:k.person_type})]);
     await conn.commit();
     res.json({ ok: true, message: 'Account created. You can now log in with your display name.' });
   } catch (e) {
@@ -308,10 +318,11 @@ app.post('/api/auth/login', async (req, res) => {
   }
   req.session.userId = u.id;
   req.session.role = u.role;
+  await audit(req,'LOGIN','user',u.id);
   res.json({ ok: true, user: await userById(u.id) });
 });
 
-app.post('/api/auth/logout', (req, res) => req.session.destroy(() => res.json({ ok: true })));
+app.post('/api/auth/logout',(req,res)=>{const uid=req.session.userId;req.session.destroy(()=>{if(uid)q('INSERT INTO activity_logs(actor_user_id,action,entity_type,entity_id) VALUES(?,?,?,?)',[uid,'LOGOUT','user',uid]).catch(()=>{});res.json({ok:true});});});
 
 app.post('/api/auth/password', requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
@@ -323,9 +334,8 @@ app.post('/api/auth/password', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Current password is incorrect' });
   }
   await q(`UPDATE users SET password_hash=? WHERE id=?`, [await bcrypt.hash(newPassword, 12), req.session.userId]);
-  await q(`INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)`, [
-    req.session.userId, 'PASSWORD_CHANGED', 'User changed their password'
-  ]);
+  await q(`INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)`, [req.session.userId,'PASSWORD_CHANGED','User changed their password']);
+  await audit(req,'PASSWORD_CHANGED','user',req.session.userId);
   res.json({ ok: true });
 });
 
@@ -340,6 +350,7 @@ app.patch('/api/auth/profile', requireAuth, async (req, res) => {
   );
   if (x[0]) return res.status(400).json({ error: 'That display name is already in use' });
   await q(`UPDATE users SET display_name=? WHERE id=?`, [displayName.trim(), req.session.userId]);
+  await audit(req,'PROFILE_UPDATED','user',req.session.userId,{displayName:displayName.trim()});
   res.json({ ok: true, user: await userById(req.session.userId) });
 });
 
@@ -371,6 +382,7 @@ app.put('/api/admin/users/:id/permissions', requireAnyPermission(['MANAGE_ROLES'
   await q('DELETE FROM user_permissions WHERE user_id=?',[targetId]);
   for(const p of valid) await q('INSERT INTO user_permissions(user_id,permission_id,granted_by) VALUES(?,?,?)',[targetId,p.id,req.session.userId]);
   await q('INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)',[req.session.userId,'PERMISSIONS_UPDATED',JSON.stringify({target_user_id:targetId,permissions:codes})]);
+  await audit(req,'PERMISSIONS_UPDATED','user',targetId,{permissions:codes});
   res.json({ok:true,permissions:await getPermissionCodes(targetId)});
 });
 
@@ -383,6 +395,7 @@ app.patch('/api/admin/users/:id/role', requirePermission('MANAGE_ADMINS'), async
   if((target[0].role==='SUPER_ADMIN'||role==='SUPER_ADMIN')&&actor[0]?.role!=='SUPER_ADMIN') return res.status(403).json({error:'Only Super Admin can manage Super Admin role'});
   await q('UPDATE users SET role=? WHERE id=?',[role,targetId]);
   await q('INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)',[req.session.userId,'ROLE_UPDATED',JSON.stringify({target_user_id:targetId,role})]);
+  await audit(req,'ROLE_UPDATED','user',targetId,{role});
   res.json({ok:true,user:await userById(targetId)});
 });
 
@@ -421,13 +434,23 @@ app.post('/api/admin/activation-keys', requirePermission('MANAGE_KEYS'), async (
     p[0].official_name,
     req.session.userId
   ]);
-  await q(`INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)`, [
-    req.session.userId, 'ACTIVATION_CREATED', `${personType} ${personId}`
-  ]);
+  await q(`INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)`,[req.session.userId,'ACTIVATION_CREATED',`${personType} ${personId}`]);
+  await audit(req,'ACTIVATION_CREATED',personType.toLowerCase(),personId);
   res.json({ ok: true, key: raw });
 });
 
-app.get('/api/admin/people', requireAnyPermission(['MANAGE_ACCOUNTS','MANAGE_ADMINS','MANAGE_STUDENTS']), async (req,res) => {
+app.post('/api/admin/teachers',requirePermission('MANAGE_TEACHERS'),async(req,res)=>{
+  const {teacherCode,officialName,displayName}=req.body||{};if(!teacherCode||!officialName||!displayName)return res.status(400).json({error:'Teacher code, official name and display name are required'});
+  try{const [r]=await q("INSERT INTO teachers(teacher_code,official_name,display_name,class_name) VALUES(?,?,?,'B4')",[teacherCode.trim(),officialName.trim(),displayName.trim()]);await audit(req,'TEACHER_CREATED','teacher',r.insertId,{teacherCode:teacherCode.trim()});res.json({ok:true,id:r.insertId});}catch(e){res.status(400).json({error:e.code==='ER_DUP_ENTRY'?'Teacher code already exists':e.message});}
+});
+app.post('/api/admin/subjects',requirePermission('MANAGE_SUBJECTS'),async(req,res)=>{
+  const {name,teacherName='',progress=0}=req.body||{};if(!name?.trim())return res.status(400).json({error:'Subject name is required'});
+  try{const [r]=await q("INSERT INTO subjects(name,class_name,teacher_name,progress) VALUES(?,'B4',?,?)",[name.trim(),String(teacherName||'').trim()||null,Math.max(0,Math.min(100,Number(progress)||0))]);await audit(req,'SUBJECT_CREATED','subject',r.insertId,{name:name.trim()});res.json({ok:true,id:r.insertId});}catch(e){res.status(400).json({error:e.code==='ER_DUP_ENTRY'?'Subject already exists':e.message});}
+});
+app.patch('/api/admin/subjects/:id',requirePermission('MANAGE_SUBJECTS'),async(req,res)=>{const id=Number(req.params.id),{name,teacherName='',progress=0}=req.body||{};const [r]=await q("UPDATE subjects SET name=?,teacher_name=?,progress=? WHERE id=? AND class_name='B4'",[String(name||'').trim(),String(teacherName||'').trim()||null,Math.max(0,Math.min(100,Number(progress)||0)),id]);if(!r.affectedRows)return res.status(404).json({error:'Subject not found'});await audit(req,'SUBJECT_UPDATED','subject',id);res.json({ok:true});});
+app.delete('/api/admin/subjects/:id',requirePermission('MANAGE_SUBJECTS'),async(req,res)=>{const id=Number(req.params.id),[r]=await q("DELETE FROM subjects WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Subject not found'});await audit(req,'SUBJECT_DELETED','subject',id);res.json({ok:true});});
+
+app.get('/api/admin/people', requireAnyPermission(['MANAGE_ACCOUNTS','MANAGE_ADMINS','MANAGE_STUDENTS','MANAGE_TEACHERS','MANAGE_KEYS']), async (req,res) => {
   const [students] = await q(`SELECT id,student_code,official_name,display_name FROM students WHERE class_name='B4' ORDER BY display_name`);
   const [teachers] = await q(`SELECT id,teacher_code,official_name,display_name FROM teachers WHERE class_name='B4' ORDER BY display_name`);
   res.json({ students, teachers });
@@ -452,7 +475,7 @@ app.post('/api/admin/assignments', requirePermission('MANAGE_ASSIGNMENTS'), asyn
   if(!title?.trim()) return res.status(400).json({error:'Assignment title is required'});
   const [r]=await q(`INSERT INTO assignments(title,description,subject_id,class_name,due_at,created_by) VALUES(?,?,?,'B4',?,?)`,
     [title.trim(),description.trim(),subjectId||null,dueAt||null,req.session.userId]);
-  res.json({ok:true,id:r.insertId});
+  await audit(req,'ASSIGNMENT_CREATED','assignment',r.insertId,{title:title.trim()});res.json({ok:true,id:r.insertId});
 });
 
 app.post('/api/admin/announcements', requirePermission('MANAGE_ANNOUNCEMENTS'), async (req,res) => {
@@ -462,6 +485,19 @@ app.post('/api/admin/announcements', requirePermission('MANAGE_ANNOUNCEMENTS'), 
     [title.trim(),body.trim(),category.trim(),req.session.userId]);
   res.json({ok:true,id:r.insertId});
 });
+
+app.patch('/api/admin/assignments/:id',requirePermission('MANAGE_ASSIGNMENTS'),async(req,res)=>{const id=Number(req.params.id);try{await assertTeacherOwner(req,'assignments',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const {title,description='',subjectId=null,dueAt=null,status='OPEN'}=req.body||{};const [r]=await q("UPDATE assignments SET title=?,description=?,subject_id=?,due_at=?,status=? WHERE id=? AND class_name='B4'",[String(title||'').trim(),String(description||'').trim(),subjectId||null,dueAt||null,['OPEN','DONE','CLOSED'].includes(status)?status:'OPEN',id]);if(!r.affectedRows)return res.status(404).json({error:'Assignment not found'});await audit(req,'ASSIGNMENT_UPDATED','assignment',id);res.json({ok:true});});
+app.delete('/api/admin/assignments/:id',requirePermission('MANAGE_ASSIGNMENTS'),async(req,res)=>{const id=Number(req.params.id);try{await assertTeacherOwner(req,'assignments',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const [r]=await q("DELETE FROM assignments WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Assignment not found'});await audit(req,'ASSIGNMENT_DELETED','assignment',id);res.json({ok:true});});
+app.patch('/api/admin/resources/:id',requirePermission('MANAGE_RESOURCES'),async(req,res)=>{const id=Number(req.params.id);try{await assertTeacherOwner(req,'resources',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const {title,description='',url='',subjectId=null}=req.body||{};const [r]=await q("UPDATE resources SET title=?,description=?,url=?,subject_id=? WHERE id=? AND class_name='B4'",[String(title||'').trim(),String(description||'').trim(),String(url||'').trim()||null,subjectId||null,id]);if(!r.affectedRows)return res.status(404).json({error:'Resource not found'});await audit(req,'RESOURCE_UPDATED','resource',id);res.json({ok:true});});
+app.delete('/api/admin/resources/:id',requirePermission('MANAGE_RESOURCES'),async(req,res)=>{const id=Number(req.params.id);try{await assertTeacherOwner(req,'resources',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const [r]=await q("DELETE FROM resources WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Resource not found'});await audit(req,'RESOURCE_DELETED','resource',id);res.json({ok:true});});
+app.patch('/api/admin/exams/:id',requirePermission('MANAGE_EXAMS'),async(req,res)=>{const id=Number(req.params.id);try{await assertTeacherOwner(req,'exams',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const {title,description='',subjectId=null,startsAt=null,endsAt=null,durationMinutes=null,questions=[]}=req.body||{};if(!title?.trim()||!Array.isArray(questions)||!questions.length)return res.status(400).json({error:'Exam title and questions are required'});if(startsAt&&endsAt&&new Date(endsAt)<=new Date(startsAt))return res.status(400).json({error:'Deadline must be after start time'});const conn=await pool.getConnection();try{await conn.beginTransaction();const [r]=await conn.execute("UPDATE exams SET title=?,description=?,subject_id=?,starts_at=?,ends_at=?,duration_minutes=? WHERE id=? AND class_name='B4'",[title.trim(),String(description||'').trim(),subjectId||null,startsAt||null,endsAt||null,durationMinutes?Number(durationMinutes):null,id]);if(!r.affectedRows)throw new Error('Exam not found');await conn.execute('DELETE FROM exam_questions WHERE exam_id=?',[id]);for(let i=0;i<questions.length;i++){const qn=questions[i];if(!String(qn.questionText||'').trim())continue;const type=['MCQ','TRUE_FALSE','SHORT'].includes(qn.questionType)?qn.questionType:'MCQ';const opts=type==='MCQ'?(Array.isArray(qn.options)?qn.options.filter(Boolean).slice(0,8):[]):null;const correct=type==='MCQ'?String(qn.correctAnswer||'').trim():(type==='TRUE_FALSE'?(String(qn.correctAnswer||'TRUE').toUpperCase()==='TRUE'?'TRUE':'FALSE'):null);await conn.execute('INSERT INTO exam_questions(exam_id,question_text,question_type,options_json,correct_answer,points,sort_order) VALUES(?,?,?,?,?,?,?)',[id,String(qn.questionText).trim(),type,opts?JSON.stringify(opts):null,correct,Number(qn.points)||1,i]);}await conn.commit();await audit(req,'EXAM_UPDATED','exam',id);res.json({ok:true});}catch(e){await conn.rollback();res.status(400).json({error:e.message})}finally{conn.release()}});
+app.delete('/api/admin/exams/:id',requirePermission('MANAGE_EXAMS'),async(req,res)=>{const id=Number(req.params.id);try{await assertTeacherOwner(req,'exams',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const [r]=await q("DELETE FROM exams WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Exam not found'});await audit(req,'EXAM_DELETED','exam',id);res.json({ok:true});});
+app.patch('/api/admin/announcements/:id',requirePermission('MANAGE_ANNOUNCEMENTS'),async(req,res)=>{const id=Number(req.params.id),{title,body,category='General'}=req.body||{};const [r]=await q("UPDATE announcements SET title=?,body=?,category=? WHERE id=? AND class_name='B4'",[String(title||'').trim(),String(body||'').trim(),String(category||'General').trim(),id]);if(!r.affectedRows)return res.status(404).json({error:'Announcement not found'});await audit(req,'ANNOUNCEMENT_UPDATED','announcement',id);res.json({ok:true});});
+app.delete('/api/admin/announcements/:id',requirePermission('MANAGE_ANNOUNCEMENTS'),async(req,res)=>{const id=Number(req.params.id),[r]=await q("DELETE FROM announcements WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Announcement not found'});await audit(req,'ANNOUNCEMENT_DELETED','announcement',id);res.json({ok:true});});
+app.put('/api/admin/schedule',requirePermission('MANAGE_SCHEDULE'),async(req,res)=>{const rows=Array.isArray(req.body?.schedule)?req.body.schedule:[],conn=await pool.getConnection();try{await conn.beginTransaction();await conn.execute("DELETE FROM schedule WHERE class_name='B4'");for(const [i,row] of rows.entries())await conn.execute("INSERT INTO schedule(class_name,day_order,day_name,p1,p2,p3,p4) VALUES('B4',?,?,?,?,?,?)",[i+1,String(row.day_name||'Day '+(i+1)),String(row.p1||''),String(row.p2||''),String(row.p3||''),String(row.p4||'')]);await conn.commit();await audit(req,'SCHEDULE_UPDATED','schedule',null,{rows:rows.length});res.json({ok:true});}catch(e){await conn.rollback();res.status(400).json({error:e.message})}finally{conn.release()}});
+app.get('/api/admin/logs',requirePermission('VIEW_LOGS'),async(req,res)=>{const [activity]=await q('SELECT l.id,l.action,l.entity_type,l.entity_id,l.details,l.created_at,u.display_name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_user_id ORDER BY l.created_at DESC LIMIT 500');const [security]=await q('SELECT l.id,l.action,l.details,l.created_at,u.display_name actor_name FROM security_logs l LEFT JOIN users u ON u.id=l.actor_user_id ORDER BY l.created_at DESC LIMIT 500');res.json({activity,security});});
+app.get('/api/exams/:id/edit',requirePermission('MANAGE_EXAMS'),async(req,res)=>{const id=Number(req.params.id);try{await assertTeacherOwner(req,'exams',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const [rows]=await q("SELECT id,title,description,subject_id,starts_at,ends_at,duration_minutes,status,created_by FROM exams WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!rows[0])return res.status(404).json({error:'Exam not found'});const [questions]=await q('SELECT id,question_text,question_type,options_json,correct_answer,points,sort_order FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[id]);res.json({exam:rows[0],questions:questions.map(x=>({...x,options_json:typeof x.options_json==='string'?(JSON.parse(x.options_json||'[]')):(x.options_json||[])}))});});
+app.get('/api/exams/:id/result',requireAuth,async(req,res)=>{const id=Number(req.params.id),[r]=await q('SELECT a.id,a.status,a.score,a.started_at,a.submitted_at,e.title,e.ends_at,e.duration_minutes FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);if(!r[0])return res.status(404).json({error:'No exam submission yet'});const [tot]=await q('SELECT COALESCE(SUM(points),0) total FROM exam_questions WHERE exam_id=?',[id]);const total=Number(tot[0]?.total||0),score=Number(r[0].score||0);res.json({attempt:r[0],percent:total?Math.round(score/total*100):0,total});});
 
 app.post('/api/chat/messages',requireAuth,async(req,res)=>{
   const body=String(req.body?.body||'').trim();
@@ -530,39 +566,46 @@ app.get('/api/auth/linked', requireAuth, async (req,res)=>{
   res.json({linked:rows});
 });
 
-app.get('/api/auth/google/start', requireAuth, async (req,res)=>{
-  const clientId=process.env.GOOGLE_CLIENT_ID, redirectUri=process.env.GOOGLE_REDIRECT_URI;
-  if(!clientId||!redirectUri) return res.status(503).json({error:'Google linking is not configured'});
-  const state=crypto.randomBytes(32).toString('hex'); req.session.googleOAuthState=state;
-  const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  u.searchParams.set('client_id',clientId); u.searchParams.set('redirect_uri',redirectUri); u.searchParams.set('response_type','code');
-  u.searchParams.set('scope','openid email profile'); u.searchParams.set('state',state); u.searchParams.set('access_type','online'); u.searchParams.set('prompt','select_account');
-  res.redirect(u.toString());
-});
-
-app.get('/api/auth/google/callback', async (req,res)=>{
+async function startGoogleOAuth(req,res,mode){
+  const clientId=process.env.GOOGLE_CLIENT_ID,redirectUri=process.env.GOOGLE_REDIRECT_URI;
+  if(!clientId||!redirectUri)return res.status(503).json({error:'Google linking is not configured'});
+  const state=crypto.randomBytes(32).toString('hex');req.session.googleOAuthState=state;req.session.googleOAuthMode=mode;
+  const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');u.searchParams.set('client_id',clientId);u.searchParams.set('redirect_uri',redirectUri);u.searchParams.set('response_type','code');u.searchParams.set('scope','openid email profile');u.searchParams.set('state',state);u.searchParams.set('access_type','online');u.searchParams.set('prompt','select_account');res.redirect(u.toString());
+}
+app.get('/api/auth/google/start',requireAuth,(req,res)=>startGoogleOAuth(req,res,'link'));
+app.get('/api/auth/google/login',(req,res)=>startGoogleOAuth(req,res,'login'));
+app.get('/api/auth/google/callback',async(req,res)=>{
   try{
-    if(req.query.error) return res.redirect('/?google=cancelled');
-    if(!req.query.code||req.query.state!==req.session.googleOAuthState) return res.status(400).send('Google OAuth state mismatch.');
-    const clientId=process.env.GOOGLE_CLIENT_ID, clientSecret=process.env.GOOGLE_CLIENT_SECRET, redirectUri=process.env.GOOGLE_REDIRECT_URI;
-    if(!clientId||!clientSecret||!redirectUri) return res.status(503).send('Google linking is not configured.');
+    const mode=req.session.googleOAuthMode||'link';
+    if(req.query.error)return res.redirect('/?google=cancelled');
+    if(!req.query.code||req.query.state!==req.session.googleOAuthState)return res.status(400).send('Google OAuth state mismatch.');
+    const clientId=process.env.GOOGLE_CLIENT_ID,clientSecret=process.env.GOOGLE_CLIENT_SECRET,redirectUri=process.env.GOOGLE_REDIRECT_URI;
+    if(!clientId||!clientSecret||!redirectUri)return res.status(503).send('Google linking is not configured.');
     const tokenRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({code:String(req.query.code),client_id:clientId,client_secret:clientSecret,redirect_uri:redirectUri,grant_type:'authorization_code'})});
-    const tokens=await tokenRes.json(); if(!tokenRes.ok||!tokens.access_token) throw new Error('Google token exchange failed');
+    const tokens=await tokenRes.json();if(!tokenRes.ok||!tokens.access_token)throw new Error('Google token exchange failed');
     const infoRes=await fetch('https://openidconnect.googleapis.com/v1/userinfo',{headers:{Authorization:'Bearer '+tokens.access_token}});
-    const info=await infoRes.json(); if(!infoRes.ok||!info.sub) throw new Error('Google user info failed');
-    const [owner]=await q('SELECT user_id FROM linked_accounts WHERE provider=\'GOOGLE\' AND provider_user_id=? LIMIT 1',[String(info.sub)]);
-    if(owner[0]&&Number(owner[0].user_id)!==Number(req.session.userId)) return res.redirect('/?google=already-linked');
-    if(!owner[0]) await q('INSERT INTO linked_accounts(user_id,provider,provider_user_id,provider_email) VALUES(?,\'GOOGLE\',?,?)',[req.session.userId,String(info.sub),info.email||null]);
-    delete req.session.googleOAuthState;
-    res.redirect('/?google=linked');
-  }catch(e){console.error('Google linking failed:',e.message);res.redirect('/?google=error');}
+    const info=await infoRes.json();if(!infoRes.ok||!info.sub)throw new Error('Google user info failed');
+    const [owner]=await q("SELECT user_id FROM linked_accounts WHERE provider='GOOGLE' AND provider_user_id=? LIMIT 1",[String(info.sub)]);
+    if(mode==='login'){
+      if(!owner[0])return res.redirect('/?google=not-linked');
+      const [u]=await q('SELECT id,role,status FROM users WHERE id=? LIMIT 1',[owner[0].user_id]);
+      if(!u[0]||u[0].status!=='ACTIVE')return res.redirect('/?google=disabled');
+      req.session.userId=u[0].id;req.session.role=u[0].role;await audit(req,'GOOGLE_LOGIN','user',u[0].id,{email:info.email||null});
+      delete req.session.googleOAuthState;delete req.session.googleOAuthMode;return res.redirect('/?google=login');
+    }
+    if(!req.session.userId)return res.redirect('/?google=login-required');
+    if(owner[0]&&Number(owner[0].user_id)!==Number(req.session.userId))return res.redirect('/?google=already-linked');
+    if(!owner[0]){await q("INSERT INTO linked_accounts(user_id,provider,provider_user_id,provider_email) VALUES(?,'GOOGLE',?,?)",[req.session.userId,String(info.sub),info.email||null]);await audit(req,'GOOGLE_LINKED','user',req.session.userId,{email:info.email||null});}
+    delete req.session.googleOAuthState;delete req.session.googleOAuthMode;res.redirect('/?google=linked');
+  }catch(e){console.error('Google OAuth failed:',e.message);res.redirect('/?google=error');}
 });
+app.delete('/api/auth/linked/GOOGLE',requireAuth,async(req,res)=>{const [r]=await q("DELETE FROM linked_accounts WHERE user_id=? AND provider='GOOGLE'",[req.session.userId]);if(r.affectedRows)await audit(req,'GOOGLE_UNLINKED','user',req.session.userId);res.json({ok:true});});
 
 app.post('/api/admin/resources', requirePermission('MANAGE_RESOURCES'), async(req,res)=>{
   const {title,description='',url='',subjectId=null,resourceType='LINK'}=req.body||{};
   if(!title?.trim()) return res.status(400).json({error:'Resource title is required'});
   const [r]=await q('INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,\'B4\',?,?)',[title.trim(),description.trim(),url.trim()||null,resourceType,subjectId||null,req.session.userId]);
-  res.json({ok:true,id:r.insertId});
+  await audit(req,'RESOURCE_CREATED','resource',r.insertId,{type:resourceType});res.json({ok:true,id:r.insertId});
 });
 
 app.post('/api/admin/resources/pdf', requirePermission('MANAGE_RESOURCES'), pdfUpload.single('file'), async(req,res)=>{
@@ -572,7 +615,7 @@ app.post('/api/admin/resources/pdf', requirePermission('MANAGE_RESOURCES'), pdfU
   const subjectId=req.body?.subjectId?Number(req.body.subjectId):null;
   const [r]=await q('INSERT INTO resources(title,description,resource_type,subject_id,class_name,created_by) VALUES(?,?,\'FILE\',?,\'B4\',?)',[title,description,subjectId||null,req.session.userId]);
   await q('INSERT INTO resource_files(resource_id,filename,mime_type,data) VALUES(?,?,?,?)',[r.insertId,req.file.originalname,'application/pdf',req.file.buffer]);
-  res.json({ok:true,id:r.insertId,fileUrl:'/api/resources/files/'+r.insertId});
+  await audit(req,'PDF_UPLOADED','resource',r.insertId,{filename:req.file.originalname});res.json({ok:true,id:r.insertId,fileUrl:'/api/resources/files/'+r.insertId});
 });
 
 app.get('/api/resources/files/:id', requireAuth, async(req,res)=>{
@@ -597,9 +640,10 @@ app.post('/api/admin/exams', requirePermission('MANAGE_EXAMS'), async(req,res)=>
       const qn=questions[i]; if(!String(qn.questionText||'').trim()) continue;
       const type=['MCQ','TRUE_FALSE','SHORT'].includes(qn.questionType)?qn.questionType:'MCQ';
       const opts=type==='MCQ'?(Array.isArray(qn.options)?qn.options.filter(Boolean).slice(0,8):[]):null;
-      await conn.execute('INSERT INTO exam_questions(exam_id,question_text,question_type,options_json,correct_answer,points,sort_order) VALUES(?,?,?,?,?,?,?)',[e.insertId,String(qn.questionText).trim(),type,opts?JSON.stringify(opts):null,String(qn.correctAnswer||'').trim()||null,Number(qn.points)||1,i]);
+      const correct=type==='MCQ'?String(qn.correctAnswer||'').trim():(type==='TRUE_FALSE'?(String(qn.correctAnswer||'TRUE').toUpperCase()==='TRUE'?'TRUE':'FALSE'):null);
+      await conn.execute('INSERT INTO exam_questions(exam_id,question_text,question_type,options_json,correct_answer,points,sort_order) VALUES(?,?,?,?,?,?,?)',[e.insertId,String(qn.questionText).trim(),type,opts?JSON.stringify(opts):null,correct,Number(qn.points)||1,i]);
     }
-    await conn.commit(); res.json({ok:true,id:e.insertId});
+    await conn.commit();await audit(req,'EXAM_CREATED','exam',e.insertId,{title:title.trim()});res.json({ok:true,id:e.insertId});
   }catch(e){await conn.rollback();res.status(400).json({error:e.message})}finally{conn.release();}
 });
 
@@ -631,7 +675,7 @@ async function sendExamStart(res,exam,attempt){
   const endDeadline=exam.ends_at?new Date(exam.ends_at).getTime():null;
   const deadlines=[durationDeadline,endDeadline].filter(Boolean);
   const deadline=deadlines.length?new Date(Math.min(...deadlines)).toISOString():null;
-  res.json({exam,attempt:{id:attempt.id,started_at:attempt.started_at,deadline},questions:questions.map(q=>({...q,options_json:q.options_json||[]}))});
+  res.json({exam,attempt:{id:attempt.id,started_at:attempt.started_at,deadline},questions:questions.map(q=>({...q,options_json:typeof q.options_json==='string'?(JSON.parse(q.options_json||'[]')):(q.options_json||[])}))});
 }
 
 app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
@@ -648,7 +692,7 @@ app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
     if(qn.question_type!=='SHORT'&&qn.correct_answer!==null){correct=answer.toLowerCase()===String(qn.correct_answer).trim().toLowerCase();awarded=correct?Number(qn.points):0;}
     await q('INSERT INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE answer_text=VALUES(answer_text),is_correct=VALUES(is_correct),points_awarded=VALUES(points_awarded)',[attempt.id,qn.id,answer,correct,awarded]); score+=awarded;
   }
-  await q('UPDATE exam_attempts SET status=\'SUBMITTED\',score=?,submitted_at=NOW() WHERE id=?',[score,attempt.id]); res.json({ok:true,score});
+  await q('UPDATE exam_attempts SET status=\'SUBMITTED\',score=?,submitted_at=NOW() WHERE id=?',[score,attempt.id]);const total=questions.reduce((n,x)=>n+Number(x.points||0),0);const percent=total?Math.round(score/total*100):0;await audit(req,'EXAM_SUBMITTED','exam',id,{score,total,percent});res.json({ok:true,score,total,percent});
 });
 
 // Serve the B4 frontend from the same Railway service.

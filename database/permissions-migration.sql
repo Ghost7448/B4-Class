@@ -11,7 +11,11 @@ CREATE TABLE IF NOT EXISTS user_permissions(
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO permissions(code,label) VALUES
-('MANAGE_ADMINS','Manage admins');
+('MANAGE_ADMINS','Manage admins'),
+('MANAGE_TEACHERS','Manage teachers');
 
 INSERT IGNORE INTO role_permissions(role,permission_id)
 SELECT 'SUPER_ADMIN',id FROM permissions;
+
+INSERT IGNORE INTO role_permissions(role,permission_id)
+SELECT 'ADMIN',id FROM permissions WHERE code IN('MANAGE_KEYS','MANAGE_TEACHERS');
