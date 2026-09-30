@@ -28,7 +28,7 @@ function attendanceV(){return title(t('attendance'),'Present, absent, late and e
 function adminV(){
   if(!can('ADMIN_CENTER'))return '';
   const cards=[];
-  if(can('MANAGE_ADMINS')||can('MANAGE_ROLES'))cards.push('<div class="card"><div class="ico">⚙</div><h3>People & Permissions</h3><p class="muted">Give each account its own role and permissions.</p><button class="btn ghost" onclick="go('permissions')">Open →</button></div>');
+  if(can('MANAGE_ADMINS')||can('MANAGE_ROLES'))cards.push("<div class='card'><div class='ico'>⚙</div><h3>People & Permissions</h3><p class='muted'>Give each account its own role and permissions.</p><button class='btn ghost' onclick=\"go('permissions')\">Open →</button></div>");
   if(can('MANAGE_STUDENTS'))cards.push('<div class="card"><div class="ico">♙</div><h3>Students</h3><p class="muted">Manage official B4 students.</p><button class="btn ghost" onclick="adminStudentModal()">Manage →</button></div>');
   if(can('MANAGE_KEYS'))cards.push('<div class="card"><div class="ico">🔑</div><h3>Activation Keys</h3><p class="muted">Create one-time account keys.</p><button class="btn ghost" onclick="activationModal(true)">Manage →</button></div>');
   if(can('MANAGE_ASSIGNMENTS'))cards.push('<div class="card"><div class="ico">✓</div><h3>Assignments</h3><p class="muted">Publish class assignments.</p><button class="btn ghost" onclick="assignmentModal()">Create →</button></div>');
