@@ -689,7 +689,7 @@ app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
   let score=0;
   for(const qn of questions){
     const answer=String(answers[String(qn.id)]??'').trim(); let correct=null,awarded=0;
-    if(qn.question_type!=='SHORT'&&qn.correct_answer!==null){correct=answer.toLowerCase()===String(qn.correct_answer).trim().toLowerCase();awarded=correct?Number(qn.points):0;}
+    if(qn.correct_answer!==null){correct=answer.toLowerCase()===String(qn.correct_answer).trim().toLowerCase();awarded=correct?Number(qn.points):0;}
     await q('INSERT INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE answer_text=VALUES(answer_text),is_correct=VALUES(is_correct),points_awarded=VALUES(points_awarded)',[attempt.id,qn.id,answer,correct,awarded]); score+=awarded;
   }
   await q('UPDATE exam_attempts SET status=\'SUBMITTED\',score=?,submitted_at=NOW() WHERE id=?',[score,attempt.id]);const total=questions.reduce((n,x)=>n+Number(x.points||0),0);const percent=total?Math.round(score/total*100):0;await audit(req,'EXAM_SUBMITTED','exam',id,{score,total,percent});res.json({ok:true,score,total,percent});
