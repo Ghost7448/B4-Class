@@ -348,7 +348,7 @@ app.get('/api/admin/users', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS'
   res.json({users:result});
 });
 
-app.put('/api/admin/users/:id/permissions', requirePermission('MANAGE_ROLES'), async (req,res)=>{
+app.put('/api/admin/users/:id/permissions', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
   const targetId=Number(req.params.id);
   const codes=Array.isArray(req.body?.permissionCodes)?[...new Set(req.body.permissionCodes.map(String))]:[];
   if(!Number.isSafeInteger(targetId)) return res.status(400).json({error:'Invalid user id'});
