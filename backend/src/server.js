@@ -131,6 +131,14 @@ async function ensurePermissionSchema() {
   const [superFlagCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='is_super_admin' LIMIT 1");
   if (!superFlagCol.length) await q("ALTER TABLE users ADD COLUMN is_super_admin TINYINT(1) NOT NULL DEFAULT 0 AFTER role");
   await q("UPDATE users SET is_super_admin=1, role='STUDENT' WHERE role='SUPER_ADMIN'");
+  await q("UPDATE users SET role='STUDENT' WHERE role='ADMIN'");
+  try {
+    await q("DELETE FROM role_permissions WHERE role IN ('ADMIN','SUPER_ADMIN')");
+    await q("ALTER TABLE role_permissions MODIFY role ENUM('STUDENT','TEACHER') NOT NULL");
+  } catch(e) { /* Existing installations may already have the reduced enum. */ }
+  try {
+    await q("ALTER TABLE users MODIFY role ENUM('STUDENT','TEACHER') NOT NULL DEFAULT 'STUDENT'");
+  } catch(e) { /* Existing installations can keep the legacy enum until their next schema migration. */ }
   await q("CREATE TABLE IF NOT EXISTS b4_attendance(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,attendance_date DATE NOT NULL,status ENUM('PRESENT','ABSENT') NOT NULL DEFAULT 'PRESENT',marked_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE KEY uq_attendance(user_id,attendance_date),INDEX idx_attendance_date(attendance_date)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_badges(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,description VARCHAR(500) NULL,icon_mime VARCHAR(120) NULL,icon_data MEDIUMBLOB NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_user_badges(user_id BIGINT UNSIGNED NOT NULL,badge_id BIGINT UNSIGNED NOT NULL,assigned_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(user_id,badge_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -144,7 +152,7 @@ async function ensurePermissionSchema() {
   if (!developerLinkCol.length) await q("ALTER TABLE b4_developers ADD COLUMN link_url VARCHAR(500) NULL AFTER name");
   await q('CREATE TABLE IF NOT EXISTS user_permissions( user_id BIGINT UNSIGNED NOT NULL, permission_id INT UNSIGNED NOT NULL, granted_by BIGINT UNSIGNED NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,permission_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(permission_id) REFERENCES permissions(id) ON DELETE CASCADE, FOREIGN KEY(granted_by) REFERENCES users(id) ON DELETE SET NULL ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   for (const [code,label] of PERMISSION_DEFS) await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',[code,label]);
-  await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'SUPER_ADMIN',id FROM permissions");
+
   const teacherPerms=['VIEW_CLASS','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ANNOUNCEMENTS','MANAGE_SUBJECTS','MANAGE_ATTENDANCE','MANAGE_ANALYTICS','MANAGE_TEACHER_CHAT','USE_AI'];
   for(const code of teacherPerms) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'TEACHER',id FROM permissions WHERE code=?",[code]);
   for(const code of ['VIEW_ADMIN_CENTER','MANAGE_ACCOUNTS','MANAGE_STUDENTS','MANAGE_TEACHERS','MANAGE_KEYS','MANAGE_SUBJECTS','MANAGE_SCHEDULE','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ATTENDANCE','MANAGE_ANNOUNCEMENTS','MANAGE_CHAT','VIEW_LOGS','USE_AI','VIEW_CLASS','MANAGE_BADGES','MANAGE_DEVELOPERS','MANAGE_ANALYTICS','ADMINISTRATOR']) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'ADMIN',id FROM permissions WHERE code=?",[code]);
@@ -156,7 +164,7 @@ async function getPermissionCodes(userId) {
   const user = users[0];
   if (!user || user.status !== 'ACTIVE') return [];
   const [adminFlag] = await q("SELECT 1 FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=? AND p.code='ADMINISTRATOR' LIMIT 1",[userId]);
-  if (Number(user.is_super_admin)===1 || user.role === 'SUPER_ADMIN' || adminFlag[0]) {
+  if (Number(user.is_super_admin)===1 || adminFlag[0]) {
     const [all] = await q('SELECT code FROM permissions ORDER BY code');
     return all.map(x=>x.code);
   }
@@ -425,10 +433,10 @@ app.put('/api/admin/users/:id/permissions', requireAnyPermission(['MANAGE_PERMIS
   const targetId=Number(req.params.id);
   const codes=Array.isArray(req.body?.permissionCodes)?[...new Set(req.body.permissionCodes.map(String))]:[];
   if(!Number.isSafeInteger(targetId)) return res.status(400).json({error:'Invalid user id'});
-  const [targetRows]=await q('SELECT id,role,status FROM users WHERE id=? LIMIT 1',[targetId]);
+  const [targetRows]=await q('SELECT id,role,is_super_admin,status FROM users WHERE id=? LIMIT 1',[targetId]);
   const target=targetRows[0];
   if(!target) return res.status(404).json({error:'User not found'});
-  if(target.role==='SUPER_ADMIN') return res.status(403).json({error:'Super Admin always has every permission'});
+  if(Number(target.is_super_admin)===1) return res.status(403).json({error:'Super Admin always has every permission'});
   const [valid]=await q('SELECT id,code FROM permissions WHERE code IN (?)',[codes.length?codes:['__NONE__']]);
   if(valid.length!==codes.length) return res.status(400).json({error:'One or more permissions are invalid'});
   await q('DELETE FROM user_permissions WHERE user_id=?',[targetId]);
@@ -675,7 +683,7 @@ app.post('/api/chat/messages',requireAuth,async(req,res)=>{
   const [r]=await q('INSERT INTO chat_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);
   const [rows]=await q(`SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM chat_messages m JOIN users u ON u.id=m.user_id LEFT JOIN chat_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?`,[r.insertId]);
   res.json({message:rows[0]});
-  pushChatEvent('message',{type:'created',message:rows[0]});
+  pushChatEvent('chat',{type:'created',message:rows[0]});
 });
 app.patch('/api/chat/messages/:id',requireAuth,async(req,res)=>{
   const id=Number(req.params.id),body=String(req.body?.body||'').trim();
@@ -690,7 +698,7 @@ app.patch('/api/chat/messages/:id',requireAuth,async(req,res)=>{
   await q('INSERT INTO activity_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)',[req.session.userId,'CHAT_MESSAGE_EDITED','chat_message',id,JSON.stringify({old_body:m.body,new_body:body})]);
   const [updated]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,u.display_name,u.avatar_url FROM chat_messages m JOIN users u ON u.id=m.user_id WHERE m.id=?',[id]);
   res.json({message:updated[0]});
-  pushChatEvent('message',{type:'updated',message:updated[0]});
+  pushChatEvent('chat',{type:'updated',message:updated[0]});
 });
 app.delete('/api/chat/messages/:id',requireAuth,async(req,res)=>{
   const id=Number(req.params.id);
@@ -703,7 +711,7 @@ app.delete('/api/chat/messages/:id',requireAuth,async(req,res)=>{
   await q('UPDATE chat_messages SET deleted_at=NOW(),deleted_by=? WHERE id=?',[req.session.userId,id]);
   await q('INSERT INTO activity_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)',[req.session.userId,'CHAT_MESSAGE_DELETED','chat_message',id,'Message deleted']);
   res.json({ok:true});
-  pushChatEvent('message',{type:'deleted',id});
+  pushChatEvent('chat',{type:'deleted',id});
 });
 app.get('/api/admin/chat/edit-logs',requirePermission('VIEW_LOGS'),async(req,res)=>{
   const [logs]=await q('SELECT e.id,e.message_id,e.old_body,e.new_body,e.created_at,u.display_name editor_name FROM chat_message_edits e LEFT JOIN users u ON u.id=e.editor_user_id ORDER BY e.created_at DESC LIMIT 200');
@@ -713,8 +721,8 @@ app.get('/api/admin/chat/edit-logs',requirePermission('VIEW_LOGS'),async(req,res
 app.post('/api/chat/typing',requireAuth,async(req,res)=>{const typing=!!req.body?.typing;if(typing)await q('INSERT INTO chat_typing(user_id,typing) VALUES(?,1) ON DUPLICATE KEY UPDATE typing=1,updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM chat_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
 app.get('/api/chat/typing',requireAuth,async(req,res)=>{await q('DELETE FROM chat_typing WHERE updated_at < (NOW() - INTERVAL 5 SECOND)');const [users]=await q("SELECT t.user_id,t.updated_at,u.display_name FROM chat_typing t JOIN users u ON u.id=t.user_id WHERE t.typing=1 AND u.status='ACTIVE' ORDER BY t.updated_at DESC");res.json({users});});
 app.post('/api/ai', requirePermission('USE_AI'), async (req, res) => {
-  const [aiUser]=await q('SELECT role FROM users WHERE id=? LIMIT 1',[req.session.userId]);
-  if(aiUser[0]?.role!=='STUDENT' && aiUser[0]?.role!=='SUPER_ADMIN') return res.status(403).json({error:'AI is available to B4 students only'});
+  const [aiUser]=await q('SELECT role,is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+  if(aiUser[0]?.role!=='STUDENT' && !Number(aiUser[0]?.is_super_admin)) return res.status(403).json({error:'AI is available to B4 students only'});
   const message = String(req.body?.message || '').trim();
   if (!message) return res.status(400).json({ error: 'Message required' });
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
@@ -901,12 +909,12 @@ app.get('/api/admin/accounts',requirePermission('MANAGE_ACCOUNTS'),async(req,res
 app.delete('/api/admin/accounts/:id',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
   const id=Number(req.params.id);
   if(!Number.isSafeInteger(id)) return res.status(400).json({error:'Invalid account'});
-  const [rows]=await q('SELECT id,role,display_name FROM users WHERE id=? LIMIT 1',[id]);
+  const [rows]=await q('SELECT id,role,is_super_admin,display_name FROM users WHERE id=? LIMIT 1',[id]);
   if(!rows[0]) return res.status(404).json({error:'Account not found'});
   if(Number(id)===Number(req.session.userId)) return res.status(400).json({error:'You cannot delete your own account'});
-  if(rows[0].role==='SUPER_ADMIN'){
-    const [actor]=await q('SELECT role FROM users WHERE id=? LIMIT 1',[req.session.userId]);
-    if(actor[0]?.role!=='SUPER_ADMIN') return res.status(403).json({error:'Only Super Admin can delete a Super Admin account'});
+  if(Number(rows[0].is_super_admin)===1){
+    const [actor]=await q('SELECT is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+    if(!Number(actor[0]?.is_super_admin)) return res.status(403).json({error:'Only Super Admin can delete a Super Admin account'});
   }
   await audit(req,'ACCOUNT_DELETED','user',id,{display_name:rows[0].display_name});
   await q('DELETE FROM users WHERE id=?',[id]);
@@ -966,7 +974,7 @@ app.delete('/api/admin/developers/:id',requirePermission('MANAGE_DEVELOPERS'),as
 app.post('/api/admin/developers/:id/avatar',requirePermission('MANAGE_DEVELOPERS'),imageUpload.single('file'),async(req,res)=>{if(!req.file)return res.status(400).json({error:'Image required'});await q('UPDATE b4_developers SET image_mime=?,image_data=? WHERE id=?',[req.file.mimetype,req.file.buffer,Number(req.params.id)]);res.json({ok:true});});
 app.get('/api/developers/:id/avatar',async(req,res)=>{const [r]=await q('SELECT image_mime,image_data FROM b4_developers WHERE id=?',[Number(req.params.id)]);if(!r[0]||!r[0].image_data)return res.status(404).end();res.setHeader('Content-Type',r[0].image_mime);res.send(r[0].image_data);});
 
-async function teacherOnly(req,res,next){if(!req.session.userId)return res.status(401).json({error:'Login required'});const [u]=await q('SELECT role,status FROM users WHERE id=?',[req.session.userId]);if(!u[0]||u[0].status!=='ACTIVE')return res.status(401).json({error:'Account disabled'});if(u[0].role!=='TEACHER'&&!['SUPER_ADMIN'].includes(u[0].role)&&!(await getPermissionCodes(req.session.userId)).includes('MANAGE_TEACHER_CHAT'))return res.status(403).json({error:'Teacher chat only'});next();}
+async function teacherOnly(req,res,next){if(!req.session.userId)return res.status(401).json({error:'Login required'});const [u]=await q('SELECT role,is_super_admin,status FROM users WHERE id=?',[req.session.userId]);if(!u[0]||u[0].status!=='ACTIVE')return res.status(401).json({error:'Account disabled'});if(!Number(u[0].is_super_admin)&&u[0].role!=='TEACHER'&&!(await getPermissionCodes(req.session.userId)).includes('MANAGE_TEACHER_CHAT'))return res.status(403).json({error:'Teacher chat only'});next();}
 app.get('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const [rows]=await q(`SELECT m.id,m.body,m.created_at,m.user_id,u.display_name,u.avatar_url FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id ORDER BY m.created_at DESC LIMIT 100`);rows.reverse();res.json({messages:rows});});
 app.post('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const body=String(req.body?.body||'').trim();if(!body||body.length>4000)return res.status(400).json({error:'Invalid message'});const [r]=await q('INSERT INTO b4_teacher_messages(user_id,body) VALUES(?,?)',[req.session.userId,body]);await audit(req,'TEACHER_CHAT_MESSAGE','teacher_chat',r.insertId);res.json({ok:true});});
 app.post('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{if(req.body?.typing)await q('INSERT INTO b4_teacher_typing(user_id) VALUES(?) ON DUPLICATE KEY UPDATE updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM b4_teacher_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
