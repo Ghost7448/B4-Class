@@ -211,7 +211,7 @@ async function saveRoleLink(e,id,role){
     close();await loadMe();await loadRoles();toast('Role and profile link updated ✓');
   }catch(e){toast(e.message)}
 }
-async function savePermissions(id){try{const card=[...document.querySelectorAll('.permission-user')].find(x=>x.dataset.userId===String(id));const codes=card?[...card.querySelectorAll('[data-perm]:checked')].map(x=>x.dataset.perm):[];await api('/api/admin/users/'+id+'/permissions',{method:'PUT',body:JSON.stringify({permissionCodes:codes})});toast('Permissions saved ✓');loadPermissions()}catch(e){toast(e.message)}}
+async async function savePermissions(id){try{const card=[...document.querySelectorAll('.permission-user')].find(x=>x.dataset.userId===String(id));const codes=card?[...card.querySelectorAll('[data-perm]:checked')].map(x=>x.dataset.perm):[];await api('/api/admin/users/'+id+'/permissions',{method:'PUT',body:JSON.stringify({permissionCodes:codes})});toast('Permissions saved ✓');loadPermissions()}catch(e){toast(e.message)}}
 async function loadAccounts(){
   const r=$('#adminRoot');
   try{
