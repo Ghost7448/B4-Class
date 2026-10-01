@@ -159,7 +159,7 @@ async function ensurePermissionSchema() {
 
   const teacherPerms=['VIEW_CLASS','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ANNOUNCEMENTS','MANAGE_SUBJECTS','MANAGE_ATTENDANCE','MANAGE_ANALYTICS','MANAGE_TEACHER_CHAT','USE_AI'];
   for(const code of teacherPerms) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'TEACHER',id FROM permissions WHERE code=?",[code]);
-  for(const code of ['VIEW_ADMIN_CENTER','MANAGE_ACCOUNTS','MANAGE_STUDENTS','MANAGE_TEACHERS','MANAGE_KEYS','MANAGE_SUBJECTS','MANAGE_SCHEDULE','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ATTENDANCE','MANAGE_ANNOUNCEMENTS','MANAGE_CHAT','VIEW_LOGS','USE_AI','VIEW_CLASS','MANAGE_BADGES','MANAGE_DEVELOPERS','MANAGE_ANALYTICS','ADMINISTRATOR']) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'ADMIN',id FROM permissions WHERE code=?",[code]);
+
   for(const code of ['VIEW_CLASS','USE_AI']) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'STUDENT',id FROM permissions WHERE code=?",[code]);
 }
 
@@ -735,14 +735,16 @@ app.post('/api/ai', requirePermission('USE_AI'), async (req, res) => {
   if (!apiKey) return res.status(503).json({ error: 'Gemini AI is not configured on the backend yet' });
   try {
     const ai = new GoogleGenAI({ apiKey });
-    const interaction = await ai.interactions.create({
+    const response = await ai.models.generateContent({
       model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
-      input: [
-        { type: 'user_input', content: [{ type: 'text', text: 'You are B4 AI Assistant for a secondary-school Telecommunication class. Explain academic topics clearly and safely. Do not invent private class data. Prefer Egyptian Arabic when the student asks in Arabic and English when asked in English.' }] },
-        { type: 'user_input', content: [{ type: 'text', text: message }] }
-      ]
+      contents: message,
+      config: {
+        systemInstruction: 'You are B4 AI Assistant for a secondary-school Telecommunication class. Explain academic topics clearly and safely. Do not invent private class data. Prefer Egyptian Arabic when the student asks in Arabic and English when asked in English.',
+        maxOutputTokens: 700,
+        temperature: 0.4
+      }
     });
-    res.json({ answer: interaction.output_text || 'No answer returned.' });
+    res.json({ answer: response.text || 'No answer returned.' });
   } catch (e) {
     console.error('Gemini request failed:', e.message);
     res.status(502).json({ error: 'AI request failed' });
