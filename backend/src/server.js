@@ -205,14 +205,14 @@ app.get('/api/health', async (req, res) => {
 
 async function getBootstrap(req) {
   const [students] = await q(`
-    SELECT s.id,s.student_code,s.official_name,
+    SELECT s.id,s.student_code,s.official_name,u.id user_id,
            COALESCE(u.display_name,s.display_name) display_name,COALESCE(u.avatar_url,s.avatar_url) avatar_url
     FROM students s
     LEFT JOIN users u ON u.student_id=s.id AND u.status='ACTIVE'
     WHERE s.class_name='B4'
     ORDER BY s.display_name
   `);
-  const [teachers] = await q(`SELECT t.id,t.teacher_code,t.official_name,COALESCE(u.display_name,t.display_name) display_name,COALESCE(u.avatar_url,t.avatar_url) avatar_url FROM teachers t LEFT JOIN users u ON u.teacher_id=t.id AND u.status='ACTIVE' WHERE t.class_name='B4' ORDER BY t.display_name`);
+  const [teachers] = await q(`SELECT t.id,t.teacher_code,t.official_name,u.id user_id,COALESCE(u.display_name,t.display_name) display_name,COALESCE(u.avatar_url,t.avatar_url) avatar_url FROM teachers t LEFT JOIN users u ON u.teacher_id=t.id AND u.status='ACTIVE' WHERE t.class_name='B4' ORDER BY t.display_name`);
   const [subjects] = await q(`SELECT id,name,teacher_name,progress FROM subjects WHERE class_name='B4' ORDER BY name`);
   const [assignments] = await q(`
     SELECT a.id,a.title,a.description,a.status,a.subject_id,a.due_at,a.created_by,s.name subject_name
