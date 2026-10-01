@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Kareem developer logo">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#76258c"/><stop offset="1" stop-color="#4b2b91"/></linearGradient></defs>
+<rect width="512" height="512" rx="72" fill="#fff"/>
+<path fill="url(#g)" d="M64 82c38-22 70-34 106-34h172c36 0 68 12 106 34v118c0 134-68 221-192 264C132 421 64 334 64 200V82Z"/>
+<path fill="#fff" d="M137 116l86 57v40l-62-41v52l62 41v40l-86-57v-132Zm238 0l-86 57v40l62-41v52l-62 41v40l86-57v-132Zm-116 9h48l-67 184h-48l67-184Z"/>
+<path fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round" d="M156 287c10 35 30 61 54 77m146-77c-10 35-30 61-54 77"/>
+<path fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round" d="M181 266c5 19 16 35 29 46m121-46c-5 19-16 35-29 46"/>
+<path fill="#fff" d="M256 282l32 44-32 48-32-48 32-44Zm0 31l-13 18 13 19 13-19-13-18Z"/>
+</svg>
