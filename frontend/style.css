@@ -230,3 +230,18 @@ body{overflow-x:hidden}
 .permission-user .notice{margin-top:12px}
 .settings-lang{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0}
 @media(max-width:700px){.role-meta{grid-template-columns:1fr}.badges{justify-content:flex-start}}
+
+
+/* ===== Permission + file input interaction polish ===== */
+.permission-tile{user-select:none;-webkit-tap-highlight-color:transparent}
+.permission-tile input.permission-checkbox{position:relative;inset:auto;opacity:1;pointer-events:auto;width:20px;height:20px;min-width:20px;min-height:20px;margin:0;accent-color:var(--p);cursor:pointer;flex:0 0 20px}
+.permission-tile:hover{border-color:#7c3aed66;background:color-mix(in srgb,var(--s2) 82%,#7c3aed 18%)}
+.permission-tile:has(input.permission-checkbox:checked){border-color:#7c3aed88;background:#7c3aed12;box-shadow:0 0 0 1px #7c3aed12 inset}
+.permission-tile input.permission-checkbox:focus-visible{outline:3px solid #7c3aed33;outline-offset:2px}
+.form input[type="file"]{cursor:pointer;padding:8px 10px;line-height:1.2;overflow:hidden}
+.form input[type="file"]::file-selector-button{margin-inline-end:12px;padding:9px 14px;border:1px solid var(--line);border-radius:10px;background:var(--s);color:var(--t);font:inherit;font-weight:800;cursor:pointer;transition:.2s}
+.form input[type="file"]::file-selector-button:hover{background:var(--s2);border-color:#7c3aed77;transform:translateY(-1px)}
+.form input[type="file"]:hover{border-color:#7c3aed77}
+.form input[type="file"]:focus-visible{border-color:var(--p);box-shadow:0 0 0 4px #7c3aed18}
+.developer-title{display:inline-flex;align-items:center;justify-content:center;padding:6px 11px;border-radius:999px;background:#7c3aed12;border:1px solid #7c3aed35;color:var(--p);font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.developer-info h3{margin:0}
