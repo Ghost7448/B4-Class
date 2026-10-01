@@ -629,6 +629,11 @@ app.get('/api/chat/stream',requireAuth,async(req,res)=>{
   req.on('close',()=>chatStreams.delete(client));
 });
 
+app.get('/api/profile/live',requireAuth,async(req,res)=>{
+  const [users]=await q('SELECT id,avatar_url,display_name,student_id,teacher_id FROM users WHERE status=\'ACTIVE\'');
+  res.json({users});
+});
+
 app.get('/api/chat/messages',requireAuth,async(req,res)=>{
   const [messages]=await q(`SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name
     FROM chat_messages m LEFT JOIN users u ON u.id=m.user_id
