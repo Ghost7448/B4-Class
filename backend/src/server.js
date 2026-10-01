@@ -688,10 +688,10 @@ app.post('/api/admin/resources/:id/pdf', requirePermission('MANAGE_RESOURCES'), 
   const [resource]=await q("SELECT id,title FROM resources WHERE id=? AND class_name='B4' LIMIT 1",[id]);
   if(!resource[0]) return res.status(404).json({error:'Resource not found'});
   await q('DELETE FROM resource_files WHERE resource_id=?',[id]);
-  await q('INSERT INTO resource_files(resource_id,filename,mime_type,data) VALUES(?,?,?,?)',[id,req.file.originalname,'application/pdf',req.file.buffer]);
+  const [fileRow]=await q('INSERT INTO resource_files(resource_id,filename,mime_type,data) VALUES(?,?,?,?)',[id,req.file.originalname,'application/pdf',req.file.buffer]);
   await q("UPDATE resources SET resource_type='FILE',url=NULL,file_url=NULL WHERE id=?",[id]);
   await audit(req,'PDF_REPLACED','resource',id,{filename:req.file.originalname});
-  res.json({ok:true,fileUrl:'/api/resources/files/'+id});
+  res.json({ok:true,fileUrl:'/api/resources/files/'+fileRow.insertId});
 });
 
 app.post('/api/admin/exams', requirePermission('MANAGE_EXAMS'), async(req,res)=>{
