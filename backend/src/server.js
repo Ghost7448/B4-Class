@@ -94,7 +94,9 @@ const PERMISSION_DEFS = [
   ['MANAGE_KEYS','Manage activation keys'],
   ['MANAGE_TEACHERS','Manage teachers'],
   ['MANAGE_STUDENTS','Manage students'],
-  ['MANAGE_ROLES','Manage roles & permissions'],
+  ['MANAGE_ROLES','Manage roles'],
+  ['MANAGE_PERMISSIONS','Manage permissions'],
+  ['VIEW_ADMIN_CENTER','View Admin Center'],
   ['MANAGE_SUBJECTS','Manage subjects'],
   ['MANAGE_SCHEDULE','Manage schedule'],
   ['MANAGE_ASSIGNMENTS','Manage assignments'],
@@ -126,6 +128,9 @@ async function ensurePermissionSchema() {
 
   const [sessionVersionCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='session_version' LIMIT 1");
   if (!sessionVersionCol.length) await q("ALTER TABLE users ADD COLUMN session_version INT NOT NULL DEFAULT 1");
+  const [superFlagCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='users' AND COLUMN_NAME='is_super_admin' LIMIT 1");
+  if (!superFlagCol.length) await q("ALTER TABLE users ADD COLUMN is_super_admin TINYINT(1) NOT NULL DEFAULT 0 AFTER role");
+  await q("UPDATE users SET is_super_admin=1, role='STUDENT' WHERE role='SUPER_ADMIN'");
   await q("CREATE TABLE IF NOT EXISTS b4_attendance(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,attendance_date DATE NOT NULL,status ENUM('PRESENT','ABSENT') NOT NULL DEFAULT 'PRESENT',marked_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE KEY uq_attendance(user_id,attendance_date),INDEX idx_attendance_date(attendance_date)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_badges(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,description VARCHAR(500) NULL,icon_mime VARCHAR(120) NULL,icon_data MEDIUMBLOB NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_user_badges(user_id BIGINT UNSIGNED NOT NULL,badge_id BIGINT UNSIGNED NOT NULL,assigned_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(user_id,badge_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -146,11 +151,11 @@ async function ensurePermissionSchema() {
 }
 
 async function getPermissionCodes(userId) {
-  const [users] = await q('SELECT role,status FROM users WHERE id=? LIMIT 1',[userId]);
+  const [users] = await q('SELECT role,status,is_super_admin FROM users WHERE id=? LIMIT 1',[userId]);
   const user = users[0];
   if (!user || user.status !== 'ACTIVE') return [];
   const [adminFlag] = await q("SELECT 1 FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=? AND p.code='ADMINISTRATOR' LIMIT 1",[userId]);
-  if (user.role === 'SUPER_ADMIN' || adminFlag[0]) {
+  if (Number(user.is_super_admin)===1 || user.role === 'SUPER_ADMIN' || adminFlag[0]) {
     const [all] = await q('SELECT code FROM permissions ORDER BY code');
     return all.map(x=>x.code);
   }
@@ -180,7 +185,7 @@ const requireAnyPermission = permissions => async (req,res,next) => {
 
 async function userById(id) {
   const [r] = await q(
-    `SELECT id,display_name,official_name,role,status,student_id,teacher_id,avatar_url
+    `SELECT id,display_name,official_name,role,is_super_admin,status,student_id,teacher_id,avatar_url
      FROM users WHERE id=? LIMIT 1`,
     [id]
   );
@@ -400,13 +405,13 @@ app.patch('/api/auth/profile', requireAuth, async (req, res) => {
   res.json({ ok: true, user: await userById(req.session.userId) });
 });
 
-app.get('/api/admin/permissions', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
+app.get('/api/admin/permissions', requireAnyPermission(['MANAGE_PERMISSIONS','MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
   const [permissions]=await q('SELECT id,code,label FROM permissions ORDER BY code');
   res.json({permissions});
 });
 
 app.get('/api/admin/users', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
-  const [users]=await q('SELECT id,display_name,official_name,role,status,student_id,teacher_id FROM users ORDER BY display_name');
+  const [users]=await q('SELECT id,display_name,official_name,role,is_super_admin,status,student_id,teacher_id FROM users ORDER BY display_name');
   const result=[];
   for(const u of users){
     const [direct]=await q('SELECT p.code FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=? ORDER BY p.code',[u.id]);
@@ -415,7 +420,7 @@ app.get('/api/admin/users', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS'
   res.json({users:result});
 });
 
-app.put('/api/admin/users/:id/permissions', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
+app.put('/api/admin/users/:id/permissions', requireAnyPermission(['MANAGE_PERMISSIONS','MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
   const targetId=Number(req.params.id);
   const codes=Array.isArray(req.body?.permissionCodes)?[...new Set(req.body.permissionCodes.map(String))]:[];
   if(!Number.isSafeInteger(targetId)) return res.status(400).json({error:'Invalid user id'});
@@ -432,17 +437,30 @@ app.put('/api/admin/users/:id/permissions', requireAnyPermission(['MANAGE_ROLES'
   res.json({ok:true,permissions:await getPermissionCodes(targetId)});
 });
 
-app.patch('/api/admin/users/:id/role', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
+app.patch('/api/admin/users/:id/role', requireAnyPermission(['MANAGE_ROLES','MANAGE_ACCOUNTS','MANAGE_ADMINS']), async (req,res)=>{
   const targetId=Number(req.params.id), role=String(req.body?.role||'').toUpperCase();
-  if(!Number.isSafeInteger(targetId)||!['STUDENT','TEACHER','SUPER_ADMIN'].includes(role)) return res.status(400).json({error:'Role must be STUDENT or TEACHER'});
-  const [actor]=await q('SELECT role FROM users WHERE id=? LIMIT 1',[req.session.userId]);
-  const [target]=await q('SELECT id,role,student_id,teacher_id FROM users WHERE id=? LIMIT 1',[targetId]);
+  const studentId=req.body?.studentId?Number(req.body.studentId):null;
+  const teacherId=req.body?.teacherId?Number(req.body.teacherId):null;
+  if(!Number.isSafeInteger(targetId)||!['STUDENT','TEACHER'].includes(role)) return res.status(400).json({error:'Role must be STUDENT or TEACHER'});
+  const [target]=await q('SELECT id,role,is_super_admin FROM users WHERE id=? LIMIT 1',[targetId]);
   if(!target[0]) return res.status(404).json({error:'User not found'});
-  if((target[0].role==='SUPER_ADMIN'||role==='SUPER_ADMIN')&&actor[0]?.role!=='SUPER_ADMIN') return res.status(403).json({error:'Only Super Admin can manage Super Admin role'});
-  if(role==='TEACHER' && !target[0].teacher_id) return res.status(400).json({error:'This account is not linked to a teacher profile'});
-  if(role==='STUDENT' && !target[0].student_id) return res.status(400).json({error:'This account is not linked to a student profile'});
-  await q('UPDATE users SET role=? WHERE id=?',[role,targetId]);
-  await audit(req,'ROLE_UPDATED','user',targetId,{role});
+  if(Number(target[0].is_super_admin)===1) return res.status(403).json({error:'Super Admin is a system flag, not an assignable role'});
+  if(role==='TEACHER'){
+    if(!Number.isSafeInteger(teacherId)) return res.status(400).json({error:'Select the teacher profile to link to this account'});
+    const [p]=await q("SELECT id FROM teachers WHERE id=? AND class_name='B4' LIMIT 1",[teacherId]);
+    if(!p[0]) return res.status(400).json({error:'Teacher profile not found'});
+    const [used]=await q('SELECT id FROM users WHERE teacher_id=? AND id<>? LIMIT 1',[teacherId,targetId]);
+    if(used[0]) return res.status(400).json({error:'That teacher profile is already linked to another account'});
+    await q('UPDATE users SET role=?,teacher_id=?,student_id=NULL WHERE id=?',['TEACHER',teacherId,targetId]);
+  }else{
+    if(!Number.isSafeInteger(studentId)) return res.status(400).json({error:'Select the student profile to link to this account'});
+    const [p]=await q("SELECT id FROM students WHERE id=? AND class_name='B4' LIMIT 1",[studentId]);
+    if(!p[0]) return res.status(400).json({error:'Student profile not found'});
+    const [used]=await q('SELECT id FROM users WHERE student_id=? AND id<>? LIMIT 1',[studentId,targetId]);
+    if(used[0]) return res.status(400).json({error:'That student profile is already linked to another account'});
+    await q('UPDATE users SET role=?,student_id=?,teacher_id=NULL WHERE id=?',['STUDENT',studentId,targetId]);
+  }
+  await audit(req,'ROLE_UPDATED','user',targetId,{role,studentId,teacherId});
   res.json({ok:true,user:await userById(targetId)});
 });
 
