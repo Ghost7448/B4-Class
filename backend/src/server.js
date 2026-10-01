@@ -995,6 +995,11 @@ app.get('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{await q('DELETE 
 
 app.get('/api/admin/developers/public',async(req,res)=>{const [developers]=await q('SELECT id,name,link_url,created_at,IF(image_data IS NULL,NULL,CONCAT("/api/developers/",id,"/avatar")) avatar_url FROM b4_developers ORDER BY id DESC');res.json({developers});});
 
+// Serve shared assets from the repository root before the SPA fallback.
+// The manifest references /assets/logo.svg, so this route must be public.
+const assetsPath = path.resolve(__dirname, '../../assets');
+app.use('/assets', express.static(assetsPath, { extensions: ['svg','png','jpg','jpeg','webp'] }));
+
 // Serve frontend assets explicitly before the SPA fallback.
 // This supports both the normal root paths (/app.js, /style.css) and the
 // older /frontend/* paths that may still exist in a local browser cache.
