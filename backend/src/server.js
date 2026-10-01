@@ -594,8 +594,8 @@ app.post('/api/auth/avatar',requireAuth,imageUpload.single('file'),async(req,res
   pushChatEvent('profile',{type:'profile',userId:req.session.userId,avatar_url:avatar});
   res.json({ok:true,avatar_url:avatar,user:await userById(req.session.userId)});
 });
-app.post('/api/admin/students/:id/avatar',requirePermission('MANAGE_STUDENTS'),imageUpload.single('file'),async(req,res)=>{const id=Number(req.params.id);if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const [r]=await q("SELECT id FROM students WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!r[0])return res.status(404).json({error:'Student not found'});const url=await saveAvatar('student',id,req.file);await q('UPDATE students SET avatar_url=? WHERE id=?',[url,id]);await audit(req,'AVATAR_UPDATED','student',id);res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
-app.post('/api/admin/teachers/:id/avatar',requirePermission('MANAGE_TEACHERS'),imageUpload.single('file'),async(req,res)=>{const id=Number(req.params.id);if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const [r]=await q("SELECT id FROM teachers WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!r[0])return res.status(404).json({error:'Teacher not found'});const url=await saveAvatar('teacher',id,req.file);await q('UPDATE teachers SET avatar_url=? WHERE id=?',[url,id]);await audit(req,'AVATAR_UPDATED','teacher',id);res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
+app.post('/api/admin/students/:id/avatar',requirePermission('MANAGE_STUDENTS'),imageUpload.single('file'),async(req,res)=>{const id=Number(req.params.id);if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const [r]=await q("SELECT id FROM students WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!r[0])return res.status(404).json({error:'Student not found'});const url=await saveAvatar('student',id,req.file);await q('UPDATE students SET avatar_url=? WHERE id=?',[url,id]);const [linked]=await q('SELECT id FROM users WHERE student_id=? AND status=\'ACTIVE\'',[id]);for(const u of linked)await q('UPDATE users SET avatar_url=? WHERE id=?',[url,u.id]);await audit(req,'AVATAR_UPDATED','student',id);for(const u of linked)pushChatEvent('profile',{type:'profile',userId:u.id,avatar_url:url+'?v='+Date.now()});res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
+app.post('/api/admin/teachers/:id/avatar',requirePermission('MANAGE_TEACHERS'),imageUpload.single('file'),async(req,res)=>{const id=Number(req.params.id);if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const [r]=await q("SELECT id FROM teachers WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!r[0])return res.status(404).json({error:'Teacher not found'});const url=await saveAvatar('teacher',id,req.file);await q('UPDATE teachers SET avatar_url=? WHERE id=?',[url,id]);const [linked]=await q('SELECT id FROM users WHERE teacher_id=? AND status=\'ACTIVE\'',[id]);for(const u of linked)await q('UPDATE users SET avatar_url=? WHERE id=?',[url,u.id]);await audit(req,'AVATAR_UPDATED','teacher',id);for(const u of linked)pushChatEvent('profile',{type:'profile',userId:u.id,avatar_url:url+'?v='+Date.now()});res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
 app.post('/api/admin/assignments', requirePermission('MANAGE_ASSIGNMENTS'), async (req,res) => {
   const {title,description='',subjectId=null,dueAt=null} = req.body || {};
   if(!title?.trim()) return res.status(400).json({error:'Assignment title is required'});
@@ -657,7 +657,7 @@ app.get('/api/chat/stream',requireAuth,async(req,res)=>{
   res.flushHeaders?.();
   const client={res,userId:req.session.userId};
   chatStreams.add(client);
-  res.write('event: ready\\ndata: {}\\n\\n');
+  res.write(': connected\\n\\n');
   req.on('close',()=>chatStreams.delete(client));
 });
 
@@ -691,12 +691,14 @@ app.patch('/api/chat/messages/:id',requireAuth,async(req,res)=>{
   const [rows]=await q('SELECT id,user_id,body,deleted_at FROM chat_messages WHERE id=? LIMIT 1',[id]);const m=rows[0];
   if(!m)return res.status(404).json({error:'Message not found'});
   if(m.deleted_at)return res.status(400).json({error:'Deleted message cannot be edited'});
-  if(Number(m.user_id)!==Number(req.session.userId))return res.status(403).json({error:'You can edit only your own messages'});
+  const permissions=await getPermissionCodes(req.session.userId);
+  const canEdit=Number(m.user_id)===Number(req.session.userId)||permissions.includes('MANAGE_CHAT');
+  if(!canEdit)return res.status(403).json({error:'Permission denied'});
   if(body===m.body)return res.status(400).json({error:'No changes made'});
   await q('INSERT INTO chat_message_edits(message_id,editor_user_id,old_body,new_body) VALUES(?,?,?,?)',[id,req.session.userId,m.body,body]);
   await q('UPDATE chat_messages SET body=?,edited_at=NOW() WHERE id=?',[body,id]);
   await q('INSERT INTO activity_logs(actor_user_id,action,entity_type,entity_id,details) VALUES(?,?,?,?,?)',[req.session.userId,'CHAT_MESSAGE_EDITED','chat_message',id,JSON.stringify({old_body:m.body,new_body:body})]);
-  const [updated]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,u.display_name,u.avatar_url FROM chat_messages m JOIN users u ON u.id=m.user_id WHERE m.id=?',[id]);
+  const [updated]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM chat_messages m JOIN users u ON u.id=m.user_id LEFT JOIN chat_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?',[id]);
   res.json({message:updated[0]});
   pushChatEvent('chat',{type:'updated',message:updated[0]});
 });
