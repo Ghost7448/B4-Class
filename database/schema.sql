@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS users(
  display_name VARCHAR(120) NOT NULL UNIQUE,
  password_hash VARCHAR(255) NOT NULL,
  role ENUM('STUDENT','TEACHER','ADMIN','SUPER_ADMIN') NOT NULL DEFAULT 'STUDENT',
+ is_super_admin TINYINT(1) NOT NULL DEFAULT 0,
  status ENUM('ACTIVE','SUSPENDED','DISABLED') NOT NULL DEFAULT 'ACTIVE',
  avatar_url VARCHAR(500),
  session_version INT NOT NULL DEFAULT 1,
@@ -287,7 +288,7 @@ CREATE TABLE IF NOT EXISTS chat_typing(
 
 INSERT IGNORE INTO permissions(code,label) VALUES
 ('MANAGE_ADMINS','Manage admins'),('MANAGE_ACCOUNTS','Manage accounts'),('MANAGE_KEYS','Manage activation keys'),
-('MANAGE_TEACHERS','Manage teachers'),('MANAGE_STUDENTS','Manage students'),('MANAGE_ROLES','Manage roles & permissions'),
+('MANAGE_TEACHERS','Manage teachers'),('MANAGE_STUDENTS','Manage students'),('MANAGE_ROLES','Manage roles'),('MANAGE_PERMISSIONS','Manage permissions'),('VIEW_ADMIN_CENTER','View Admin Center'),
 ('MANAGE_SUBJECTS','Manage subjects'),('MANAGE_SCHEDULE','Manage schedule'),('MANAGE_ASSIGNMENTS','Manage assignments'),
 ('MANAGE_RESOURCES','Manage resources'),('MANAGE_EXAMS','Manage exams'),('MANAGE_ATTENDANCE','Manage attendance'),
 ('MANAGE_ANNOUNCEMENTS','Manage announcements'),('MANAGE_CHAT','Moderate chat'),('VIEW_LOGS','View logs'),
