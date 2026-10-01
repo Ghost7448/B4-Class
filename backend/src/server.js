@@ -1014,7 +1014,7 @@ app.post('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const body=St
 app.post('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{if(req.body?.typing)await q('INSERT INTO b4_teacher_typing(user_id) VALUES(?) ON DUPLICATE KEY UPDATE updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM b4_teacher_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
 app.get('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{await q('DELETE FROM b4_teacher_typing WHERE updated_at<(NOW()-INTERVAL 5 SECOND)');const [rows]=await q('SELECT t.user_id,u.display_name FROM b4_teacher_typing t JOIN users u ON u.id=t.user_id ORDER BY t.updated_at DESC');res.json({users:rows});});
 
-app.get('/api/admin/developers/public',async(req,res)=>{const [developers]=await q('SELECT id,name,link_url,created_at,IF(image_data IS NULL,NULL,CONCAT("/api/developers/",id,"/avatar")) avatar_url FROM b4_developers ORDER BY id DESC');res.json({developers});});
+app.get('/api/admin/developers/public',async(req,res)=>{const [developers]=await q('SELECT id,name,title,link_url,created_at,IF(image_data IS NULL,NULL,CONCAT("/api/developers/",id,"/avatar")) avatar_url FROM b4_developers ORDER BY id DESC');res.json({developers});});
 
 // Serve shared assets from the repository root before the SPA fallback.
 // The manifest references /assets/logo.svg, so this route must be public.
