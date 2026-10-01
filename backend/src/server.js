@@ -424,7 +424,7 @@ app.get('/api/admin/permissions', requireAnyPermission(['MANAGE_PERMISSIONS','MA
 });
 
 app.get('/api/admin/users', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
-  const [users]=await q('SELECT id,display_name,official_name,role,is_super_admin,status,student_id,teacher_id FROM users ORDER BY display_name');
+  const [users]=await q('SELECT u.id,u.display_name,u.official_name,u.role,u.is_super_admin,u.status,u.student_id,u.teacher_id,s.student_code,t.teacher_code FROM users u LEFT JOIN students s ON s.id=u.student_id LEFT JOIN teachers t ON t.id=u.teacher_id ORDER BY u.display_name');
   const result=[];
   for(const u of users){
     const [direct]=await q('SELECT p.code FROM user_permissions up JOIN permissions p ON p.id=up.permission_id WHERE up.user_id=? ORDER BY p.code',[u.id]);
