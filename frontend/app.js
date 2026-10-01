@@ -152,7 +152,7 @@ async function loadRoles(){
     r.innerHTML='<div class="grid c2">'+S.users.map(u=>{
       const linked=u.role==='TEACHER'?(u.teacher_id?'Teacher profile #'+u.teacher_id:'Not linked'):(u.student_id?'Student profile #'+u.student_id:'Not linked');
       const options='<option value="STUDENT" '+(u.role==='STUDENT'?'selected':'')+'>STUDENT</option><option value="TEACHER" '+(u.role==='TEACHER'?'selected':'')+'>TEACHER</option>';
-      return '<div class="card role-card"><div class="head"><div><b>'+esc(u.display_name)+'</b><p class="muted">'+esc(u.official_name||'')+'</p></div>'+(Number(u.is_super_admin)===1?'<span class="badge">SUPER ADMIN</span>':'<span class="badge">'+esc(u.role)+'</span>')+'</div><p class="muted">Current link: '+esc(linked)+'</p>'+ (Number(u.is_super_admin)===1?'<div class="notice">Super Admin is a private system flag. This account keeps its Student/Teacher role.</div>':'<label>Account role<select onchange="changeRole('+u.id+',this.value)">'+options+'</select></label>')+'</div>';
+      return '<div class="card role-card"><div class="head"><div><b>'+esc(u.display_name)+'</b><p class="muted">'+esc(u.official_name||'')+'</p></div>'+(Number(u.is_super_admin)===1?'<span class="badge">SUPER ADMIN</span>':'<span class="badge">'+esc(u.role)+'</span>')+'</div><p class="muted">Current link: '+esc(linked)+'</p>'+ (Number(u.is_super_admin)===1?'<div class="notice">Super Admin is a private system flag, not a role. You can still link this account to its B4 Student/Teacher identity.</div><button class="btn ghost" onclick="identityEdit('+u.id+')">Set class identity</button>':'<label>Account role<select onchange="changeRole('+u.id+',this.value)">'+options+'</select></label>')+'</div>';
     }).join('')+'</div>';
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
@@ -161,6 +161,17 @@ async function loadPermissions(){
   try{const d=await api('/api/admin/users');S.users=d.users||[];
     r.innerHTML='<div class="grid c2">'+S.users.map(u=>'<div class="card permission-user" data-user-id="'+u.id+'"><div class="head"><div><b>'+esc(u.display_name)+'</b><p class="muted">'+esc(u.role)+'</p></div><span class="badge">'+(u.direct_permissions?.length||0)+' direct</span></div><div class="permission-grid">'+PERMS.map(p=>'<label class="permission-tile '+((u.direct_permissions||[]).includes(p[0])?'is-on':'')+'"><input type="checkbox" data-perm="'+p[0]+'" '+((u.direct_permissions||[]).includes(p[0])?'checked':'')+'><span>'+p[1]+'</span></label>').join('')+'</div><button class="btn primary" onclick="savePermissions('+u.id+')">Save permissions</button></div>').join('')+'</div>';
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
+}
+function identityEdit(id){
+  const u=S.users.find(x=>Number(x.id)===Number(id))||{};
+  const studentOpts='<option value="">Choose student</option>'+S.students.map(x=>'<option value="'+x.id+'" '+(Number(x.id)===Number(u.student_id)?'selected':'')+'>'+esc(x.display_name)+' • '+esc(x.student_code||'')+'</option>').join('');
+  const teacherOpts='<option value="">Choose teacher</option>'+S.teachers.map(x=>'<option value="'+x.id+'" '+(Number(x.id)===Number(u.teacher_id)?'selected':'')+'>'+esc(x.display_name)+' • '+esc(x.teacher_code||'')+'</option>').join('');
+  modal('<div class="modalhead"><h2>Class identity</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveIdentity(event,'+id+')"><label>Identity type<select id="identityType" onchange="document.querySelectorAll(\'.identity-select\').forEach(x=>x.hidden=x.dataset.type!==this.value)"><option value="STUDENT" '+(u.student_id?'selected':'')+'>Student</option><option value="TEACHER" '+(u.teacher_id?'selected':'')+'>Teacher</option><option value="NONE" '+(!u.student_id&&!u.teacher_id?'selected':'')+'>No class identity</option></select></label><select id="studentIdentity" class="identity-select" data-type="STUDENT" '+(u.student_id?'':'hidden')+'>'+studentOpts+'</select><select id="teacherIdentity" class="identity-select" data-type="TEACHER" '+(u.teacher_id?'':'hidden')+'>'+teacherOpts+'</select><button class="btn primary">Save identity</button></form>')
+}
+async function saveIdentity(e,id){
+  e.preventDefault();
+  const type=$('#identityType').value, identityId=type==='STUDENT'?Number($('#studentIdentity').value):type==='TEACHER'?Number($('#teacherIdentity').value):null;
+  try{await api('/api/admin/users/'+id+'/identity',{method:'PATCH',body:JSON.stringify({type,identityId})});close();await loadMe();await loadRoles();toast('Class identity updated ✓')}catch(e){toast(e.message)}
 }
 async function changeRole(id,role){
   const user=S.users.find(u=>Number(u.id)===Number(id));if(!user)return;
