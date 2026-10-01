@@ -745,36 +745,35 @@ app.get('/api/admin/chat/edit-logs',requirePermission('VIEW_LOGS'),async(req,res
 
 app.post('/api/chat/typing',requireAuth,async(req,res)=>{const typing=!!req.body?.typing;if(typing)await q('INSERT INTO chat_typing(user_id,typing) VALUES(?,1) ON DUPLICATE KEY UPDATE typing=1,updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM chat_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
 app.get('/api/chat/typing',requireAuth,async(req,res)=>{await q('DELETE FROM chat_typing WHERE updated_at < (NOW() - INTERVAL 5 SECOND)');const [users]=await q("SELECT t.user_id,t.updated_at,u.display_name FROM chat_typing t JOIN users u ON u.id=t.user_id WHERE t.typing=1 AND u.status='ACTIVE' ORDER BY t.updated_at DESC");res.json({users});});
-app.post('/api/ai', requirePermission('USE_AI'), async (req, res) => {
-  const [aiUser]=await q('SELECT role,is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);
-  if(aiUser[0]?.role!=='STUDENT' && !Number(aiUser[0]?.is_super_admin)) return res.status(403).json({error:'AI is available to B4 students only'});
-  const message = String(req.body?.message || '').trim();
-  if (!message) return res.status(400).json({ error: 'Message required' });
-  const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!apiKey) return res.status(503).json({ error: 'Gemini AI is not configured on the backend yet' });
-  const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-3.8-flash','gemini-3.7-flash','gemini-3.6-flash'])];
-  const systemInstruction = 'You are B4 AI Assistant for a secondary-school Telecommunication class. Explain academic topics clearly and safely. Do not invent private class data. Prefer Egyptian Arabic when the student asks in Arabic and English when asked in English.';
-  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-  let lastError = null;
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({model,contents:message,config:{systemInstruction,maxOutputTokens:700,thinkingConfig:{thinkingLevel:'low'}}});
-        return res.json({ answer: response.text || 'No answer returned.', model });
-      } catch (e) {
-        lastError = e;
-        const status = Number(e?.status || e?.statusCode || e?.response?.status || 0);
-        const msg = String(e?.message || '');
-        const retryable = status===429 || status===500 || status===502 || status===503 || /high demand|unavailable|temporar|rate.?limit|overloaded/i.test(msg);
-        console.error('Gemini request failed', {model,attempt:attempt+1,status,message:msg});
-        if (!retryable) break;
-        if (attempt===0) await sleep(250);
-      }
+app.post('/api/ai', requirePermission('USE_AI'), async (req,res)=>{
+  const [u]=await q('SELECT role,is_super_admin,status FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+  if(!u[0]||u[0].status!=='ACTIVE') return res.status(401).json({error:'Account is not active'});
+  if(u[0].role!=='STUDENT' && !Number(u[0].is_super_admin)) return res.status(403).json({error:'AI is available to B4 students'});
+  const message=String(req.body?.message||'').trim();
+  if(!message) return res.status(400).json({error:'Message required'});
+  const key=process.env.GEMINI_API_KEY||process.env.GOOGLE_API_KEY;
+  if(!key) return res.status(503).json({error:'Gemini is not configured on the backend'});
+  const models=[...new Set([process.env.GEMINI_MODEL||'gemini-3.8-flash','gemini-3.8-flash','gemini-3.6-flash'])];
+  const instruction='You are B4 AI Assistant for a secondary-school Telecommunication class. Explain academic topics clearly and safely. Do not invent private class data. Prefer Egyptian Arabic for Arabic questions and English for English questions.';
+  let last=null;
+  for(const model of models){
+    try{
+      const ai=new GoogleGenAI({apiKey:key});
+      const out=await ai.models.generateContent({model,contents:message,config:{systemInstruction:instruction,maxOutputTokens:700}});
+      const answer=String(out?.text||'').trim();
+      if(answer)return res.json({answer,model});
+      last=new Error('Empty Gemini response');
+    }catch(err){
+      last=err;
+      const status=Number(err?.status||err?.statusCode||0);
+      const msg=String(err?.message||'');
+      console.error('Gemini error',{model,status,message:msg});
+      if(status===400||status===401||status===403) return res.status(502).json({error:'Gemini rejected the request. Check the backend Gemini configuration.'});
     }
   }
-  const finalMessage=/high demand|unavailable|overloaded/i.test(String(lastError?.message||''))?'Gemini is busy right now. I automatically tried backup Gemini models; please try again in a moment.':'AI request failed. Please check the Gemini API key/model settings.';
-  return res.status(503).json({error:finalMessage});
+  const msg=String(last?.message||'');
+  if(/quota|resource.?exhausted|rate.?limit|429/i.test(msg)) return res.status(503).json({error:'Gemini quota/rate limit reached.'});
+  return res.status(502).json({error:'Gemini request failed. Check the backend Gemini configuration.'});
 });
 
 
