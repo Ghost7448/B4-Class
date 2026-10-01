@@ -752,22 +752,29 @@ app.post('/api/ai', requirePermission('USE_AI'), async (req, res) => {
   if (!message) return res.status(400).json({ error: 'Message required' });
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (!apiKey) return res.status(503).json({ error: 'Gemini AI is not configured on the backend yet' });
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
-      contents: message,
-      config: {
-        systemInstruction: 'You are B4 AI Assistant for a secondary-school Telecommunication class. Explain academic topics clearly and safely. Do not invent private class data. Prefer Egyptian Arabic when the student asks in Arabic and English when asked in English.',
-        maxOutputTokens: 700,
-        temperature: 0.4
+  const models = [...new Set([process.env.GEMINI_MODEL || 'gemini-3.8-flash','gemini-3.7-flash','gemini-3.6-flash'])];
+  const systemInstruction = 'You are B4 AI Assistant for a secondary-school Telecommunication class. Explain academic topics clearly and safely. Do not invent private class data. Prefer Egyptian Arabic when the student asks in Arabic and English when asked in English.';
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+  let lastError = null;
+  for (const model of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({model,contents:message,config:{systemInstruction,maxOutputTokens:700,thinkingConfig:{thinkingLevel:'low'}}});
+        return res.json({ answer: response.text || 'No answer returned.', model });
+      } catch (e) {
+        lastError = e;
+        const status = Number(e?.status || e?.statusCode || e?.response?.status || 0);
+        const msg = String(e?.message || '');
+        const retryable = status===429 || status===500 || status===502 || status===503 || /high demand|unavailable|temporar|rate.?limit|overloaded/i.test(msg);
+        console.error('Gemini request failed', {model,attempt:attempt+1,status,message:msg});
+        if (!retryable) break;
+        if (attempt===0) await sleep(250);
       }
-    });
-    res.json({ answer: response.text || 'No answer returned.' });
-  } catch (e) {
-    console.error('Gemini request failed:', e.message);
-    res.status(502).json({ error: 'AI request failed' });
+    }
   }
+  const finalMessage=/high demand|unavailable|overloaded/i.test(String(lastError?.message||''))?'Gemini is busy right now. I automatically tried backup Gemini models; please try again in a moment.':'AI request failed. Please check the Gemini API key/model settings.';
+  return res.status(503).json({error:finalMessage});
 });
 
 
