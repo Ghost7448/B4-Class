@@ -185,3 +185,36 @@ label small{font-weight:500}
 .reply-preview{border-inline-start-color:var(--accent)}
 @keyframes timerPulse{to{transform:scale(1.01);filter:brightness(1.08)}}
 @media(max-width:700px){.title h1{font-size:25px}.hero{border-radius:22px;padding:22px}.card{border-radius:18px}.modal{padding:16px}.exam-timer{top:8px}.answer-option{padding:10px}}
+
+/* ===== B4 FINAL UI POLISH ===== */
+body{overflow-x:hidden}
+#content{animation:pageIn .38s cubic-bezier(.2,.8,.2,1)}
+@keyframes pageIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.modal{width:min(920px,96vw);padding:30px;border-radius:28px}
+.modal .form,.form{gap:16px}
+.form label{display:grid;gap:8px;color:var(--t);font-weight:800;font-size:13px}
+.form input,.form textarea,.form select{width:100%;min-height:50px;font-size:14px;background:var(--s2);color:var(--t);border:1px solid var(--line);border-radius:14px;padding:13px 15px;outline:0}
+.form textarea{min-height:120px;resize:vertical}
+.form input:focus,.form textarea:focus,.form select:focus{border-color:var(--p);box-shadow:0 0 0 4px #7c3aed18}
+.admin-card,.role-card,.permission-user{color:var(--t)}
+.admin-card h3,.admin-card small,.role-card b,.role-card p,.permission-user b,.permission-user p{color:var(--t)}
+.admin-card small,.role-card .muted,.permission-user .muted{color:var(--m)!important}
+.dark .admin-card h3,.dark .admin-card small,.dark .role-card b,.dark .role-card p,.dark .permission-user b,.dark .permission-user p{color:var(--t)!important}
+.admin-cards .admin-card{min-height:170px}
+.developers-grid{grid-template-columns:repeat(auto-fit,minmax(260px,1fr));align-items:stretch}
+.developer-card{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;min-height:290px;justify-content:center;position:relative;overflow:hidden}
+.developer-card:before{content:"";position:absolute;inset:-45% auto auto -20%;width:190px;height:190px;border-radius:50%;background:#7c3aed12;animation:floatGlow 5s ease-in-out infinite}
+.developer-card .avatar.xl{width:120px;height:120px;border-radius:30px;border:3px solid #7c3aed44;box-shadow:0 20px 45px #7c3aed1c}
+.developer-info{position:relative;z-index:1;display:grid;gap:9px;justify-items:center}
+.developer-info h3{margin:0;font-size:19px;color:var(--t)}
+.key-row{flex-wrap:wrap}
+.logs-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;margin-bottom:12px;border:1px solid var(--line);border-radius:16px;background:var(--s)}
+.logs-list{display:grid;gap:9px}
+.log-row{display:flex;align-items:flex-start;gap:13px;padding:15px;border:1px solid var(--line);border-radius:16px;background:var(--s);box-shadow:var(--shadow);animation:card .35s both}
+.log-icon{width:38px;height:38px;flex:0 0 38px;border-radius:12px;background:#7c3aed12;color:var(--p);display:grid;place-items:center;font-weight:900}
+.log-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.log-source{font-size:9px;padding:4px 7px;border-radius:99px;background:var(--s2);color:var(--m);font-weight:900}
+.log-row small{color:var(--m)}.log-row p{margin:7px 0 0;color:var(--m);font-size:11px}
+.review-summary{margin-bottom:16px}.review-summary .card{display:grid;gap:7px}.review-summary b{font-size:22px;color:var(--t)}
+.review-questions{grid-template-columns:1fr}.answer-block{background:var(--s2);border:1px solid var(--line);border-radius:15px;padding:13px;margin-top:10px}.answer-block small{color:var(--m);font-weight:800}.answer-block p{margin:5px 0 0;color:var(--t);white-space:pre-wrap}.answer-result{margin-top:10px;padding:10px 12px;border-radius:12px;font-weight:800}.answer-result.correct{background:#16a34a14;color:#16a34a}.answer-result.incorrect{background:#dc262614;color:#dc2626}.review-student{width:100%;display:flex;justify-content:space-between;align-items:center;text-align:left;cursor:pointer;color:var(--t)}.review-student small{display:block;color:var(--m);margin-top:4px}
+@keyframes floatGlow{50%{transform:translate(18px,15px) scale(1.08)}}
+@media(max-width:700px){#content{padding:18px 14px}.modal{padding:22px 16px}.developer-card{min-height:260px}.form input,.form textarea,.form select{font-size:15px}.logs-toolbar{align-items:flex-start;flex-direction:column}}
