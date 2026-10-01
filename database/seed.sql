@@ -1,0 +1,33 @@
+-- B4 official roster/subjects seed. Safe to run more than once.
+INSERT INTO students(student_code,official_name,display_name,class_name,specialization) VALUES
+('B4-01','احمد السيد ابراهيم عطيه جحا','احمد السيد','B4','Telecommunication'),
+('B4-02','ادهم حسن حسن محمد عاصي','ادهم حسن','B4','Telecommunication'),
+('B4-03','طلعت ابراهيم ابراهيم محمد الصعيدي','طلعت ابراهيم','B4','Telecommunication'),
+('B4-04','كريم طارق السيد على ابو الحسن','كريم طارق','B4','Telecommunication'),
+('B4-05','محمد فؤاد محي الدين محمد العشري','محمد فؤاد','B4','Telecommunication'),
+('B4-06','اسراء السيد ابراهيم زين الدين العبسى','اسراء السيد','B4','Telecommunication'),
+('B4-07','اسماء منسي محمد عوض سالم','اسماء منسي','B4','Telecommunication'),
+('B4-08','اسماء نظمي عبد المعطي شعبان محمد','اسماء نظمي','B4','Telecommunication'),
+('B4-09','جنه هيثم السيد جمعه حسن هيكل','جنه هيثم','B4','Telecommunication'),
+('B4-10','حسناء فراج محمود حسين فراج','حسناء فراج','B4','Telecommunication'),
+('B4-11','سارة عمرو ابراهيم جمال الدين','سارة عمرو','B4','Telecommunication'),
+('B4-12','سمر سامح عبد الجواد عبد القوي ريحان','سمر سامح','B4','Telecommunication'),
+('B4-13','شهد عماد صبري مصطفى الجوهري','شهد عماد','B4','Telecommunication'),
+('B4-14','ملك على على راشد','ملك على','B4','Telecommunication'),
+('B4-15','ملك محمد حمدي السيد عبد الجليل ابو عيانه','ملك محمد حمدي','B4','Telecommunication'),
+('B4-16','ملك محمد عبد الكريم عبد الجواد عبد الخالق','ملك محمد عبد الكريم','B4','Telecommunication'),
+('B4-17','نادين هيثم اشرف عبد الوهاب عبد المجيد','نادين هيثم','B4','Telecommunication'),
+('B4-18','ندا السيد راضي غازي سلامه','ندا السيد','B4','Telecommunication'),
+('B4-19','ندى السيد محمود يوسف خاطر','ندى السيد','B4','Telecommunication'),
+('B4-20','نور عابد سماره زكي ابراهيم','نور عابد','B4','Telecommunication'),
+('B4-21','نورهان سمير السعيد احمد عبد الله الشهاوي','نورهان سمير','B4','Telecommunication'),
+('B4-22','هنا عبد الله نجاح عبد الله محمد نجم','هنا عبد','B4','Telecommunication'),
+('B4-23','مروة ماهر محمد محمد يوسف','مروة ماهر','B4','Telecommunication'),
+('B4-24','محمد ابراهيم عبدالخالق مرسي','محمد ابراهيم','B4','Telecommunication')
+ON DUPLICATE KEY UPDATE official_name=VALUES(official_name),display_name=VALUES(display_name),class_name='B4',specialization='Telecommunication';
+
+INSERT INTO subjects(name,class_name,teacher_name,progress) VALUES
+('Telecommunication','B4','',0),('Mathematics','B4','',0),('Physics','B4','',0),
+('English','B4','',0),('Capstone','B4','',0),('DT','B4','',0),('Arabic','B4','',0),
+('Religion','B4','',0),('Social Studies','B4','',0)
+ON DUPLICATE KEY UPDATE teacher_name=VALUES(teacher_name);
