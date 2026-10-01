@@ -435,19 +435,33 @@ app.get('/api/admin/users', requireAnyPermission(['MANAGE_ROLES','MANAGE_ADMINS'
 
 app.put('/api/admin/users/:id/permissions', requireAnyPermission(['MANAGE_PERMISSIONS','MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
   const targetId=Number(req.params.id);
-  const codes=Array.isArray(req.body?.permissionCodes)?[...new Set(req.body.permissionCodes.map(String))]:[];
+  const codes=Array.isArray(req.body?.permissionCodes)
+    ? [...new Set(req.body.permissionCodes.map(x=>String(x).trim()).filter(Boolean))]
+    : [];
   if(!Number.isSafeInteger(targetId)) return res.status(400).json({error:'Invalid user id'});
   const [targetRows]=await q('SELECT id,role,is_super_admin,status FROM users WHERE id=? LIMIT 1',[targetId]);
   const target=targetRows[0];
   if(!target) return res.status(404).json({error:'User not found'});
   if(Number(target.is_super_admin)===1) return res.status(403).json({error:'Super Admin always has every permission'});
-  // Keep existing databases compatible with the current permission catalog.
-  for(const code of codes){
-    const def=PERMISSION_DEFS.find(x=>x[0]===code);
-    if(def) await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',def);
+
+  // Validate against the canonical server-side permission catalog.
+  const invalid=codes.filter(code=>!PERMISSION_DEFS.some(def=>def[0]===code));
+  if(invalid.length) return res.status(400).json({error:'One or more permissions are invalid',invalid});
+
+  // Self-heal older databases so every current permission exists.
+  for(const [code,label] of PERMISSION_DEFS){
+    await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',[code,label]);
   }
-  const [valid]=await q('SELECT id,code FROM permissions WHERE code IN (?)',[codes.length?codes:['__NONE__']]);
-  if(valid.length!==codes.length) return res.status(400).json({error:'One or more permissions are invalid'});
+
+  // mysql2 does not expand an array passed to a single IN (?) placeholder.
+  // Use one placeholder per code so the validation works correctly.
+  const [valid]=codes.length
+    ? await q('SELECT id,code FROM permissions WHERE code IN ('+codes.map(()=>'?').join(',')+')',[...codes])
+    : [[]];
+  const validCodes=new Set(valid.map(x=>x.code));
+  if(valid.length!==codes.length || codes.some(code=>!validCodes.has(code))){
+    return res.status(400).json({error:'One or more permissions are invalid',invalid:codes.filter(code=>!validCodes.has(code))});
+  }
   await q('DELETE FROM user_permissions WHERE user_id=?',[targetId]);
   for(const p of valid) await q('INSERT INTO user_permissions(user_id,permission_id,granted_by) VALUES(?,?,?)',[targetId,p.id,req.session.userId]);
   await q('INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)',[req.session.userId,'PERMISSIONS_UPDATED',JSON.stringify({target_user_id:targetId,permissions:codes})]);
