@@ -465,6 +465,29 @@ app.patch('/api/admin/users/:id/role', requireAnyPermission(['MANAGE_ROLES','MAN
   res.json({ok:true,user:await userById(targetId)});
 });
 
+app.patch('/api/admin/users/:id/identity', requireAnyPermission(['MANAGE_ACCOUNTS','MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
+  const targetId=Number(req.params.id), type=String(req.body?.type||'').toUpperCase();
+  const identityId=Number(req.body?.identityId);
+  if(!Number.isSafeInteger(targetId)||!['STUDENT','TEACHER','NONE'].includes(type)) return res.status(400).json({error:'Invalid identity type'});
+  const [target]=await q('SELECT id,is_super_admin FROM users WHERE id=? LIMIT 1',[targetId]);
+  if(!target[0]) return res.status(404).json({error:'User not found'});
+  if(type==='NONE'){
+    await q('UPDATE users SET student_id=NULL,teacher_id=NULL WHERE id=?',[targetId]);
+  }else if(type==='STUDENT'){
+    if(!Number.isSafeInteger(identityId))return res.status(400).json({error:'Student profile is required'});
+    const [p]=await q("SELECT id FROM students WHERE id=? AND class_name='B4' LIMIT 1",[identityId]);if(!p[0])return res.status(400).json({error:'Student profile not found'});
+    const [used]=await q('SELECT id FROM users WHERE student_id=? AND id<>? LIMIT 1',[identityId,targetId]);if(used[0])return res.status(400).json({error:'That student profile is already linked to another account'});
+    await q('UPDATE users SET student_id=?,teacher_id=NULL WHERE id=?',[identityId,targetId]);
+  }else{
+    if(!Number.isSafeInteger(identityId))return res.status(400).json({error:'Teacher profile is required'});
+    const [p]=await q("SELECT id FROM teachers WHERE id=? AND class_name='B4' LIMIT 1",[identityId]);if(!p[0])return res.status(400).json({error:'Teacher profile not found'});
+    const [used]=await q('SELECT id FROM users WHERE teacher_id=? AND id<>? LIMIT 1',[identityId,targetId]);if(used[0])return res.status(400).json({error:'That teacher profile is already linked to another account'});
+    await q('UPDATE users SET teacher_id=?,student_id=NULL WHERE id=?',[identityId,targetId]);
+  }
+  await audit(req,'IDENTITY_LINK_UPDATED','user',targetId,{type,identityId:type==='NONE'?null:identityId});
+  res.json({ok:true,user:await userById(targetId)});
+});
+
 app.get('/api/admin/activation-keys', requirePermission('MANAGE_KEYS'), async (req, res) => {
   const [keys] = await q(`
     SELECT ak.id,ak.key_preview,ak.key_value,ak.status,ak.created_at,ak.expires_at,
