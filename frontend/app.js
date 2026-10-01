@@ -48,7 +48,7 @@ function settingsV(){
   '<div class="card"><h3>'+ (ar?'التفضيلات':'Preferences') +'</h3><div class="settings-lang"><button class="btn '+(S.lang==='en'?'primary':'ghost')+'" onclick="setLang(\'en\')">EN</button><button class="btn '+(S.lang==='ar'?'primary':'ghost')+'" onclick="setLang(\'ar\')">عربي</button></div><button class="btn ghost" onclick="toggleTheme()">'+(S.theme==='dark'?t('light'):t('dark'))+'</button><hr><h3>Google</h3><p class="muted">'+(S.linked.length?(ar?'Google مرتبط':'Google linked'):(ar?'Google غير مرتبط':'Google not linked'))+'</p><button class="btn primary" onclick="googleLink()">'+(S.linked.length?(ar?'إعادة ربط Google':'Relink Google'):(ar?'ربط Google':'Link Google'))+'</button>'+(S.linked.length?'<button class="btn danger" onclick="unlinkGoogle()">'+(ar?'إلغاء ربط Google':'Unlink Google')+'</button>':'')+'</div></div>';
 }
 function devV(){return title(t('developers'),'The B4 development team and project contributors.')+'<div class="grid developers-grid">'+S.developers.map(d=>'<article class="card developer-card"><div class="developer-photo"><img class="avatar xl" src="'+esc(d.avatar_url||'assets/logo.svg')+'" onerror="this.src=\'assets/logo.svg\'"></div><div class="developer-info"><span class="badge">B4 DEVELOPER</span><h3>'+esc(d.name)+'</h3>'+(d.link_url?'<a class="btn ghost developer-link" href="'+esc(d.link_url)+'" target="_blank" rel="noopener">Open profile ↗</a>':'')+'</div></article>').join('')||'<div class="card empty">No developers added yet.</div>'+'</div>'}
-function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if(window.chatStream){window.chatStream.close();window.chatStream=null}$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='attendance'?attendanceV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='attendance'&&can('MANAGE_ATTENDANCE'))attendanceLoad();if(v==='chat')chatLoop();if(v==='teacherChat')teacherChatLoop();if(v.startsWith('admin:'))adminLoad(v.slice(6))}
+function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';$('#lang span')&&($('#lang span').textContent=S.lang==='ar'?'EN':'عربي');if(window.chatStream){window.chatStream.close();window.chatStream=null}$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='attendance'?attendanceV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='attendance'&&can('MANAGE_ATTENDANCE'))attendanceLoad();if(v==='chat')chatLoop();if(v==='teacherChat')teacherChatLoop();if(v.startsWith('admin:'))adminLoad(v.slice(6))}
 function teacherChatV(){return title(t('teacherChat'),'Private chat for teachers and authorized staff.')+'<div class="card chat"><div class="messages" id="teacherMessages">'+S.teacherMessages.map(m=>messageHTML(m)).join('')+'</div><div id="teacherTyping" class="typing-indicator"></div><form class="chatform" onsubmit="sendTeacherChat(event)"><input id="teacherInput" oninput="teacherTyping(!!this.value.trim())"><button class="btn primary">➤</button></form></div>'}
 function adminPage(p){if(p==='roles')return title('Roles','Account role is only Student or Teacher. Super Admin is a private system flag, never a role.')+'<div id="adminRoot"></div>';if(p==='permissions')return title('Permissions','Direct permissions are independent from the account role. Administrator grants every permission.')+'<div id="adminRoot"></div>';if(p==='accounts')return title('Accounts','Activation key, Google link, password and sessions.')+'<div id="adminRoot"></div>';if(p==='students')return title('Manage Students','Edit identity, display name and photo.','<button class="btn primary" onclick="studentEdit()">＋ Add</button>')+'<div class="grid c3">'+S.students.map(x=>peopleCard(x,'student')).join('')+'</div>';if(p==='teachers')return title('Manage Teachers','Edit identity, display name and photo.','<button class="btn primary" onclick="teacherEdit()">＋ Add</button>')+'<div class="grid c3">'+S.teachers.map(x=>peopleCard(x,'teacher')).join('')+'</div>';if(p==='keys')return title('Activation Keys','One-time keys.')+'<div id="adminRoot"></div>';if(p==='badges')return title('Manage Badges','Create icons and assign badges.')+'<div id="adminRoot"></div>';if(p==='subjects')return subjectsV();if(p==='schedule')return scheduleV();if(p==='admins')return title('Manage Admins','Admin access is independent from Student/Teacher role.')+'<div id="adminRoot"></div>';if(p==='logs')return title('Logs','All platform activity and security events.')+'<div id="adminRoot"></div>';if(p==='attendance')return attendanceV();if(p==='developers')return title('Manage Developers','Super Admin only.')+'<div id="adminRoot"></div>';return adminV()}
 async function loadMe(){try{const d=await api('/api/auth/me');S.me=d.user;S.linked=(await api('/api/auth/linked')).linked||[]}catch{S.me=null;S.linked=[]}await loadData();render()}
@@ -67,7 +67,51 @@ async function logout(){await api('/api/auth/logout',{method:'POST'}).catch(()=>
 function googleLink(){location.href=API+'/api/auth/google/start'}async function unlinkGoogle(){try{await api('/api/auth/linked/GOOGLE',{method:'DELETE'});await loadMe()}catch(e){toast(e.message)}}
 function aiModal(){modal('<div class="modalhead"><h2>✦ '+t('ai')+'</h2><button class="close" onclick="b4Close()">×</button></div><div id="aiOut" class="card">Ask a study question.</div><form class="form" onsubmit="askAI(event)"><textarea id="aiInput" rows="4" placeholder="Ask about Telecommunication..."></textarea><button class="btn primary">Send</button></form>')}
 async function askAI(e){e.preventDefault();if(!S.me||S.me.role!=='STUDENT'){toast('لازم تكون طالب في B4 عشان تستخدم الـAI');return}try{$('#aiOut').textContent='Thinking…';const d=await api('/api/ai',{method:'POST',body:JSON.stringify({message:$('#aiInput').value})});$('#aiOut').textContent=d.answer}catch(x){toast(x.message)}}
-function chatLoop(){clearInterval(window.chatTimer);clearInterval(window.chatTypingTimer);if(window.chatStream){window.chatStream.close();window.chatStream=null}if(!S.me||S.view!=='chat')return;try{window.chatStream=new EventSource(API+'/api/chat/stream',{withCredentials:true});window.chatStream.addEventListener('message',e=>{try{const d=JSON.parse(e.data);if(d.type==='created'&&!S.messages.some(m=>Number(m.id)===Number(d.message.id)))S.messages.push(d.message);else if(d.type==='updated')S.messages=S.messages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m);else if(d.type==='deleted')S.messages=S.messages.filter(m=>Number(m.id)!==Number(d.id));const box=$('#messages');if(box){box.innerHTML=S.messages.map(messageHTML).join('');box.scrollTop=box.scrollHeight}}catch{}});window.chatStream.onerror=()=>{};window.chatTypingTimer=setInterval(async()=>{if(S.view!=='chat')return;try{const ty=await api('/api/chat/typing');const el=$('#typing');if(el)el.textContent=(ty.users||[]).filter(x=>Number(x.user_id)!==Number(S.me.id)).map(x=>x.display_name+' is typing…').join(' • ')}catch{}},1200);}catch{}}async function sendChat(e){
+function applyChatMessages(messages){
+  const next=messages||[];
+  const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.messages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));
+  if(!changed)return;
+  S.messages=next;
+  const box=$('#messages');
+  if(box){const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;box.innerHTML=S.messages.map(messageHTML).join('');if(wasNearBottom)box.scrollTop=box.scrollHeight}
+}
+function applyProfileEvent(d){
+  if(!d?.userId)return;
+  const uid=Number(d.userId),avatar=d.avatar_url;
+  if(S.me&&Number(S.me.id)===uid)S.me.avatar_url=avatar;
+  S.messages=(S.messages||[]).map(m=>Number(m.user_id)===uid?{...m,avatar_url:avatar}:m);
+  S.students=(S.students||[]).map(x=>x.user_id&&Number(x.user_id)===uid?{...x,avatar_url:avatar}:x);
+  S.teachers=(S.teachers||[]).map(x=>x.user_id&&Number(x.user_id)===uid?{...x,avatar_url:avatar}:x);
+  const box=$('#messages');if(box)box.innerHTML=S.messages.map(messageHTML).join('');
+  if(S.me&&Number(S.me.id)===uid&&$('#topAvatar'))$('#topAvatar').src=avatar;
+}
+function chatLoop(){
+  clearInterval(window.chatTimer);clearInterval(window.chatTypingTimer);
+  if(window.chatStream){window.chatStream.close();window.chatStream=null}
+  if(!S.me||S.view!=='chat')return;
+  const sync=async()=>{try{const d=await api('/api/chat/messages');applyChatMessages(d.messages||[])}catch{}};
+  try{
+    window.chatStream=new EventSource(API+'/api/chat/stream',{withCredentials:true});
+    window.chatStream.addEventListener('message',e=>{
+      try{
+        const d=JSON.parse(e.data);
+        if(d.type==='created'){
+          if(!S.messages.some(m=>Number(m.id)===Number(d.message.id)))applyChatMessages([...S.messages,d.message]);
+        }else if(d.type==='updated'){
+          applyChatMessages(S.messages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));
+        }else if(d.type==='deleted'){
+          applyChatMessages(S.messages.filter(m=>Number(m.id)!==Number(d.id)));
+        }
+      }catch{}
+    });
+    window.chatStream.addEventListener('profile',e=>{try{applyProfileEvent(JSON.parse(e.data))}catch{}});
+    window.chatStream.onerror=()=>{};
+  }catch{}
+  window.chatTimer=setInterval(sync,2500);
+  window.chatTypingTimer=setInterval(async()=>{if(S.view!=='chat')return;try{const ty=await api('/api/chat/typing');const el=$('#typing');if(el)el.textContent=(ty.users||[]).filter(x=>Number(x.user_id)!==Number(S.me.id)).map(x=>x.display_name+' is typing…').join(' • ')}catch{}},1200);
+  sync();
+}
+async function sendChat(e){
   e.preventDefault();const i=$('#chatInput');if(!i.value.trim())return;
   try{
     await api('/api/chat/messages',{method:'POST',body:JSON.stringify({body:i.value.trim(),replyToId:window.replyTo||null})});
