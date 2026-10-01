@@ -82,7 +82,19 @@ async function saveProfile(e){e.preventDefault();try{await api('/api/auth/profil
 async function logout(){await api('/api/auth/logout',{method:'POST'}).catch(()=>{});if(window.realtimeStream){window.realtimeStream.close();window.realtimeStream=null}S.me=null;clearInterval(window.profileSyncTimer);S.view='students';await loadData();render();toast('Logged out')}
 function googleLink(){location.href=API+'/api/auth/google/start'}async function unlinkGoogle(){try{await api('/api/auth/linked/GOOGLE',{method:'DELETE'});await loadMe()}catch(e){toast(e.message)}}
 function aiModal(){modal('<div class="modalhead"><h2>✦ '+t('ai')+'</h2><button class="close" onclick="b4Close()">×</button></div><div id="aiOut" class="card">Ask a study question.</div><form class="form" onsubmit="askAI(event)"><textarea id="aiInput" rows="4" placeholder="Ask about Telecommunication..."></textarea><button class="btn primary">Send</button></form>')}
-async function askAI(e){e.preventDefault();if(!S.me||S.me.role!=='STUDENT'){toast('لازم تكون طالب في B4 عشان تستخدم الـAI');return}try{$('#aiOut').textContent='Thinking…';const d=await api('/api/ai',{method:'POST',body:JSON.stringify({message:$('#aiInput').value})});$('#aiOut').textContent=d.answer}catch(x){toast(x.message)}}
+async function askAI(e){
+  e.preventDefault();
+  if(!S.me||S.me.role!=='STUDENT'){toast('لازم تكون طالب في B4 عشان تستخدم الـAI');return}
+  const input=$('#aiInput'),out=$('#aiOut'),message=input?.value.trim();
+  if(!message)return;
+  try{
+    out.textContent='Thinking…';
+    const r=await fetch(API+'/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({message})});
+    const d=await r.json();
+    if(!r.ok)throw Error(d.error||'AI request failed');
+    out.textContent=d.answer||'No answer returned.';
+  }catch(x){out.textContent='';toast(x.message)}
+ }
 function applyChatMessages(messages){
   const next=messages||[];
   const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.messages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));
