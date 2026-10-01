@@ -147,6 +147,7 @@ async function ensurePermissionSchema() {
   await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'SUPER_ADMIN',id FROM permissions");
   const teacherPerms=['VIEW_CLASS','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ANNOUNCEMENTS','MANAGE_SUBJECTS','MANAGE_ATTENDANCE','MANAGE_ANALYTICS','MANAGE_TEACHER_CHAT','USE_AI'];
   for(const code of teacherPerms) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'TEACHER',id FROM permissions WHERE code=?",[code]);
+  for(const code of ['VIEW_ADMIN_CENTER','MANAGE_ACCOUNTS','MANAGE_STUDENTS','MANAGE_TEACHERS','MANAGE_KEYS','MANAGE_SUBJECTS','MANAGE_SCHEDULE','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ATTENDANCE','MANAGE_ANNOUNCEMENTS','MANAGE_CHAT','VIEW_LOGS','USE_AI','VIEW_CLASS','MANAGE_BADGES','MANAGE_DEVELOPERS','MANAGE_ANALYTICS','ADMINISTRATOR']) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'ADMIN',id FROM permissions WHERE code=?",[code]);
   for(const code of ['VIEW_CLASS','USE_AI']) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'STUDENT',id FROM permissions WHERE code=?",[code]);
 }
 
