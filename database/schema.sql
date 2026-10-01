@@ -30,7 +30,6 @@ CREATE TABLE IF NOT EXISTS users(
  display_name VARCHAR(120) NOT NULL UNIQUE,
  password_hash VARCHAR(255) NOT NULL,
  role ENUM('STUDENT','TEACHER') NOT NULL DEFAULT 'STUDENT',
- is_super_admin TINYINT(1) NOT NULL DEFAULT 0,
  status ENUM('ACTIVE','SUSPENDED','DISABLED') NOT NULL DEFAULT 'ACTIVE',
  avatar_url VARCHAR(500),
  session_version INT NOT NULL DEFAULT 1,
@@ -69,7 +68,6 @@ CREATE TABLE IF NOT EXISTS activation_keys(
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
  key_hash CHAR(64) NOT NULL UNIQUE,
  key_preview VARCHAR(30) NOT NULL,
- key_value VARCHAR(80) NULL,
  person_type ENUM('STUDENT','TEACHER') NOT NULL,
  student_id INT UNSIGNED NULL,
  teacher_id INT UNSIGNED NULL,
@@ -262,7 +260,7 @@ CREATE TABLE IF NOT EXISTS b4_user_badges(
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS b4_developers(
- id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,link_url VARCHAR(500) NULL,
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,
  image_mime VARCHAR(120),image_data MEDIUMBLOB,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -288,7 +286,7 @@ CREATE TABLE IF NOT EXISTS chat_typing(
 
 INSERT IGNORE INTO permissions(code,label) VALUES
 ('MANAGE_ADMINS','Manage admins'),('MANAGE_ACCOUNTS','Manage accounts'),('MANAGE_KEYS','Manage activation keys'),
-('MANAGE_TEACHERS','Manage teachers'),('MANAGE_STUDENTS','Manage students'),('MANAGE_ROLES','Manage roles'),('MANAGE_PERMISSIONS','Manage permissions'),('VIEW_ADMIN_CENTER','View Admin Center'),
+('MANAGE_TEACHERS','Manage teachers'),('MANAGE_STUDENTS','Manage students'),('MANAGE_ROLES','Manage roles & permissions'),
 ('MANAGE_SUBJECTS','Manage subjects'),('MANAGE_SCHEDULE','Manage schedule'),('MANAGE_ASSIGNMENTS','Manage assignments'),
 ('MANAGE_RESOURCES','Manage resources'),('MANAGE_EXAMS','Manage exams'),('MANAGE_ATTENDANCE','Manage attendance'),
 ('MANAGE_ANNOUNCEMENTS','Manage announcements'),('MANAGE_CHAT','Moderate chat'),('VIEW_LOGS','View logs'),
@@ -298,5 +296,4 @@ INSERT IGNORE INTO permissions(code,label) VALUES
 
 INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'TEACHER',id FROM permissions WHERE code IN
 ('MANAGE_SUBJECTS','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ATTENDANCE','MANAGE_ANNOUNCEMENTS','MANAGE_CHAT','USE_AI','VIEW_CLASS','MANAGE_TEACHER_CHAT');
-INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'STUDENT',id FROM permissions WHERE code IN('USE_AI','VIEW_CLASS');
-
+INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'STUDENT',id FROM permissions WHERE code IN('USE_AI','VIEW_CLASS')
