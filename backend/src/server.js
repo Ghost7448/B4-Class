@@ -441,6 +441,11 @@ app.put('/api/admin/users/:id/permissions', requireAnyPermission(['MANAGE_PERMIS
   const target=targetRows[0];
   if(!target) return res.status(404).json({error:'User not found'});
   if(Number(target.is_super_admin)===1) return res.status(403).json({error:'Super Admin always has every permission'});
+  // Keep existing databases compatible with the current permission catalog.
+  for(const code of codes){
+    const def=PERMISSION_DEFS.find(x=>x[0]===code);
+    if(def) await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',def);
+  }
   const [valid]=await q('SELECT id,code FROM permissions WHERE code IN (?)',[codes.length?codes:['__NONE__']]);
   if(valid.length!==codes.length) return res.status(400).json({error:'One or more permissions are invalid'});
   await q('DELETE FROM user_permissions WHERE user_id=?',[targetId]);
