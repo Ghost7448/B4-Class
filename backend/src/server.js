@@ -553,7 +553,15 @@ const imageUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:5*1024
 app.delete('/api/admin/students/:id',requirePermission('MANAGE_STUDENTS'),async(req,res)=>{const id=Number(req.params.id);const [r]=await q("DELETE FROM students WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Student not found'});await audit(req,'STUDENT_DELETED','student',id);res.json({ok:true});});
 async function saveAvatar(type,id,file){await q('INSERT INTO profile_images(entity_type,entity_id,mime_type,data) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE mime_type=VALUES(mime_type),data=VALUES(data)',[type,id,file.mimetype,file.buffer]);return '/api/profile-images/'+type+'/'+id;}
 app.get('/api/profile-images/:type/:id',async(req,res)=>{const type=String(req.params.type),id=Number(req.params.id);if(!['user','student','teacher'].includes(type)||!Number.isSafeInteger(id))return res.status(400).end();const [r]=await q('SELECT mime_type,data FROM profile_images WHERE entity_type=? AND entity_id=? LIMIT 1',[type,id]);if(!r[0])return res.status(404).end();res.setHeader('Content-Type',r[0].mime_type);res.setHeader('Cache-Control','public,max-age=300');res.send(r[0].data);});
-app.post('/api/auth/avatar',requireAuth,imageUpload.single('file'),async(req,res)=>{if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const url=await saveAvatar('user',req.session.userId,req.file);await q('UPDATE users SET avatar_url=? WHERE id=?',[url,req.session.userId]);await audit(req,'AVATAR_UPDATED','user',req.session.userId);res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
+app.post('/api/auth/avatar',requireAuth,imageUpload.single('file'),async(req,res)=>{
+  if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});
+  const url=await saveAvatar('user',req.session.userId,req.file);
+  await q('UPDATE users SET avatar_url=? WHERE id=?',[url,req.session.userId]);
+  await audit(req,'AVATAR_UPDATED','user',req.session.userId);
+  const avatar=url+'?v='+Date.now();
+  pushChatEvent('profile',{type:'profile',userId:req.session.userId,avatar_url:avatar});
+  res.json({ok:true,avatar_url:avatar,user:await userById(req.session.userId)});
+});
 app.post('/api/admin/students/:id/avatar',requirePermission('MANAGE_STUDENTS'),imageUpload.single('file'),async(req,res)=>{const id=Number(req.params.id);if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const [r]=await q("SELECT id FROM students WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!r[0])return res.status(404).json({error:'Student not found'});const url=await saveAvatar('student',id,req.file);await q('UPDATE students SET avatar_url=? WHERE id=?',[url,id]);await audit(req,'AVATAR_UPDATED','student',id);res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
 app.post('/api/admin/teachers/:id/avatar',requirePermission('MANAGE_TEACHERS'),imageUpload.single('file'),async(req,res)=>{const id=Number(req.params.id);if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});const [r]=await q("SELECT id FROM teachers WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!r[0])return res.status(404).json({error:'Teacher not found'});const url=await saveAvatar('teacher',id,req.file);await q('UPDATE teachers SET avatar_url=? WHERE id=?',[url,id]);await audit(req,'AVATAR_UPDATED','teacher',id);res.json({ok:true,avatar_url:url+'?v='+Date.now()});});
 app.post('/api/admin/assignments', requirePermission('MANAGE_ASSIGNMENTS'), async (req,res) => {
@@ -619,6 +627,15 @@ app.get('/api/chat/stream',requireAuth,async(req,res)=>{
   chatStreams.add(client);
   res.write('event: ready\\ndata: {}\\n\\n');
   req.on('close',()=>chatStreams.delete(client));
+});
+
+app.get('/api/chat/messages',requireAuth,async(req,res)=>{
+  const [messages]=await q(`SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name
+    FROM chat_messages m LEFT JOIN users u ON u.id=m.user_id
+    LEFT JOIN chat_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id
+    WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100`);
+  messages.reverse();
+  res.json({messages});
 });
 
 app.post('/api/chat/messages',requireAuth,async(req,res)=>{
@@ -845,7 +862,7 @@ app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
 app.post('/api/auth/forgot-password',async(req,res)=>{res.json({ok:true,whatsapp:'https://wa.me/201023019916'});});
 
 app.get('/api/admin/accounts',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
-  const [rows]=await q(`SELECT u.id,u.display_name,u.official_name,u.role,u.status,u.student_id,u.teacher_id,u.avatar_url,
+  const [rows]=await q(`SELECT u.id,u.display_name,u.official_name,u.role,u.is_super_admin,u.status,u.student_id,u.teacher_id,u.avatar_url,
     EXISTS(SELECT 1 FROM linked_accounts l WHERE l.user_id=u.id AND l.provider='GOOGLE') google_linked,
     COALESCE(s.student_code,t.teacher_code) identity_code,COALESCE(ak.key_preview,'') activation_key_preview
     FROM users u LEFT JOIN students s ON s.id=u.student_id LEFT JOIN teachers t ON t.id=u.teacher_id
