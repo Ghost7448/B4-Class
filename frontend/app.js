@@ -163,7 +163,7 @@ async function loadRoles(){
   try{
     const d=await api('/api/admin/users');S.users=d.users||[];
     r.innerHTML='<div class="grid c2">'+S.users.map(u=>{
-      const linked=u.role==='TEACHER'?(u.teacher_id?'Teacher profile #'+u.teacher_id:'Not linked'):(u.student_id?'Student profile #'+u.student_id:'Not linked');
+      const linked=u.role==='TEACHER'?(u.teacher_code||'Not linked'):(u.student_code||'Not linked');
       const options='<option value="STUDENT" '+(u.role==='STUDENT'?'selected':'')+'>STUDENT</option><option value="TEACHER" '+(u.role==='TEACHER'?'selected':'')+'>TEACHER</option>';
       const systemBadge=Number(u.is_super_admin)===1?'<span class="badge super-badge">SUPER ADMIN • SYSTEM</span>':'';
       const roleBadge='<span class="badge">'+esc(u.role)+'</span>';
@@ -177,7 +177,7 @@ async function loadPermissions(){
   try{const d=await api('/api/admin/users');S.users=d.users||[];
     r.innerHTML='<div class="grid c2">'+S.users.map(u=>{
       const superAdmin=Number(u.is_super_admin)===1, administrator=(u.direct_permissions||[]).includes('ADMINISTRATOR');
-      return '<div class="card permission-user" data-user-id="'+u.id+'"><div class="head"><div><b>'+esc(u.display_name)+'</b><p class="muted">'+esc(u.role)+'</p></div><span class="badge">'+(superAdmin?'SUPER ADMIN':(administrator?'ADMINISTRATOR':((u.direct_permissions||[]).length||0)+' direct'))+'</span></div><div class="permission-grid">'+PERMS.map(p=>'<label class="permission-tile '+(((u.direct_permissions||[]).includes(p[0])||superAdmin)?'is-on':'')+'"><input type="checkbox" class="permission-checkbox" data-perm="'+p[0]+'" '+(((u.direct_permissions||[]).includes(p[0])||superAdmin)?'checked':'')+' '+(superAdmin?'disabled':'')+'><span>'+p[1]+'</span></label>').join('')+'</div>'+(superAdmin?'<div class="notice">Super Admin has every permission automatically.</div>':'<button class="btn primary" onclick="savePermissions('+u.id+')">Save permissions</button>')+'</div>';
+      return '<div class="card permission-user" data-user-id="'+u.id+'"><div class="head"><div><b>'+esc(u.display_name)+'</b><p class="muted identity-line">'+((u.student_code||u.teacher_code)?'<span class="identity-code">'+esc(u.student_code||u.teacher_code)+'</span>':'')+' <span>'+esc(u.role)+'</span></p></div><span class="badge">'+(superAdmin?'SUPER ADMIN':(administrator?'ADMINISTRATOR':((u.direct_permissions||[]).length||0)+' direct'))+'</span></div><div class="permission-grid">'+PERMS.map(p=>'<label class="permission-tile '+(((u.direct_permissions||[]).includes(p[0])||superAdmin)?'is-on':'')+'"><input type="checkbox" class="permission-checkbox" data-perm="'+p[0]+'" '+(((u.direct_permissions||[]).includes(p[0])||superAdmin)?'checked':'')+' '+(superAdmin?'disabled':'')+'><span>'+p[1]+'</span></label>').join('')+'</div>'+(superAdmin?'<div class="notice">Super Admin has every permission automatically.</div>':'<button class="btn primary" onclick="savePermissions('+u.id+')">Save permissions</button>')+'</div>';
     }).join('')+'</div>';
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
