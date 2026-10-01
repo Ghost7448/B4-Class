@@ -15,11 +15,11 @@ try{
   const hash=await bcrypt.hash(password,12);
   const [existing]=await db.query('SELECT id FROM users WHERE LOWER(display_name)=LOWER(?) LIMIT 1',[displayName]);
   if(existing[0]){
-    await db.query("UPDATE users SET password_hash=?,role='SUPER_ADMIN',status='ACTIVE' WHERE id=?",[hash,existing[0].id]);
-    console.log('Existing account promoted to SUPER_ADMIN.');
+    await db.query("UPDATE users SET password_hash=?,is_super_admin=1,status='ACTIVE' WHERE id=?",[hash,existing[0].id]);
+    console.log('Existing account promoted to Super Admin flag (role preserved).');
   }else{
-    const [r]=await db.query("INSERT INTO users(official_name,display_name,password_hash,role,status) VALUES(?,?,?,'SUPER_ADMIN','ACTIVE')",[displayName,displayName,hash]);
-    console.log('SUPER_ADMIN created. ID:',r.insertId);
+    const [r]=await db.query("INSERT INTO users(official_name,display_name,password_hash,role,is_super_admin,status) VALUES(?,?,?,'STUDENT',1,'ACTIVE')",[displayName,displayName,hash]);
+    console.log('Super Admin flag created. Role remains STUDENT until linked to a class identity. ID:',r.insertId);
   }
   await db.end();
 }catch(e){console.error(e.message);process.exitCode=1;}finally{rl.close();}
