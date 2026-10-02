@@ -253,3 +253,59 @@ body{overflow-x:hidden}
 .btn,.top button,#mobile,.quick,.google-btn,.close,.person-card,.permission-card,.answer-option,.admin-card,.card,.item{will-change:transform}.btn:active,.top button:active,#mobile:active,.quick:active,.google-btn:active,.close:active{transform:translateY(1px) scale(.98)}.card:nth-child(2){animation-delay:35ms}.card:nth-child(3){animation-delay:70ms}.card:nth-child(4){animation-delay:105ms}.card:nth-child(5){animation-delay:140ms}.card:nth-child(6){animation-delay:175ms}.card:nth-child(7){animation-delay:210ms}.card:nth-child(8){animation-delay:245ms}.item:nth-child(2){animation-delay:30ms}.item:nth-child(3){animation-delay:60ms}.item:nth-child(4){animation-delay:90ms}.item:nth-child(5){animation-delay:120ms}.item:nth-child(6){animation-delay:150ms}
 .page .title{animation:titleIn .45s both}.page .actions{animation:actionsIn .5s .06s both}.hero h1,.hero p{animation:heroText .7s both}.hero p{animation-delay:.08s}.hero .btn{animation:heroButton .55s .14s both}.search:focus-within{transform:translateY(-1px);box-shadow:0 10px 30px rgba(124,58,237,.10);border-color:#7c3aed55}.field input:focus,.field textarea:focus,.field select:focus,.chatform input:focus{border-color:#7c3aed66;box-shadow:0 0 0 4px #7c3aed0d;transform:translateY(-1px)}@keyframes titleIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}@keyframes actionsIn{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}@keyframes heroText{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}@keyframes heroButton{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}@media(max-width:600px){.logs-toolbar{align-items:flex-start;flex-direction:column}.log-row{padding:12px}.identity-code{min-height:23px}}
+
+
+/* ===== MOBILE DRAWER FINAL FIX — MOBILE ONLY ===== */
+@media(max-width:800px){
+  .app aside{
+    z-index:60;
+    height:100dvh;
+    max-height:100dvh;
+    overflow:hidden;
+    transition:transform .38s cubic-bezier(.22,.8,.22,1),box-shadow .38s ease;
+  }
+
+  /* Fade the page behind the drawer while it is open. */
+  body:has(#side.open)::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    z-index:55;
+    background:rgba(0,0,0,.42);
+    backdrop-filter:blur(2px);
+    pointer-events:none;
+    animation:mobileDrawerBackdrop .28s ease both;
+  }
+
+  nav#nav{
+    max-height:calc(100dvh - 230px);
+    height:calc(100dvh - 230px);
+    overflow-y:auto;
+    overflow-x:hidden;
+    padding-bottom:180px;
+    scroll-padding-bottom:180px;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:thin;
+  }
+
+  nav#nav::-webkit-scrollbar{width:4px}
+  nav#nav::-webkit-scrollbar-thumb{background:#7c3aed55;border-radius:99px}
+  nav#nav::-webkit-scrollbar-track{background:transparent}
+
+  /* Keep the bottom dock under the drawer, so it never hides the last nav items. */
+  .mobile-dock{
+    z-index:45;
+    bottom:max(10px,env(safe-area-inset-bottom));
+  }
+
+  @keyframes mobileDrawerBackdrop{
+    from{opacity:0}
+    to{opacity:1}
+  }
+
+  @media(prefers-reduced-motion:reduce){
+    body:has(#side.open)::before{animation:none}
+    .app aside{transition:none}
+  }
+}
