@@ -71,11 +71,17 @@ const q = (sql, args = []) => pool.execute(sql, args);
 // relying on Node's environment timezone (which is commonly UTC on Railway).
 function cairoDate(value) {
   if (value == null || value === '') return null;
+  if (value instanceof Date) return new Date(value.getTime());
   const s = String(value).trim().replace(' ', 'T');
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) return new Date(value);
   const utcMs = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] || 0));
   return new Date(utcMs - 3 * 60 * 60 * 1000);
+}
+function cairoEpoch(value) {
+  const d = cairoDate(value);
+  const ms = d?.getTime();
+  return Number.isFinite(ms) ? ms : null;
 }
 
 const chatStreams = new Set();
@@ -273,10 +279,18 @@ async function getBootstrap(req) {
     WHERE r.class_name='B4' ORDER BY r.created_at DESC LIMIT 100
   `);
   const [exams] = await q(`
-    SELECT e.id,e.title,e.description,e.subject_id,e.created_by,s.name subject_name,e.starts_at,e.ends_at,e.duration_minutes,CASE WHEN e.starts_at IS NOT NULL AND NOW()<e.starts_at THEN 'SCHEDULED' WHEN e.ends_at IS NOT NULL AND NOW()>=e.ends_at THEN 'CLOSED' ELSE 'OPEN' END status
+    SELECT e.id,e.title,e.description,e.subject_id,e.created_by,s.name subject_name,e.starts_at,e.ends_at,e.duration_minutes
     FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id
     WHERE e.class_name='B4' ORDER BY e.starts_at IS NULL,e.starts_at
   `);
+  const nowMs = Date.now();
+  for (const exam of exams) {
+    const startMs = cairoEpoch(exam.starts_at);
+    const endMs = cairoEpoch(exam.ends_at);
+    exam.start_ms = startMs;
+    exam.end_ms = endMs;
+    exam.status = startMs !== null && nowMs < startMs ? 'SCHEDULED' : (endMs !== null && nowMs >= endMs ? 'CLOSED' : 'OPEN');
+  }
   let attendance=[],messages=[],notifications=[];
   if(req.session.userId) {
     [attendance]=await q(`SELECT attendance_date AS date,status FROM b4_attendance WHERE user_id=? ORDER BY attendance_date DESC LIMIT 60`,[req.session.userId]);
@@ -684,7 +698,7 @@ app.post('/api/admin/assignments', requirePermission('MANAGE_ASSIGNMENTS'), asyn
 app.post('/api/admin/assignments/:id/file', requirePermission('MANAGE_ASSIGNMENTS'), assignmentUpload.single('file'), async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id)||!req.file)return res.status(400).json({error:'Valid assignment id and image/PDF file are required'});try{await assertTeacherOwner(req,'assignments',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const [a]=await q("SELECT id FROM assignments WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!a[0])return res.status(404).json({error:'Assignment not found'});await q('DELETE FROM assignment_files WHERE assignment_id=?',[id]);const [r]=await q('INSERT INTO assignment_files(assignment_id,filename,mime_type,data) VALUES(?,?,?,?)',[id,req.file.originalname,req.file.mimetype,req.file.buffer]);await audit(req,'ASSIGNMENT_FILE_UPLOADED','assignment',id,{filename:req.file.originalname});res.json({ok:true,fileId:r.insertId})});
 app.delete('/api/admin/assignments/:id/file',requirePermission('MANAGE_ASSIGNMENTS'),async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid assignment id'});try{await assertTeacherOwner(req,'assignments',id);const [r]=await q('DELETE FROM assignment_files WHERE assignment_id=?',[id]);if(!r.affectedRows)return res.status(404).json({error:'Assignment file not found'});await audit(req,'ASSIGNMENT_FILE_DELETED','assignment',id,null);res.json({ok:true})}catch(e){res.status(e.statusCode||500).json({error:e.message||'Could not delete assignment file'})}});
 app.get('/api/assignments/files/:id', requireAuth, async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).end();const [rows]=await q('SELECT af.filename,af.mime_type,af.data FROM assignment_files af JOIN assignments a ON a.id=af.assignment_id WHERE af.id=? AND a.class_name=\'B4\' LIMIT 1',[id]);if(!rows[0])return res.status(404).end();res.setHeader('Content-Type',rows[0].mime_type);res.setHeader('Content-Disposition','inline; filename*=UTF-8\'\''+encodeURIComponent(rows[0].filename));res.send(rows[0].data)});
-app.post('/api/assignments/:id/submission', requireAuth, submissionUpload.single('file'), async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id)||!req.file)return res.status(400).json({error:'A file is required'});try{const [a]=await q("SELECT id,status,due_at FROM assignments WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!a[0])return res.status(404).json({error:'Assignment not found'});if(a[0].status!=='OPEN')return res.status(400).json({error:'This assignment is not open'});if(a[0].due_at&&new Date(a[0].due_at).getTime()<=Date.now())return res.status(400).json({error:'The assignment deadline has passed'});const [existing]=await q('SELECT id FROM assignment_submissions WHERE assignment_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);let submissionId;if(existing[0]){submissionId=existing[0].id;await q('UPDATE assignment_submissions SET status=\'SUBMITTED\',score=NULL,submitted_at=CURRENT_TIMESTAMP WHERE id=?',[submissionId]);await q('DELETE FROM assignment_submission_files WHERE submission_id=?',[submissionId])}else{const [r]=await q('INSERT INTO assignment_submissions(assignment_id,user_id,status) VALUES(?,?,\'SUBMITTED\')',[id,req.session.userId]);submissionId=r.insertId}await q('INSERT INTO assignment_submission_files(submission_id,filename,mime_type,data) VALUES(?,?,?,?)',[submissionId,req.file.originalname,req.file.mimetype||'application/octet-stream',req.file.buffer]);await audit(req,'ASSIGNMENT_SUBMITTED','assignment',id,{filename:req.file.originalname});res.json({ok:true,submissionId})}catch(e){console.error('Assignment submission failed:',e);res.status(500).json({error:'Could not submit assignment'})}});
+app.post('/api/assignments/:id/submission', requireAuth, submissionUpload.single('file'), async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id)||!req.file)return res.status(400).json({error:'A file is required'});try{const [a]=await q("SELECT id,status,due_at FROM assignments WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!a[0])return res.status(404).json({error:'Assignment not found'});if(a[0].status!=='OPEN')return res.status(400).json({error:'This assignment is not open'});if(a[0].due_at&&cairoEpoch(a[0].due_at)<=Date.now())return res.status(400).json({error:'The assignment deadline has passed'});const [existing]=await q('SELECT id FROM assignment_submissions WHERE assignment_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);let submissionId;if(existing[0]){submissionId=existing[0].id;await q('UPDATE assignment_submissions SET status=\'SUBMITTED\',score=NULL,submitted_at=CURRENT_TIMESTAMP WHERE id=?',[submissionId]);await q('DELETE FROM assignment_submission_files WHERE submission_id=?',[submissionId])}else{const [r]=await q('INSERT INTO assignment_submissions(assignment_id,user_id,status) VALUES(?,?,\'SUBMITTED\')',[id,req.session.userId]);submissionId=r.insertId}await q('INSERT INTO assignment_submission_files(submission_id,filename,mime_type,data) VALUES(?,?,?,?)',[submissionId,req.file.originalname,req.file.mimetype||'application/octet-stream',req.file.buffer]);await audit(req,'ASSIGNMENT_SUBMITTED','assignment',id,{filename:req.file.originalname});res.json({ok:true,submissionId})}catch(e){console.error('Assignment submission failed:',e);res.status(500).json({error:'Could not submit assignment'})}});
 app.delete('/api/assignments/:id/submission',requireAuth,async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid assignment id'});try{const [rows]=await q('SELECT id FROM assignment_submissions WHERE assignment_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);if(!rows[0])return res.status(404).json({error:'Submission not found'});await q('DELETE FROM assignment_submissions WHERE id=?',[rows[0].id]);await audit(req,'ASSIGNMENT_SUBMISSION_DELETED','assignment',id,null);res.json({ok:true})}catch(e){console.error('Assignment submission delete failed:',e);res.status(500).json({error:'Could not delete submission'})}});
 app.get('/api/assignments/submissions/files/:id', requireAuth, async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).end();const [rows]=await q('SELECT sf.filename,sf.mime_type,sf.data FROM assignment_submission_files sf JOIN assignment_submissions s ON s.id=sf.submission_id JOIN assignments a ON a.id=s.assignment_id WHERE sf.submission_id=? AND a.class_name=\'B4\' AND s.user_id=? LIMIT 1',[id,req.session.userId]);if(!rows[0])return res.status(404).end();res.setHeader('Content-Type',rows[0].mime_type||'application/octet-stream');res.setHeader('Content-Disposition','inline; filename*=UTF-8\'\''+encodeURIComponent(rows[0].filename));res.send(rows[0].data)});
 
@@ -944,7 +958,7 @@ app.post('/api/admin/exams', requirePermission('MANAGE_EXAMS'), async(req,res)=>
   const {title,description='',subjectId=null,startsAt=null,endsAt=null,durationMinutes=null,questions=[]}=req.body||{};
   if(!title?.trim()) return res.status(400).json({error:'Exam title is required'});
   if(!Array.isArray(questions)||!questions.length) return res.status(400).json({error:'Add at least one question'});
-  if(startsAt&&endsAt&&new Date(endsAt)<=new Date(startsAt)) return res.status(400).json({error:'Deadline must be after start time'});
+  if(startsAt&&endsAt&&cairoEpoch(endsAt)<=cairoEpoch(startsAt)) return res.status(400).json({error:'Deadline must be after start time'});
   const conn=await pool.getConnection();
   try{
     await conn.beginTransaction();
@@ -976,8 +990,10 @@ app.post('/api/exams/:id/start', requireAuth, async(req,res)=>{
   const id=Number(req.params.id); const now=new Date();
   const [ex]=await q('SELECT * FROM exams WHERE id=? AND class_name=\'B4\' LIMIT 1',[id]); const exam=ex[0];
   if(!exam) return res.status(404).json({error:'Exam not found'});
-  if(exam.starts_at&&now<new Date(exam.starts_at)) return res.status(403).json({error:'Exam has not started yet'});
-  if(exam.ends_at&&now>=new Date(exam.ends_at)) return res.status(403).json({error:'Exam deadline has passed'});
+  const startMs=cairoEpoch(exam.starts_at);
+  const endMs=cairoEpoch(exam.ends_at);
+  if(startMs!==null&&now.getTime()<startMs) return res.status(403).json({error:'Exam has not started yet'});
+  if(endMs!==null&&now.getTime()>=endMs) return res.status(403).json({error:'Exam deadline has passed'});
   const [existing]=await q('SELECT * FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
   if(existing[0]){if(existing[0].status!=='STARTED')return res.status(403).json({error:'You have already submitted this exam'});return sendExamStart(res,exam,existing[0]);}
   const [r]=await q('INSERT INTO exam_attempts(exam_id,user_id,status) VALUES(?,?,\'STARTED\')',[id,req.session.userId]);
@@ -989,7 +1005,7 @@ async function sendExamStart(res,exam,attempt){
   const [questions]=await q('SELECT id,question_text,question_type,options_json,points,sort_order FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[exam.id]);
   const start=new Date(attempt.started_at).getTime();
   const durationDeadline=exam.duration_minutes?start+Number(exam.duration_minutes)*60000:null;
-  const endDeadline=exam.ends_at?new Date(exam.ends_at).getTime():null;
+  const endDeadline=cairoEpoch(exam.ends_at);
   const deadlines=[durationDeadline,endDeadline].filter(Boolean);
   const deadline=deadlines.length?new Date(Math.min(...deadlines)).toISOString():null;
   res.json({exam,attempt:{id:attempt.id,started_at:attempt.started_at,deadline},questions:questions.map(q=>({...q,options_json:typeof q.options_json==='string'?(JSON.parse(q.options_json||'[]')):(q.options_json||[])}))});
@@ -1000,7 +1016,7 @@ app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
   const [rows]=await q('SELECT a.*,e.ends_at,e.duration_minutes FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);
   const attempt=rows[0]; if(!attempt)return res.status(404).json({error:'Exam attempt not found'});
   if(attempt.status!=='STARTED')return res.status(400).json({error:'Exam already submitted'});
-  const started=new Date(attempt.started_at).getTime(),deadline=Math.min(...[attempt.ends_at?new Date(attempt.ends_at).getTime():Infinity,attempt.duration_minutes?started+Number(attempt.duration_minutes)*60000:Infinity]);
+  const started=new Date(attempt.started_at).getTime(),deadline=Math.min(...[attempt.ends_at?cairoEpoch(attempt.ends_at):Infinity,attempt.duration_minutes?started+Number(attempt.duration_minutes)*60000:Infinity]);
   if(Date.now()>deadline){await q('UPDATE exam_attempts SET status=\'SUBMITTED\',submitted_at=NOW() WHERE id=?',[attempt.id]);return res.status(403).json({error:'Time is over. The exam was closed automatically.'});}
   const [questions]=await q('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[id]);
   let score=0;
