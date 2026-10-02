@@ -560,3 +560,5 @@ body{overflow-x:hidden}
 .submission-main{display:grid;gap:5px;min-width:0}.submission-main b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.submission-main small{font-size:10px}
 .submission-actions{display:flex;justify-content:flex-end}
 @media(max-width:760px){.submission-card{grid-template-columns:1fr}.submission-actions{justify-content:stretch}.submission-actions .btn{width:100%;text-align:center}.file-picker{min-height:54px}}
+
+.submission-own{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.submission-own>div:first-child{display:grid;gap:4px}.submission-own small{display:block;color:var(--m);font-size:11px}.submission-own-actions{display:flex;gap:8px;align-items:center}.current-assignment-file{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
