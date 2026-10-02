@@ -69,14 +69,32 @@ const q = (sql, args = []) => pool.execute(sql, args);
 // Exam/assignment datetime inputs are entered as Egypt local time (UTC+03:00).
 // MySQL DATETIME has no timezone, so parse exam values explicitly instead of
 // relying on Node's environment timezone (which is commonly UTC on Railway).
+function cairoOffsetMs(epochMs=Date.now()) {
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Africa/Cairo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(epochMs));
+  const get=t=>Number(parts.find(x=>x.type===t)?.value||0);
+  const asUtc=Date.UTC(get('year'),get('month')-1,get('day'),get('hour'),get('minute'),get('second'));
+  return asUtc-epochMs;
+}
 function cairoDate(value) {
   if (value == null || value === '') return null;
   if (value instanceof Date) return new Date(value.getTime());
   const s = String(value).trim().replace(' ', 'T');
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) return new Date(value);
-  const utcMs = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] || 0));
-  return new Date(utcMs - 3 * 60 * 60 * 1000);
+  const localAsUtc=Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3]),Number(m[4]),Number(m[5]),Number(m[6]||0));
+  const offset=cairoOffsetMs(localAsUtc);
+  return new Date(localAsUtc-offset);
+}
+function cairoEpoch(value) {
+  const d=cairoDate(value);
+  const ms=d?.getTime();
+  return Number.isFinite(ms)?ms:null;
+}
+function cairoNow() {
+  const now=new Date();
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Cairo',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(now);
+  const get=t=>parts.find(x=>x.type===t)?.value||'00';
+  return {epoch_ms:now.getTime(),time_zone:'Africa/Cairo',utc_offset_minutes:Math.round(cairoOffsetMs(now.getTime())/60000),local_iso:get('year')+'-'+get('month')+'-'+get('day')+'T'+get('hour')+':'+get('minute')+':'+get('second')};
 }
 function cairoEpoch(value) {
   const d = cairoDate(value);
@@ -318,6 +336,7 @@ async function getBootstrap(req) {
   return {server_now_ms:Date.now(),students,teachers,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications};
 }
 
+app.get('/api/time',(req,res)=>res.json(cairoNow()));
 app.get('/api/bootstrap', async (req, res) => {
   try {
     res.json(await getBootstrap(req));
