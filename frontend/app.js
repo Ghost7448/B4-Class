@@ -1,6 +1,6 @@
 const $=s=>document.querySelector(s),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const API=(window.B4_API_URL||'').replace(/\/$/,'');
-const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'light',view:'dashboard',me:null,linked:[],students:[],teachers:[],subjects:[],schedule:[],assignments:[],resources:[],exams:[],announcements:[],messages:[],attendance:[],developers:[],badges:[],accounts:[],permissions:[],users:[],teacherMessages:[],notifications:[],examReview:null,serverNowMs:0,error:''};
+const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'light',view:'dashboard',me:null,linked:[],students:[],teachers:[],subjects:[],schedule:[],assignments:[],resources:[],exams:[],announcements:[],messages:[],attendance:[],developers:[],badges:[],accounts:[],permissions:[],users:[],teacherMessages:[],notifications:[],examReview:null,serverNowMs:0,serverClockOffsetMs:0,serverTimeZone:'Africa/Cairo',error:''};
 const L={en:{dashboard:'Dashboard',students:'Students',teachers:'Teachers',subjects:'Subjects',schedule:'Schedule',assignments:'Assignments',resources:'Resources',exams:'Exam Center',announcements:'Announcements',chat:'Class Chat',teacherChat:'Teacher Chat',attendance:'Attendance',admin:'Admin Center',teacherCenter:'Teacher Center',settings:'Settings',developers:'Developers',login:'Login',logout:'Log out',activate:'Activation Key',ai:'B4 AI',search:'Search everything...',guest:'Guest',save:'Save',add:'Add',edit:'Edit',delete:'Delete',open:'Open resource',light:'Light mode',dark:'Dark mode',english:'English',arabic:'Arabic',administrator:'Administrator — all permissions',superAdmin:'Super Admin',classRole:'Class role',systemAccess:'System access'},ar:{dashboard:'الرئيسية',students:'الطلاب',teachers:'المدرسين',subjects:'المواد',schedule:'الجدول',assignments:'الواجبات',resources:'المصادر',exams:'الامتحانات',announcements:'الإعلانات',chat:'شات الفصل',teacherChat:'شات المدرسين',attendance:'الحضور',admin:'مركز الإدارة',teacherCenter:'مركز المدرس',settings:'الإعدادات',developers:'المطورون',login:'تسجيل الدخول',logout:'تسجيل الخروج',activate:'مفتاح التفعيل',ai:'مساعد B4',search:'ابحث...',guest:'زائر',save:'حفظ',add:'إضافة',edit:'تعديل',delete:'حذف',open:'فتح المصدر',light:'الوضع النهاري',dark:'الوضع الليلي',english:'الإنجليزية',arabic:'العربية',administrator:'Administrator — كل الصلاحيات',superAdmin:'Super Admin',classRole:'دور الحساب',systemAccess:'صلاحية النظام'}};
 const t=k=>L[S.lang][k]||k;
 const PERMS=[['MANAGE_CHAT','Manage Chat / Moderate messages'],['MANAGE_ACCOUNTS','Manage Accounts'],['MANAGE_PERMISSIONS','Manage Permissions'],['VIEW_LOGS','View Logs'],['VIEW_ADMIN_CENTER','View Admin Center'],['MANAGE_STUDENTS','Manage Students'],['MANAGE_TEACHERS','Manage Teachers'],['MANAGE_ROLES','Manage Roles'],['MANAGE_ADMINS','Manage Admins'],['MANAGE_KEYS','Manage Activation Keys'],['MANAGE_BADGES','Manage Badges'],['MANAGE_SUBJECTS','Manage Subjects'],['MANAGE_SCHEDULE','Manage Schedule'],['MANAGE_ASSIGNMENTS','Manage Assignments'],['MANAGE_RESOURCES','Manage Resources / PDFs'],['MANAGE_EXAMS','Manage Exams'],['MANAGE_ANNOUNCEMENTS','Manage Announcements'],['MANAGE_ATTENDANCE','Manage Attendance'],['MANAGE_TEACHER_CHAT','Teacher Chat'],['MANAGE_ANALYTICS','Attendance Analytics'],['USE_AI','Use AI'],['MANAGE_DEVELOPERS','Manage Developers'],['VIEW_CLASS','View Class'],['ADMINISTRATOR','Administrator — ALL permissions']];
@@ -44,18 +44,34 @@ function updateExamCountdowns(){document.querySelectorAll('[data-exam-id]').forE
 function assignmentCard(a){const tm=assignmentTime(a);return '<article class="card assignment-card"><div class="head"><div><span class="badge">'+esc(a.status||'OPEN')+'</span><h3>'+esc(a.title)+'</h3></div><span class="assignment-subject">'+esc(a.subject_name||'')+'</span></div><p>'+esc(a.description||'')+'</p><div class="assignment-countdown"><span>Time left</span><b class="countdown '+tm.tone+'" data-assignment-id="'+a.id+'">'+tm.label+'</b></div><div class="assignment-bar"><span class="'+tm.tone+'" data-assignment-bar="'+a.id+'" style="width:'+tm.pct+'%"></span></div><div class="assignment-file">'+(a.attachment_id?'<span>📎 '+esc(a.attachment_name||'Assignment file')+'</span>':'<span class="muted">No file attached</span>')+'<button class="btn primary" onclick="openAssignment('+a.id+')">Open Assignment →</button></div>'+(can('MANAGE_ASSIGNMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="assignmentEdit('+a.id+')">Edit</button><button class="btn ghost" onclick="assignmentSubmissions('+a.id+')">Submissions</button><button class="btn danger" onclick="delAPI(\'/api/admin/assignments/'+a.id+'\',\'Assignment deleted\')">Delete</button></div>':'')+'</article>'}
 function tasksV(){return title(t('assignments'),' ',can('MANAGE_ASSIGNMENTS')?'<button class="btn primary" onclick="assignmentEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid c2">'+S.assignments.map(assignmentCard).join('')+'</div>'}
 function updateAssignmentCountdowns(){if(S.view!=='assignments')return;document.querySelectorAll('[data-assignment-id]').forEach(el=>{const a=S.assignments.find(x=>Number(x.id)===Number(el.dataset.assignmentId));if(!a)return;const tm=assignmentTime(a);el.textContent=tm.label;el.className='countdown '+tm.tone;const bar=document.querySelector('[data-assignment-bar="'+a.id+'"]');if(bar){bar.className=tm.tone;bar.style.width=tm.pct+'%'}})}
+function siteNowMs(){const o=Number(S.serverClockOffsetMs);return Date.now()+(Number.isFinite(o)?o:0)}
 function updateLiveClock(){
-  const offset=Number(S.serverNowMs)-Date.now();
-  const now=new Date(Date.now()+(Number.isFinite(offset)?offset:0));
+  const now=new Date(siteNowMs());
   const el=$('#miniTime');
-  if(el)el.textContent=now.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if(el){el.textContent=now.toLocaleTimeString('en-EG',{timeZone:'Africa/Cairo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});el.title='Egypt time • Africa/Cairo'}
   updateAssignmentCountdowns();
   updateExamCountdowns();
+}
+async function syncSiteClock(){
+  try{
+    const before=Date.now();
+    const d=await api('/api/time');
+    const after=Date.now();
+    const server=Number(d.epoch_ms);
+    if(!Number.isFinite(server))return;
+    S.serverClockOffsetMs=server-((before+after)/2);
+    S.serverNowMs=server;
+    S.serverTimeZone=d.time_zone||'Africa/Cairo';
+    updateLiveClock();
+  }catch{}
 }
 function startAssignmentCountdown(){
   if(window.assignmentCountdownTimer)return;
   updateLiveClock();
+  syncSiteClock();
   window.assignmentCountdownTimer=setInterval(updateLiveClock,1000);
+  clearInterval(window.siteClockSyncTimer);
+  window.siteClockSyncTimer=setInterval(syncSiteClock,60000);
 }
 function liveDataSignature(){
   return JSON.stringify({
@@ -137,7 +153,7 @@ async function syncProfiles(){
 }
 function profileSyncLoop(){clearInterval(window.profileSyncTimer);if(!S.me)return;syncProfiles();window.profileSyncTimer=setInterval(syncProfiles,1500)}
 async function loadMe(){try{const d=await api('/api/auth/me');S.me=d.user;S.linked=(await api('/api/auth/linked')).linked||[];ensureRealtime()}catch{S.me=null;S.linked=[]}await loadData();render();profileSyncLoop();startAssignmentCountdown();liveDataLoop()}
-async function loadData(){try{const d=await api('/api/bootstrap');Object.assign(S,{serverNowMs:Number(d.server_now_ms)||Date.now(),students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}S.error=''}catch(e){S.error=e.message}}
+async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}S.error=''}catch(e){S.error=e.message}}
 async function login(e){e.preventDefault();try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({login:$('#loginName').value.trim(),password:$('#loginPassword').value})});close();await loadMe();toast('Login successful ✓')}catch(x){toast(x.message)}}
 function loginModal(){modal('<div class="modalhead"><h2>'+t('login')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="login(event)"><label>Display name<input id="loginName" required autocomplete="username"></label><label>Password<input id="loginPassword" type="password" required autocomplete="current-password"></label><button class="btn primary">'+t('login')+' →</button></form><div class="login-divider"><span>or</span></div><button class="google-btn" onclick="googleLogin()">Continue with Google</button><button class="btn ghost" onclick="forgotPassword()">Forgot my password</button><button class="btn ghost" onclick="activationModal()">'+t('activate')+'</button>')}
 function activationModal(){modal('<div class="modalhead"><h2>'+t('activate')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="activate(event)"><label>One-time key<input id="actKey" required></label><label>Display name<input id="actName" required></label><label>Password<input id="actPw" type="password" minlength="8" required></label><button class="btn primary">Create account</button></form>')}
