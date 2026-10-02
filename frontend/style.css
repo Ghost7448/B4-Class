@@ -519,9 +519,9 @@ body{overflow-x:hidden}
 
 /* Activation key action colors */
 .key-actions .key-revoke{
-  background:#f59e0b18;
-  color:#d97706;
-  border:1px solid #f59e0b45;
+  background:#dc262614;
+  color:#dc2626;
+  border:1px solid #dc262638;
 }
 .key-actions .key-revoke:hover{
   background:#f59e0b28;
