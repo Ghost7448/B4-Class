@@ -42,14 +42,41 @@ async function detectB4Installed(){
   }catch{}
   return false;
 }
-async function installB4(){
-  if(await detectB4Installed()){
-    b4InstallState='installed';
-    return toast('B4 is already installed ✓');
-  }
-  if(!deferredInstallPrompt){
-    return toast('Install is not available in this browser yet');
-  }
+function openInstallModal(state='ready'){
+  const ar=S.lang==='ar';
+  const installed=state==='installed';
+  const unavailable=state==='unavailable';
+  const title=installed?(ar?'B4 مثبت بالفعل':'B4 is already installed'):(ar?'تثبيت B4':'Install B4');
+  const text=installed
+    ?(ar?'التطبيق موجود بالفعل على جهازك ويمكنك فتحه من قائمة التطبيقات.':'B4 is already installed on this device and is ready to use.')
+    :(unavailable
+      ?(ar?'المتصفح لم يوفّر نافذة التثبيت الآن. جرّب فتح الموقع من Chrome وتأكد أن الموقع مؤهل للتثبيت.':'This browser has not made the install prompt available yet. Try opening B4 in Chrome and refresh the page.')
+      :(ar?'ثبّت B4 كتطبيق مستقل للوصول السريع وتجربة أفضل.':'Install B4 as an app for faster access and a cleaner experience.'));
+  const action=installed?(ar?'تم':'Done'):(unavailable?(ar?'حسنًا':'Got it'):(ar?'تثبيت الآن':'Install now'));
+  modal(
+    '<div class="install-modal">'+
+      '<div class="install-modal-icon"><img src="/assets/logo.svg" alt="B4"></div>'+
+      '<div class="install-modal-copy">'+
+        '<div class="install-modal-kicker">B4 • TELECOMMUNICATION</div>'+
+        '<h2>'+esc(title)+'</h2>'+
+        '<p>'+esc(text)+'</p>'+
+      '</div>'+
+      (!installed&&!unavailable?'<div class="install-modal-points"><span>✓ '+(ar?'يعمل كتطبيق مستقل':'Runs like an app')+'</span><span>✓ '+(ar?'وصول أسرع':'Faster access')+'</span><span>✓ '+(ar?'واجهة أنظف':'Cleaner experience')+'</span></div>':'')+
+      '<div class="install-modal-actions">'+
+        '<button type="button" class="btn ghost install-modal-cancel">'+(installed||unavailable?(ar?'إغلاق':'Close'):(ar?'لاحقًا':'Later'))+'</button>'+
+        '<button type="button" class="btn primary install-modal-confirm">'+esc(action)+'</button>'+
+      '</div>'+
+    '</div>'
+  );
+  $('#modal .install-modal-cancel')?.addEventListener('click',close);
+  $('#modal .install-modal-confirm')?.addEventListener('click',async()=>{
+    if(installed||unavailable)return close();
+    close();
+    await triggerB4Install();
+  });
+}
+async function triggerB4Install(){
+  if(!deferredInstallPrompt)return openInstallModal('unavailable');
   const prompt=deferredInstallPrompt;
   deferredInstallPrompt=null;
   try{
@@ -68,6 +95,14 @@ async function installB4(){
     deferredInstallPrompt=prompt;
     toast('Could not open the install prompt');
   }
+}
+async function installB4(){
+  if(await detectB4Installed()){
+    b4InstallState='installed';
+    return openInstallModal('installed');
+  }
+  if(!deferredInstallPrompt)return openInstallModal('unavailable');
+  openInstallModal('ready');
 }
 let activeConfirmCancel=null;
 const close=()=>{
