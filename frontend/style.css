@@ -545,3 +545,18 @@ body{overflow-x:hidden}
 
 
 .assignment-submit{display:grid;gap:12px;padding:14px 16px;background:var(--s2);border:1px solid var(--line);border-radius:14px}.assignment-submit label{display:grid;gap:8px;font-weight:800}.assignment-submit input[type=file]{width:100%}.assignment-submit .btn{width:max-content}
+
+
+.file-picker{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:58px;padding:10px 14px;border:1px dashed var(--line);border-radius:15px;background:var(--s2);cursor:pointer;transition:transform .18s ease,border-color .18s ease,background .18s ease;box-sizing:border-box}
+.file-picker:hover{transform:translateY(-1px);border-color:var(--accent);background:var(--s1)}
+.file-picker input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.file-picker-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--accent);color:#fff;font-size:20px;font-weight:900;flex:0 0 auto}
+.file-picker-copy{display:grid;gap:3px;min-width:0}.file-picker-copy b{font-size:13px}.file-picker-copy small{font-size:11px;color:var(--m);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.field-label{font-weight:800}
+.submission-list{display:grid;gap:10px;max-height:65vh;overflow:auto;padding-right:2px}
+.submission-card{display:grid;grid-template-columns:minmax(150px,1fr) minmax(170px,1.3fr) auto;align-items:center;gap:14px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--s2)}
+.submission-person{display:flex;align-items:center;gap:10px;min-width:0}.submission-person>div:last-child{display:grid;gap:3px;min-width:0}.submission-person small{color:var(--m);font-size:10px}
+.submission-avatar{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--accent);color:#fff;font-weight:900}
+.submission-main{display:grid;gap:5px;min-width:0}.submission-main b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.submission-main small{font-size:10px}
+.submission-actions{display:flex;justify-content:flex-end}
+@media(max-width:760px){.submission-card{grid-template-columns:1fr}.submission-actions{justify-content:stretch}.submission-actions .btn{width:100%;text-align:center}.file-picker{min-height:54px}}
