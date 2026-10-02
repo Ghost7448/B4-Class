@@ -277,13 +277,20 @@ body{overflow-x:hidden}
     animation:mobileDrawerBackdrop .28s ease both;
   }
 
+  .app aside{
+    display:flex;
+    flex-direction:column;
+  }
+
   nav#nav{
-    max-height:calc(100dvh - 230px);
-    height:calc(100dvh - 230px);
+    flex:1 1 auto;
+    min-height:0;
+    max-height:none;
+    height:auto;
     overflow-y:auto;
     overflow-x:hidden;
-    padding-bottom:180px;
-    scroll-padding-bottom:180px;
+    padding-bottom:230px;
+    scroll-padding-bottom:230px;
     overscroll-behavior:contain;
     -webkit-overflow-scrolling:touch;
     scrollbar-width:thin;
