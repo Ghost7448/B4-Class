@@ -240,9 +240,12 @@ async function loadKeys(){
           <div class="key-value mono">${esc(k.key_value||k.key_preview)}</div>
           <div class="key-person"><span>♙</span><b>${esc(k.person_name||'Unassigned')}</b><small>${esc(k.person_type||'')}</small></div>
         </div>
-        <div class="key-actions">${k.key_value?'<button class="btn ghost" onclick="copyKey('+k.id+')">Copy</button>':''}${k.status==='ACTIVE'?'<button class="btn key-revoke" onclick="revokeKey('+k.id+')">Revoke</button>':''}<button class="btn danger" onclick="deleteKey(String(k.id))">Delete</button></div>
+        <div class="key-actions">${k.key_value?'<button type="button" class="btn ghost key-copy" data-key-id="${esc(String(k.id))}">Copy</button>':''}${k.status==='ACTIVE'?'<button type="button" class="btn key-revoke key-revoke-action" data-key-id="${esc(String(k.id))}">Revoke</button>':''}<button type="button" class="btn danger key-delete" data-key-id="${esc(String(k.id))}">Delete</button></div>
       </article>`).join('')||'<div class="card empty">No activation keys yet.</div>'}</div>`;
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
+  r.querySelectorAll('.key-copy').forEach(btn=>btn.addEventListener('click',()=>copyKey(btn.dataset.keyId)));
+  r.querySelectorAll('.key-revoke-action').forEach(btn=>btn.addEventListener('click',()=>revokeKey(btn.dataset.keyId)));
+  r.querySelectorAll('.key-delete').forEach(btn=>btn.addEventListener('click',()=>deleteKey(btn.dataset.keyId)));
 }
 async function copyKey(id){
   try{const d=await api('/api/admin/activation-keys');const k=(d.keys||[]).find(x=>Number(x.id)===Number(id));if(!k?.key_value)return toast('This older key cannot be recovered');await navigator.clipboard.writeText(k.key_value);toast('Activation key copied ✓')}catch(e){toast(e.message)}
