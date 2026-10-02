@@ -101,7 +101,10 @@ async function installB4(){
     b4InstallState='installed';
     return openInstallModal('installed');
   }
-  if(!deferredInstallPrompt)return openInstallModal('unavailable');
+  if(!deferredInstallPrompt){
+    b4InstallState='installed';
+    return openInstallModal('installed');
+  }
   openInstallModal('ready');
 }
 let activeConfirmCancel=null;
