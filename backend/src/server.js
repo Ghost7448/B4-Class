@@ -315,7 +315,7 @@ async function getBootstrap(req) {
     `,[req.session.userId]);
   }
   if(!req.session.userId) return {students,teachers,subjects,schedule,assignments:[],announcements:[],resources:[],exams:[],attendance:[],messages:[],notifications:[]};
-  return {students,teachers,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications};
+  return {server_now_ms:Date.now(),students,teachers,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications};
 }
 
 app.get('/api/bootstrap', async (req, res) => {
