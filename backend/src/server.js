@@ -570,6 +570,16 @@ app.post('/api/admin/activation-keys/:id/revoke', requirePermission('MANAGE_KEYS
   res.json({ok:true});
 });
 
+app.delete('/api/admin/activation-keys/:id', requirePermission('MANAGE_KEYS'), async (req,res)=>{
+  const id=Number(req.params.id);
+  if(!Number.isSafeInteger(id)) return res.status(400).json({error:'Invalid activation key'});
+  const [r]=await q('DELETE FROM activation_keys WHERE id=?',[id]);
+  if(!r.affectedRows) return res.status(404).json({error:'Activation key not found'});
+  await q("INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)",[req.session.userId,'ACTIVATION_DELETED',String(id)]);
+  await audit(req,'ACTIVATION_DELETED','activation_key',id);
+  res.json({ok:true});
+});
+
 app.post('/api/admin/teachers',requirePermission('MANAGE_TEACHERS'),async(req,res)=>{
   const {teacherCode,officialName,displayName}=req.body||{};if(!teacherCode||!officialName||!displayName)return res.status(400).json({error:'Teacher code, official name and display name are required'});
   try{const [r]=await q("INSERT INTO teachers(teacher_code,official_name,display_name,class_name) VALUES(?,?,?,'B4')",[teacherCode.trim(),officialName.trim(),displayName.trim()]);await audit(req,'TEACHER_CREATED','teacher',r.insertId,{teacherCode:teacherCode.trim()});res.json({ok:true,id:r.insertId});}catch(e){res.status(400).json({error:e.code==='ER_DUP_ENTRY'?'Teacher code already exists':e.message});}
