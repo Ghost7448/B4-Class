@@ -540,3 +540,5 @@ body{overflow-x:hidden}
 }
 
 
+
+.assignment-card{overflow:hidden}.assignment-card h3{margin:8px 0 0}.assignment-subject{font-size:10px;color:var(--m);font-weight:800}.assignment-countdown{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px}.assignment-countdown.large{padding:14px 16px;background:var(--s2);border:1px solid var(--line);border-radius:14px}.countdown{font-weight:900;font-variant-numeric:tabular-nums}.countdown.green{color:#16a34a}.countdown.yellow{color:#d97706}.countdown.red{color:#dc2626}.assignment-bar{height:9px;background:var(--s2);border-radius:99px;overflow:hidden;margin:8px 0 14px}.assignment-bar span{height:100%;display:block;border-radius:99px;transition:width .4s ease,background .3s ease}.assignment-bar span.green{background:#16a34a}.assignment-bar span.yellow{background:#eab308}.assignment-bar span.red{background:#dc2626}.assignment-file{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:11px}.assignment-open{display:grid;gap:12px}.assignment-open-file{width:max-content}
