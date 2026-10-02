@@ -206,6 +206,19 @@ await q('CREATE TABLE IF NOT EXISTS resource_files( id BIGINT UNSIGNED AUTO_INCR
   if (!examStartMsCol.length) await q("ALTER TABLE exams ADD COLUMN timer_started_ms BIGINT UNSIGNED NULL AFTER timer_started_at");
   const [examEndMsCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='exams' AND COLUMN_NAME='ends_at_ms' LIMIT 1");
   if (!examEndMsCol.length) await q("ALTER TABLE exams ADD COLUMN ends_at_ms BIGINT UNSIGNED NULL AFTER timer_started_ms");
+  // Backfill legacy rows once. created_at is a TIMESTAMP, so UNIX_TIMESTAMP gives its real UTC epoch.
+  const [legacyAssignments] = await q("SELECT id,UNIX_TIMESTAMP(created_at)*1000 created_ms,due_at FROM assignments WHERE timer_started_ms IS NULL OR due_at_ms IS NULL");
+  for (const row of legacyAssignments) {
+    const startMs=Number(row.created_ms)||Date.now();
+    const dueMs=cairoEpoch(row.due_at);
+    await q("UPDATE assignments SET timer_started_ms=COALESCE(timer_started_ms,?),due_at_ms=COALESCE(due_at_ms,?) WHERE id=?",[startMs,dueMs,row.id]);
+  }
+  const [legacyExams] = await q("SELECT id,UNIX_TIMESTAMP(created_at)*1000 created_ms,ends_at FROM exams WHERE timer_started_ms IS NULL OR ends_at_ms IS NULL");
+  for (const row of legacyExams) {
+    const startMs=Number(row.created_ms)||Date.now();
+    const endMs=cairoEpoch(row.ends_at);
+    await q("UPDATE exams SET timer_started_ms=COALESCE(timer_started_ms,?),ends_at_ms=COALESCE(ends_at_ms,?) WHERE id=?",[startMs,endMs,row.id]);
+  }
   await q('CREATE TABLE IF NOT EXISTS assignment_submission_files( id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, submission_id BIGINT UNSIGNED NOT NULL, filename VARCHAR(255) NOT NULL, mime_type VARCHAR(120) NOT NULL, data LONGBLOB NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(submission_id) REFERENCES assignment_submissions(id) ON DELETE CASCADE, UNIQUE KEY uq_submission_file(submission_id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   const [assignmentFileType] = await q("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='assignment_files' AND COLUMN_NAME='data' LIMIT 1");
   if(assignmentFileType[0] && String(assignmentFileType[0].DATA_TYPE).toLowerCase()==='mediumblob') await q("ALTER TABLE assignment_files MODIFY data LONGBLOB NOT NULL");
