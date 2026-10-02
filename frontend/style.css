@@ -393,8 +393,8 @@ body{overflow-x:hidden}
 
 
 /* ===== SIDEBAR EXTRA SPACE BELOW DEVELOPERS — SMALL SCREENS ===== */
-@media(max-width:800px){
-  /* Keep a little breathing room after the last navigation item (Developers). */
+@media(max-width:1050px){
+  /* Tablet/small screens: match the phone drawer spacing below Developers. */
   nav#nav{
     padding-bottom:280px;
     scroll-padding-bottom:280px;
