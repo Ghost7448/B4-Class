@@ -409,6 +409,34 @@ function setLang(lang){S.lang=lang==='ar'?'ar':'en';localStorage.b4Lang=S.lang;d
 function toggleLang(){setLang(S.lang==='ar'?'en':'ar')}
 function commandCenter(){modal('<div class="modalhead"><h2>More</h2><button class="close" onclick="b4Close()">×</button></div><div class="list"><button class="item" onclick="close();go(\'students\')">Students</button><button class="item" onclick="close();go(\'subjects\')">Subjects</button><button class="item" onclick="close();go(\'schedule\')">Schedule</button><button class="item" onclick="close();go(\'settings\')">Settings</button><button class="item" onclick="close();go(\'developers\')">Developers</button></div>')}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-v]');if(b)go(b.dataset.v)});
+function setupMobileDockAutoHide(){
+  let lastY=window.scrollY||0;
+  let ticking=false;
+  const update=()=>{
+    ticking=false;
+    if(window.innerWidth>800)return;
+    const dock=document.querySelector('.mobile-dock');
+    if(!dock)return;
+    const side=document.querySelector('#side');
+    if(side?.classList.contains('open')){
+      dock.classList.add('dock-hidden');
+      lastY=window.scrollY||0;
+      return;
+    }
+    const y=window.scrollY||0;
+    const nearTop=y<40;
+    const nearBottom=(window.innerHeight+y)>=document.documentElement.scrollHeight-80;
+    if(nearTop || nearBottom || y<lastY) dock.classList.remove('dock-hidden');
+    else if(y>lastY+8) dock.classList.add('dock-hidden');
+    lastY=y;
+  };
+  window.addEventListener('scroll',()=>{
+    if(!ticking){ticking=true;requestAnimationFrame(update)}
+  },{passive:true});
+  window.addEventListener('resize',update);
+  update();
+}
 function cancelReply(){window.replyTo=null;const i=$('#chatInput');if(i){i.value='';i.placeholder='Write a message...'}close()}
 window.addEventListener('beforeunload',()=>clearInterval(window.examTimer));
-document.addEventListener('DOMContentLoaded',async()=>{document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=()=>toast('Use your browser menu to install B4');$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe()});
+document.addEventListener('DOMContentLoaded',async()=>{
+setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=()=>toast('Use your browser menu to install B4');$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe()});
