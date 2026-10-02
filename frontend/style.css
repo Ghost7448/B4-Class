@@ -693,3 +693,92 @@ body{overflow-x:hidden}
     width:100%;
   }
 }
+
+
+/* ===== B4 INSTALL MODAL ===== */
+.install-modal{
+  width:min(500px,100%);
+  display:grid;
+  grid-template-columns:76px 1fr;
+  gap:16px;
+  align-items:start;
+  padding:4px;
+}
+.install-modal-icon{
+  width:76px;height:76px;
+  display:grid;place-items:center;
+  border-radius:23px;
+  background:linear-gradient(135deg,#7c3aed18,#a855f718);
+  border:1px solid #7c3aed35;
+  box-shadow:0 14px 34px #7c3aed16,inset 0 0 24px #7c3aed0a;
+  overflow:hidden;
+}
+.install-modal-icon img{
+  width:62px;height:62px;object-fit:contain;
+  border-radius:18px;
+}
+.install-modal-copy{min-width:0;padding-top:2px}
+.install-modal-kicker{
+  color:var(--p);
+  font-size:8px;font-weight:950;
+  letter-spacing:.15em;text-transform:uppercase;
+  margin-bottom:5px;
+}
+.install-modal-copy h2{
+  margin:0;font-size:21px;line-height:1.2;
+  letter-spacing:-.02em;
+}
+.install-modal-copy p{
+  margin:8px 0 0;color:var(--m);
+  font-size:11px;line-height:1.65;
+}
+.install-modal-points{
+  grid-column:1/-1;
+  display:flex;flex-wrap:wrap;gap:8px;
+  padding:12px 13px;
+  border:1px solid var(--line);
+  border-radius:15px;
+  background:var(--s2);
+}
+.install-modal-points span{
+  display:inline-flex;align-items:center;
+  padding:7px 9px;border-radius:10px;
+  background:var(--s);border:1px solid var(--line);
+  color:var(--m);font-size:9px;font-weight:800;
+}
+.install-modal-actions{
+  grid-column:1/-1;
+  display:flex;justify-content:flex-end;gap:9px;
+  padding-top:10px;margin-top:2px;
+  border-top:1px solid var(--line);
+}
+.install-modal-actions .btn{min-width:105px;min-height:40px}
+.install-modal-confirm{
+  box-shadow:0 10px 25px #7c3aed18;
+}
+.dark .install-modal-icon{
+  background:linear-gradient(135deg,#7c3aed25,#a855f716);
+  border-color:#8b5cf644;
+  box-shadow:0 16px 38px #0006,inset 0 0 25px #7c3aed0b;
+}
+.dark .install-modal-points{
+  background:#11141b;
+}
+@media(max-width:600px){
+  .install-modal{
+    grid-template-columns:58px 1fr;
+    gap:13px;
+  }
+  .install-modal-icon{
+    width:58px;height:58px;border-radius:17px;
+  }
+  .install-modal-icon img{
+    width:48px;height:48px;border-radius:14px;
+  }
+  .install-modal-copy h2{font-size:18px}
+  .install-modal-copy p{font-size:10px;line-height:1.6}
+  .install-modal-points{grid-column:1/-1;padding:10px;gap:6px}
+  .install-modal-points span{font-size:8px;padding:6px 7px}
+  .install-modal-actions{flex-direction:column-reverse}
+  .install-modal-actions .btn{width:100%}
+}
