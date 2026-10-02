@@ -363,3 +363,26 @@ body{overflow-x:hidden}
     .mobile-dock{transition:none}
   }
 }
+
+
+/* ===== MORE MENU POLISH ===== */
+.more-menu{display:grid;gap:10px;margin-top:4px}
+.more-option{width:100%;display:grid;grid-template-columns:46px 1fr auto;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--line);border-radius:17px;background:linear-gradient(135deg,var(--s2),var(--s));color:var(--t);text-align:start;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.04);position:relative;overflow:hidden}
+.more-option:before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 20%,rgba(124,58,237,.08),transparent 75%);transform:translateX(-110%);transition:transform .55s ease;pointer-events:none}
+.more-option:hover{transform:translateY(-2px);border-color:#7c3aed55;box-shadow:0 12px 26px rgba(124,58,237,.10);background:linear-gradient(135deg,var(--s),var(--s2))}
+.more-option:hover:before{transform:translateX(110%)}
+.more-option:active{transform:scale(.985)}
+.more-icon{width:46px;height:46px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(135deg,#7c3aed18,#a855f718);border:1px solid #7c3aed30;color:var(--p);font-size:20px;font-weight:900;box-shadow:inset 0 0 18px #7c3aed0a}
+.more-option b{display:block;font-size:14px;line-height:1.2;color:var(--t)}
+.more-option small{display:block;margin-top:4px;color:var(--m);font-size:10px;font-weight:600}
+.more-option i{font-style:normal;color:var(--m);font-size:25px;line-height:1;transition:transform .2s ease,color .2s ease}
+.more-option:hover i{transform:translateX(3px);color:var(--p)}
+.dark .more-option{box-shadow:0 10px 28px rgba(0,0,0,.18);background:linear-gradient(135deg,#151923,#11141b)}
+.dark .more-option:hover{background:linear-gradient(135deg,#191d28,#141821);border-color:#8b5cf655}
+.dark .more-icon{background:linear-gradient(135deg,#7c3aed22,#a855f712);border-color:#8b5cf644}
+@media(max-width:700px){
+  .more-option{grid-template-columns:42px 1fr auto;padding:11px 12px;border-radius:15px}
+  .more-icon{width:42px;height:42px;border-radius:12px;font-size:18px}
+  .more-option b{font-size:13px}
+  .more-option small{font-size:9px}
+}
