@@ -934,6 +934,7 @@ app.post('/api/auth/forgot-password',async(req,res)=>{res.json({ok:true,whatsapp
 app.get('/api/admin/accounts',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
   const [rows]=await q(`SELECT u.id,u.display_name,u.official_name,u.role,u.is_super_admin,u.status,u.student_id,u.teacher_id,u.avatar_url,
     EXISTS(SELECT 1 FROM linked_accounts l WHERE l.user_id=u.id AND l.provider='GOOGLE') google_linked,
+    (SELECT l.provider_email FROM linked_accounts l WHERE l.user_id=u.id AND l.provider='GOOGLE' ORDER BY l.created_at DESC LIMIT 1) google_email,
     COALESCE(s.student_code,t.teacher_code) identity_code,COALESCE(ak.key_preview,'') activation_key_preview
     FROM users u LEFT JOIN students s ON s.id=u.student_id LEFT JOIN teachers t ON t.id=u.teacher_id
     LEFT JOIN activation_keys ak ON ak.used_user_id=u.id ORDER BY u.display_name`);
