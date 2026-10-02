@@ -316,3 +316,25 @@ body{overflow-x:hidden}
     .app aside{transition:none}
   }
 }
+
+
+/* ===== MOBILE BOTTOM DOCK AUTO-HIDE — MOBILE ONLY ===== */
+@media(max-width:800px){
+  .mobile-dock{
+    transition:transform .32s cubic-bezier(.22,.8,.22,1),opacity .25s ease;
+    will-change:transform,opacity;
+  }
+  .mobile-dock.dock-hidden{
+    transform:translateY(calc(100% + 24px));
+    opacity:0;
+    pointer-events:none;
+  }
+  .app aside.open ~ .mobile-dock{
+    transform:translateY(calc(100% + 24px));
+    opacity:0;
+    pointer-events:none;
+  }
+  @media(prefers-reduced-motion:reduce){
+    .mobile-dock{transition:none}
+  }
+}
