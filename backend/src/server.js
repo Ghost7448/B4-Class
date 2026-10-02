@@ -101,7 +101,7 @@ function cairoNow() {
 const chatStreams = new Set();
 const teacherChatStreams = new Set();
 function pushChatEvent(event, payload) {
-  const packet = `event: ${event}\\ndata: ${JSON.stringify(payload)}\\n\\n`;
+  const packet = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
   for (const client of chatStreams) { try { client.res.write(packet); } catch { chatStreams.delete(client); } }
 }
 function pushTeacherChatEvent(event, payload) {
@@ -109,7 +109,7 @@ function pushTeacherChatEvent(event, payload) {
   for (const client of teacherChatStreams) { try { client.res.write(packet); } catch { teacherChatStreams.delete(client); } }
 }
 setInterval(() => {
-  for (const client of chatStreams) { try { client.res.write(': ping\\n\\n'); } catch { chatStreams.delete(client); } }
+  for (const client of chatStreams) { try { client.res.write(': ping\n\n'); } catch { chatStreams.delete(client); } }
   for (const client of teacherChatStreams) { try { client.res.write(': ping\\n\\n'); } catch { teacherChatStreams.delete(client); } }
 }, 25000);
 
@@ -827,7 +827,7 @@ app.get('/api/chat/stream',requireAuth,async(req,res)=>{
   res.flushHeaders?.();
   const client={res,userId:req.session.userId};
   chatStreams.add(client);
-  res.write(': connected\\n\\n');
+  res.write(': connected\n\n');
   req.on('close',()=>chatStreams.delete(client));
 });
 
