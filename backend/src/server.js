@@ -970,14 +970,14 @@ app.post('/api/admin/resources/:id/pdf', requirePermission('MANAGE_RESOURCES'), 
 });
 
 app.post('/api/admin/exams', requirePermission('MANAGE_EXAMS'), async(req,res)=>{
-  const {title,description='',subjectId=null,startsAt=null,endsAt=null,durationMinutes=null,questions=[]}=req.body||{};
+  const {title,description='',subjectId=null,endsAt=null,durationMinutes=null,questions=[]}=req.body||{};
   if(!title?.trim()) return res.status(400).json({error:'Exam title is required'});
   if(!Array.isArray(questions)||!questions.length) return res.status(400).json({error:'Add at least one question'});
-  if(startsAt&&endsAt&&cairoEpoch(endsAt)<=cairoEpoch(startsAt)) return res.status(400).json({error:'Deadline must be after start time'});
+
   const conn=await pool.getConnection();
   try{
     await conn.beginTransaction();
-    const [e]=await conn.execute('INSERT INTO exams(title,description,subject_id,class_name,starts_at,ends_at,duration_minutes,status,created_by) VALUES(?,?,?,?,?,?,?,\'SCHEDULED\',?)',[title.trim(),description.trim(),subjectId||null,'B4',startsAt||null,endsAt||null,durationMinutes?Number(durationMinutes):null,req.session.userId]);
+    const [e]=await conn.execute('INSERT INTO exams(title,description,subject_id,class_name,starts_at,ends_at,duration_minutes,status,created_by) VALUES(?,?,?,?,NULL,?,?,\'OPEN\',?)',[title.trim(),description.trim(),subjectId||null,'B4',endsAt||null,durationMinutes?Number(durationMinutes):null,req.session.userId]);
     let inserted=0;
     for(let i=0;i<questions.length;i++){
       const qn=questions[i]; const text=String(qn.questionText||'').trim(); if(!text) continue;
@@ -1005,9 +1005,7 @@ app.post('/api/exams/:id/start', requireAuth, async(req,res)=>{
   const id=Number(req.params.id); const now=new Date();
   const [ex]=await q('SELECT * FROM exams WHERE id=? AND class_name=\'B4\' LIMIT 1',[id]); const exam=ex[0];
   if(!exam) return res.status(404).json({error:'Exam not found'});
-  const startMs=cairoEpoch(exam.starts_at);
   const endMs=cairoEpoch(exam.ends_at);
-  if(startMs!==null&&now.getTime()<startMs) return res.status(403).json({error:'Exam has not started yet'});
   if(endMs!==null&&now.getTime()>=endMs) return res.status(403).json({error:'Exam deadline has passed'});
   const [existing]=await q('SELECT * FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
   if(existing[0]){if(existing[0].status!=='STARTED')return res.status(403).json({error:'You have already submitted this exam'});return sendExamStart(res,exam,existing[0]);}
