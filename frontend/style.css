@@ -418,3 +418,22 @@ body{overflow-x:hidden}
     background:linear-gradient(to bottom,transparent 0%,var(--s) 22%,var(--s) 100%);
   }
 }
+
+
+/* ===== SIDEBAR PC NAV HIDES BEHIND BOTTOM CONTROLS ===== */
+@media(min-width:1051px){
+  .app aside{
+    overflow:hidden;
+  }
+  .app aside nav#nav{
+    max-height:calc(100vh - 150px);
+    overflow-y:auto;
+    overflow-x:hidden;
+    padding-bottom:170px;
+    scroll-padding-bottom:170px;
+  }
+  .app aside .side-bottom{
+    z-index:8;
+    background:linear-gradient(to bottom,transparent 0%,var(--s) 22%,var(--s) 100%);
+  }
+}
