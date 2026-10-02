@@ -161,8 +161,10 @@ async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS b4_teacher_message_edits(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,message_id BIGINT UNSIGNED NOT NULL,editor_user_id BIGINT UNSIGNED NULL,old_body TEXT NOT NULL,new_body TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_teacher_message_edits(message_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_teacher_typing(user_id BIGINT UNSIGNED PRIMARY KEY,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 await q('CREATE TABLE IF NOT EXISTS resource_files( id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, resource_id BIGINT UNSIGNED NOT NULL, filename VARCHAR(255) NOT NULL, mime_type VARCHAR(120) NOT NULL DEFAULT \'application/pdf\', data MEDIUMBLOB NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE, INDEX idx_resource_files_resource(resource_id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
-  await q('CREATE TABLE IF NOT EXISTS assignment_files( id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, assignment_id BIGINT UNSIGNED NOT NULL, filename VARCHAR(255) NOT NULL, mime_type VARCHAR(120) NOT NULL, data MEDIUMBLOB NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(assignment_id) REFERENCES assignments(id) ON DELETE CASCADE, UNIQUE KEY uq_assignment_file(assignment_id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+  await q('CREATE TABLE IF NOT EXISTS assignment_files( id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, assignment_id BIGINT UNSIGNED NOT NULL, filename VARCHAR(255) NOT NULL, mime_type VARCHAR(120) NOT NULL, data LONGBLOB NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(assignment_id) REFERENCES assignments(id) ON DELETE CASCADE, UNIQUE KEY uq_assignment_file(assignment_id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   await q('CREATE TABLE IF NOT EXISTS assignment_submission_files( id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, submission_id BIGINT UNSIGNED NOT NULL, filename VARCHAR(255) NOT NULL, mime_type VARCHAR(120) NOT NULL, data LONGBLOB NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(submission_id) REFERENCES assignment_submissions(id) ON DELETE CASCADE, UNIQUE KEY uq_submission_file(submission_id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+  const [assignmentFileType] = await q("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='assignment_files' AND COLUMN_NAME='data' LIMIT 1");
+  if(assignmentFileType[0] && String(assignmentFileType[0].DATA_TYPE).toLowerCase()==='mediumblob') await q("ALTER TABLE assignment_files MODIFY data LONGBLOB NOT NULL");
   const [activationKeyValueCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='activation_keys' AND COLUMN_NAME='key_value' LIMIT 1");
   if (!activationKeyValueCol.length) await q("ALTER TABLE activation_keys ADD COLUMN key_value VARCHAR(80) NULL AFTER key_preview");
   const [developerLinkCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='b4_developers' AND COLUMN_NAME='link_url' LIMIT 1");
@@ -673,6 +675,29 @@ app.post('/api/assignments/:id/submission', requireAuth, submissionUpload.single
 app.get('/api/assignments/submissions/files/:id', requireAuth, async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).end();const [rows]=await q('SELECT sf.filename,sf.mime_type,sf.data FROM assignment_submission_files sf JOIN assignment_submissions s ON s.id=sf.submission_id JOIN assignments a ON a.id=s.assignment_id WHERE sf.submission_id=? AND a.class_name=\'B4\' AND s.user_id=? LIMIT 1',[id,req.session.userId]);if(!rows[0])return res.status(404).end();res.setHeader('Content-Type',rows[0].mime_type||'application/octet-stream');res.setHeader('Content-Disposition','inline; filename*=UTF-8\'\''+encodeURIComponent(rows[0].filename));res.send(rows[0].data)});
 
 
+app.get('/api/admin/assignment-submissions', requirePermission('MANAGE_ASSIGNMENTS'), async(req,res)=>{
+  try{
+    const [actor]=await q('SELECT role,is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+    const assignmentId=req.query.assignmentId?Number(req.query.assignmentId):null;
+    const params=[];let where="a.class_name='B4'";
+    if(Number.isSafeInteger(assignmentId)){where+=' AND a.id=?';params.push(assignmentId)}
+    if(actor[0]?.role==='TEACHER'&&Number(actor[0]?.is_super_admin)!==1){where+=' AND a.created_by=?';params.push(req.session.userId)}
+    const [submissions]=await q('SELECT s.id submission_id,s.assignment_id,s.submitted_at,s.status,s.score,a.title assignment_title,u.id user_id,u.display_name,st.student_code,sf.id file_id,sf.filename,sf.mime_type FROM assignment_submissions s JOIN assignments a ON a.id=s.assignment_id JOIN users u ON u.id=s.user_id LEFT JOIN students st ON st.id=u.student_id LEFT JOIN assignment_submission_files sf ON sf.submission_id=s.id WHERE '+where+' ORDER BY s.submitted_at DESC',params);
+    res.json({submissions});
+  }catch(e){console.error('Assignment submissions list failed:',e);res.status(500).json({error:'Could not load assignment submissions'})}
+});
+app.get('/api/admin/assignment-submissions/files/:id', requirePermission('MANAGE_ASSIGNMENTS'), async(req,res)=>{
+  const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).end();
+  try{
+    const [actor]=await q('SELECT role,is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+    const [rows]=await q("SELECT sf.filename,sf.mime_type,sf.data,a.created_by FROM assignment_submission_files sf JOIN assignment_submissions sub ON sub.id=sf.submission_id JOIN assignments a ON a.id=sub.assignment_id WHERE sf.id=? AND a.class_name='B4' LIMIT 1",[id]);
+    if(!rows[0])return res.status(404).end();
+    if(actor[0]?.role==='TEACHER'&&Number(actor[0]?.is_super_admin)!==1&&Number(rows[0].created_by)!==Number(req.session.userId))return res.status(403).json({error:'Permission denied'});
+    res.setHeader('Content-Type',rows[0].mime_type||'application/octet-stream');
+    res.setHeader('Content-Disposition','inline; filename="'+encodeURIComponent(rows[0].filename)+'"');
+    res.send(rows[0].data);
+  }catch(e){console.error('Assignment submission file failed:',e);res.status(500).end()}
+});
 app.post('/api/admin/announcements', requirePermission('MANAGE_ANNOUNCEMENTS'), async (req,res) => {
   const {title,body,category='General'} = req.body || {};
   if(!title?.trim() || !body?.trim()) return res.status(400).json({error:'Title and body are required'});
