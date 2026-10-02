@@ -392,11 +392,29 @@ body{overflow-x:hidden}
 .account-google-email{display:block;margin-top:4px;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
 
 
-/* ===== SIDEBAR EXTRA SPACE BELOW DEVELOPERS — SMALL SCREENS ===== */
+/* ===== SIDEBAR NAV SCROLLS BEHIND BOTTOM CONTROLS ===== */
+.app aside{
+  overflow:hidden;
+}
+.app aside nav#nav{
+  max-height:calc(100vh - 150px);
+  padding-bottom:150px;
+  scroll-padding-bottom:150px;
+}
+.app aside .side-bottom{
+  z-index:8;
+  padding:8px 0 0;
+  background:linear-gradient(to bottom,transparent 0%,var(--s) 22%,var(--s) 100%);
+}
 @media(max-width:1050px){
-  /* Tablet/small screens: match the phone drawer spacing below Developers. */
-  nav#nav{
-    padding-bottom:280px;
-    scroll-padding-bottom:280px;
+  /* Tablet + phone: keep the navigation scrollable underneath the bottom controls. */
+  .app aside nav#nav{
+    max-height:none;
+    padding-bottom:150px;
+    scroll-padding-bottom:150px;
+  }
+  .app aside .side-bottom{
+    z-index:8;
+    background:linear-gradient(to bottom,transparent 0%,var(--s) 22%,var(--s) 100%);
   }
 }
