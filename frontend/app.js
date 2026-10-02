@@ -264,7 +264,29 @@ function chatTime(value){
   if(!Number.isFinite(d.getTime()))return String(value||'');
   return d.toLocaleTimeString('en-US',{timeZone:'Africa/Cairo',hour:'numeric',minute:'2-digit',hour12:true});
 }
-function chatV(){return title(t('chat'),'')+'<div class="card chat"><div class="messages" id="messages">'+S.messages.map(messageHTML).join('')+'</div><div id="typing" class="typing-indicator"></div><form class="chatform" onsubmit="sendChat(event)"><input id="chatInput" oninput="typing(!!this.value.trim())" placeholder="Write a message..."><button class="btn primary">➤</button></form></div>'}
+function chatV(){
+  return chatShell({
+    title:t('chat'),
+    messagesId:'messages',
+    typingId:'typing',
+    inputId:'chatInput',
+    messages:S.messages,
+    messageRenderer:messageHTML,
+    submit:'sendChat(event)',
+    typing:'typing(!!this.value.trim())'
+  })
+}
+function chatShell(o){
+  return title(o.title,'')+
+    '<div class="card chat">'+
+      '<div class="messages" id="'+o.messagesId+'">'+o.messages.map(o.messageRenderer).join('')+'</div>'+
+      '<div id="'+o.typingId+'" class="typing-indicator"></div>'+
+      '<form class="chatform" onsubmit="'+o.submit+'">'+
+        '<input id="'+o.inputId+'" oninput="'+o.typing+'" placeholder="Write a message...">'+
+        '<button type="submit" class="btn primary">➤</button>'+
+      '</form>'+
+    '</div>'
+}
 function messageHTML(m){
   const reply=m.reply_to_id?'<div class="reply-preview"><b>↩ '+esc(m.reply_display_name||'Reply')+'</b><span>'+esc(m.reply_body||'')+'</span></div>':'';
   const edited=m.edited_at?'<small class="edited">edited</small>':'';
@@ -281,7 +303,18 @@ function settingsV(){
 }
 function devV(){return title(t('developers'),'The Wep Devoleper')+'<div class="grid developers-grid">'+S.developers.map(d=>'<article class="card developer-card"><div class="developer-photo"><img class="avatar xl" src="'+esc(d.avatar_url||'/assets/logo.svg')+'" onerror="this.src=\'assets/logo.svg\'"></div><div class="developer-info"><span class="badge">B4 DEVELOPER</span>'+(d.title?'<span class="developer-title">'+esc(d.title)+'</span>':'')+(d.title2?'<span class="developer-title">'+esc(d.title2)+'</span>':'')+'<h3>'+esc(d.name)+'</h3>'+(d.link_url?'<a class="btn ghost developer-link" href="'+esc(d.link_url)+'" target="_blank" rel="noopener">Open profile ↗</a>':'')+'</div></article>').join('')||'<div class="card empty">No developers added yet.</div>'+'</div>'}
 function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='attendance'?attendanceV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='attendance'&&can('MANAGE_ATTENDANCE'))attendanceLoad();if(v==='chat')chatLoop();if(v==='teacherChat')teacherChatLoop();if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
-function teacherChatV(){return title(t('teacherChat'),'')+'<div class="card chat"><div class="messages" id="teacherMessages">'+S.teacherMessages.map(teacherMessageHTML).join('')+'</div><div id="teacherTyping" class="typing-indicator"></div><form class="chatform" onsubmit="sendTeacherChat(event)"><input id="teacherInput" oninput="teacherTyping(!!this.value.trim())" placeholder="Write a message..."><button class="btn primary">➤</button></form></div>'}
+function teacherChatV(){
+  return chatShell({
+    title:t('teacherChat'),
+    messagesId:'teacherMessages',
+    typingId:'teacherTyping',
+    inputId:'teacherInput',
+    messages:S.teacherMessages,
+    messageRenderer:teacherMessageHTML,
+    submit:'sendTeacherChat(event)',
+    typing:'teacherTyping(!!this.value.trim())'
+  })
+}
 function adminPage(p){if(p==='roles')return title('Roles','Account role is only Student or Teacher. Super Admin is a private system flag, never a role.')+'<div id="adminRoot"></div>';if(p==='permissions')return title('Permissions','Direct permissions are independent from the account role. Administrator grants every permission.')+'<div id="adminRoot"></div>';if(p==='accounts')return title('Accounts','Activation key, Google link, password and sessions.')+'<div id="adminRoot"></div>';if(p==='students')return title('Manage Students','Edit identity, display name and photo.','<button class="btn primary" onclick="studentEdit()">＋ Add</button>')+'<div class="grid c3">'+S.students.map(x=>peopleCard(x,'student')).join('')+'</div>';if(p==='teachers')return title('Manage Teachers','Edit identity, display name and photo.','<button class="btn primary" onclick="teacherEdit()">＋ Add</button>')+'<div class="grid c3">'+S.teachers.map(x=>peopleCard(x,'teacher')).join('')+'</div>';if(p==='keys')return title('Activation Keys','One-time keys.')+'<div id="adminRoot"></div>';if(p==='badges')return title('Manage Badges','Create icons and assign badges.')+'<div id="adminRoot"></div>';if(p==='subjects')return subjectsV();if(p==='schedule')return scheduleV();if(p==='admins')return title('Manage Admins','Admin access is independent from Student/Teacher role.')+'<div id="adminRoot"></div>';if(p==='logs')return title('Logs','All platform activity and security events.')+'<div id="adminRoot"></div>';if(p==='attendance')return attendanceV();if(p==='developers')return title('Manage Developers','Super Admin only.')+'<div id="adminRoot"></div>';return adminV()}
 async function syncProfiles(){
   if(!S.me)return;
