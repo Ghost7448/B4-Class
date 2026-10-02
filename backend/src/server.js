@@ -41,7 +41,8 @@ const corsOptions = frontend
 app.set('trust proxy', 1);
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
-const assignmentUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 }, fileFilter: (req,file,cb) => cb(null, file.mimetype === 'application/pdf' || /^image\/(png|jpe?g|webp|gif)$/i.test(file.mimetype)) });
+const assignmentUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+const submissionUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 }, fileFilter: (req,file,cb) => cb(null, file.mimetype === 'application/pdf') });
 
 const MySQLStore = MySQLStoreFactory(session);
@@ -239,7 +240,7 @@ async function getBootstrap(req) {
   const [teachers] = await q(`SELECT t.id,t.teacher_code,t.official_name,u.id user_id,COALESCE(u.display_name,t.display_name) display_name,COALESCE(u.avatar_url,t.avatar_url) avatar_url FROM teachers t LEFT JOIN users u ON u.teacher_id=t.id AND u.status='ACTIVE' WHERE t.class_name='B4' ORDER BY t.display_name`);
   const [subjects] = await q(`SELECT id,name,teacher_name,progress FROM subjects WHERE class_name='B4' ORDER BY name`);
   const [assignments] = await q(`
-    SELECT a.id,a.title,a.description,a.status,a.subject_id,a.due_at,a.created_by,s.name subject_name,af.id attachment_id,af.filename attachment_name,af.mime_type attachment_mime
+    SELECT a.id,a.title,a.description,a.status,a.subject_id,a.due_at,a.created_by,a.created_at,s.name subject_name,af.id attachment_id,af.filename attachment_name,af.mime_type attachment_mime
     FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id LEFT JOIN assignment_files af ON af.assignment_id=a.id
     WHERE a.class_name='B4' ORDER BY a.due_at IS NULL,a.due_at
   `);
@@ -264,6 +265,9 @@ async function getBootstrap(req) {
   let attendance=[],messages=[],notifications=[];
   if(req.session.userId) {
     [attendance]=await q(`SELECT attendance_date AS date,status FROM b4_attendance WHERE user_id=? ORDER BY attendance_date DESC LIMIT 60`,[req.session.userId]);
+    const [submissions]=await q(`SELECT s.assignment_id,s.id submission_id,s.submitted_at,s.status,s.score,sf.filename submission_name FROM assignment_submissions s LEFT JOIN assignment_submission_files sf ON sf.submission_id=s.id WHERE s.user_id=?`,[req.session.userId]);
+    const byAssignment=new Map(submissions.map(x=>[Number(x.assignment_id),x]));
+    for(const a of assignments){const sub=byAssignment.get(Number(a.id));if(sub)Object.assign(a,sub);}
   }
   [messages]=await q(`
     SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,
@@ -664,6 +668,9 @@ app.post('/api/admin/assignments', requirePermission('MANAGE_ASSIGNMENTS'), asyn
 });
 app.post('/api/admin/assignments/:id/file', requirePermission('MANAGE_ASSIGNMENTS'), assignmentUpload.single('file'), async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id)||!req.file)return res.status(400).json({error:'Valid assignment id and image/PDF file are required'});try{await assertTeacherOwner(req,'assignments',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const [a]=await q("SELECT id FROM assignments WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!a[0])return res.status(404).json({error:'Assignment not found'});await q('DELETE FROM assignment_files WHERE assignment_id=?',[id]);const [r]=await q('INSERT INTO assignment_files(assignment_id,filename,mime_type,data) VALUES(?,?,?,?)',[id,req.file.originalname,req.file.mimetype,req.file.buffer]);await audit(req,'ASSIGNMENT_FILE_UPLOADED','assignment',id,{filename:req.file.originalname});res.json({ok:true,fileId:r.insertId})});
 app.get('/api/assignments/files/:id', requireAuth, async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).end();const [rows]=await q('SELECT af.filename,af.mime_type,af.data FROM assignment_files af JOIN assignments a ON a.id=af.assignment_id WHERE af.id=? AND a.class_name=\'B4\' LIMIT 1',[id]);if(!rows[0])return res.status(404).end();res.setHeader('Content-Type',rows[0].mime_type);res.setHeader('Content-Disposition','inline; filename*=UTF-8\'\''+encodeURIComponent(rows[0].filename));res.send(rows[0].data)});
+app.post('/api/assignments/:id/submission', requireAuth, submissionUpload.single('file'), async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id)||!req.file)return res.status(400).json({error:'A file is required'});try{const [a]=await q("SELECT id,status,due_at FROM assignments WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!a[0])return res.status(404).json({error:'Assignment not found'});if(a[0].status!=='OPEN')return res.status(400).json({error:'This assignment is not open'});if(a[0].due_at&&new Date(a[0].due_at).getTime()<=Date.now())return res.status(400).json({error:'The assignment deadline has passed'});const [existing]=await q('SELECT id FROM assignment_submissions WHERE assignment_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);let submissionId;if(existing[0]){submissionId=existing[0].id;await q('UPDATE assignment_submissions SET status=\'SUBMITTED\',score=NULL,submitted_at=CURRENT_TIMESTAMP WHERE id=?',[submissionId]);await q('DELETE FROM assignment_submission_files WHERE submission_id=?',[submissionId])}else{const [r]=await q('INSERT INTO assignment_submissions(assignment_id,user_id,status) VALUES(?,?,\'SUBMITTED\')',[id,req.session.userId]);submissionId=r.insertId}await q('INSERT INTO assignment_submission_files(submission_id,filename,mime_type,data) VALUES(?,?,?,?)',[submissionId,req.file.originalname,req.file.mimetype||'application/octet-stream',req.file.buffer]);await audit(req,'ASSIGNMENT_SUBMITTED','assignment',id,{filename:req.file.originalname});res.json({ok:true,submissionId})}catch(e){console.error('Assignment submission failed:',e);res.status(500).json({error:'Could not submit assignment'})}});
+app.get('/api/assignments/submissions/files/:id', requireAuth, async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).end();const [rows]=await q('SELECT sf.filename,sf.mime_type,sf.data FROM assignment_submission_files sf JOIN assignment_submissions s ON s.id=sf.submission_id JOIN assignments a ON a.id=s.assignment_id WHERE sf.submission_id=? AND a.class_name=\'B4\' AND s.user_id=? LIMIT 1',[id,req.session.userId]);if(!rows[0])return res.status(404).end();res.setHeader('Content-Type',rows[0].mime_type||'application/octet-stream');res.setHeader('Content-Disposition','inline; filename*=UTF-8\'\''+encodeURIComponent(rows[0].filename));res.send(rows[0].data)});
+
 
 app.post('/api/admin/announcements', requirePermission('MANAGE_ANNOUNCEMENTS'), async (req,res) => {
   const {title,body,category='General'} = req.body || {};
