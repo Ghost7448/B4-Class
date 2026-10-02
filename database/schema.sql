@@ -129,6 +129,17 @@ CREATE TABLE IF NOT EXISTS assignment_submissions(
  UNIQUE KEY uq_submission(assignment_id,user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS assignment_submission_files(
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ submission_id BIGINT UNSIGNED NOT NULL,
+ filename VARCHAR(255) NOT NULL,
+ mime_type VARCHAR(120) NOT NULL,
+ data LONGBLOB NOT NULL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(submission_id) REFERENCES assignment_submissions(id) ON DELETE CASCADE,
+ UNIQUE KEY uq_submission_file(submission_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS resources(
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
  title VARCHAR(220) NOT NULL,description TEXT,
