@@ -980,7 +980,7 @@ app.post('/api/admin/exams', requirePermission('MANAGE_EXAMS'), async(req,res)=>
 
 app.get('/api/exams/:id', requireAuth, async(req,res)=>{
   const id=Number(req.params.id); if(!Number.isSafeInteger(id)) return res.status(400).json({error:'Invalid exam'});
-  const [ex]=await q('SELECT e.*,DATE_FORMAT(e.starts_at,'%Y-%m-%d %H:%i:%s') starts_at,DATE_FORMAT(e.ends_at,'%Y-%m-%d %H:%i:%s') ends_at,s.name subject_name FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id WHERE e.id=? AND e.class_name=\'B4\' LIMIT 1',[id]);
+   const [ex]=await q("SELECT e.*,DATE_FORMAT(e.starts_at,'%Y-%m-%d %H:%i:%s') starts_at,DATE_FORMAT(e.ends_at,'%Y-%m-%d %H:%i:%s') ends_at,s.name subject_name FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id WHERE e.id=? AND e.class_name='B4' LIMIT 1",[id]);
   if(!ex[0]) return res.status(404).json({error:'Exam not found'});
   const [attempt]=await q('SELECT id,status,started_at,submitted_at,score FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
   res.json({exam:ex[0],attempt:attempt[0]||null});
