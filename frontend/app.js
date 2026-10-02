@@ -7,6 +7,7 @@ const PERMS=[['MANAGE_CHAT','Manage Chat / Moderate messages'],['MANAGE_ACCOUNTS
 const api=async(path,opt={})=>{const r=await fetch(API+path,{credentials:'include',...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Request failed');return d};
 const toast=m=>{const e=document.createElement('div');e.className='toast';e.textContent=m;document.body.append(e);setTimeout(()=>e.remove(),2500)};
 const close=()=>{$('#back')?.classList.remove('show')};window.b4Close=close;
+document.addEventListener('click',e=>{const back=$('#back');if(back?.classList.contains('show')&&e.target===back)close()});
 const modal=h=>{$('#modal').innerHTML='<div class="modal">'+h+'</div>';$('#back').classList.add('show')};
 const can=p=>{if(!S.me)return false;if(Number(S.me.is_super_admin)===1)return true;return (S.me.permissions||[]).includes(p)};
 const nav=[['dashboard','⌂'],['students','♙'],['teachers','♟'],['subjects','▣'],['schedule','◫'],['assignments','✓'],['resources','▤'],['exams','⌁'],['announcements','◈'],['chat','◌'],['attendance','◉']];
