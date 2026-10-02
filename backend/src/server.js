@@ -560,6 +560,21 @@ app.post('/api/admin/activation-keys', requirePermission('MANAGE_KEYS'), async (
   res.json({ ok: true, key: raw });
 });
 
+app.post('/api/admin/activation-keys/:id/delete', requirePermission('MANAGE_KEYS'), async (req,res)=>{
+  try {
+    const id=String(req.params.id||'').trim();
+    if(!/^\\d+$/.test(id)) return res.status(400).json({error:'Invalid activation key'});
+    const [r]=await q('DELETE FROM activation_keys WHERE id=?',[id]);
+    if(!r.affectedRows) return res.status(404).json({error:'Activation key not found'});
+    try { await q("INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)",[req.session.userId,'ACTIVATION_DELETED',id]); } catch(e) { console.error('Security log failed:',e.message); }
+    await audit(req,'ACTIVATION_DELETED','activation_key',Number(id));
+    res.json({ok:true});
+  } catch(e) {
+    console.error('Activation key delete failed:',e);
+    res.status(500).json({error:e?.message||'Failed to delete activation key'});
+  }
+});
+
 app.post('/api/admin/activation-keys/:id/revoke', requirePermission('MANAGE_KEYS'), async (req,res)=>{
   const id=Number(req.params.id);
   if(!Number.isSafeInteger(id)) return res.status(400).json({error:'Invalid activation key'});
