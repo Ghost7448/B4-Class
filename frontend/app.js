@@ -265,33 +265,12 @@ function chatTime(value){
   return d.toLocaleTimeString('en-US',{timeZone:'Africa/Cairo',hour:'numeric',minute:'2-digit',hour12:true});
 }
 function chatV(){
-  return chatShell({
-    title:t('chat'),
-    messagesId:'messages',
-    typingId:'typing',
-    inputId:'chatInput',
-    messages:S.messages,
-    messageRenderer:messageHTML,
-    submit:'sendChat(event)',
-    typing:'typing(!!this.value.trim())'
-  })
+  return title(t('chat'),'')+
+    '<div class="card chat"><div class="messages" id="messages">'+S.messages.map(messageHTML).join('')+'</div>'+
+    '<div id="typing" class="typing-indicator"></div>'+
+    '<form class="chatform" onsubmit="sendChat(event)"><input id="chatInput" oninput="typing(!!this.value.trim())" placeholder="Write a message..."><button type="submit" class="btn primary">➤</button></form></div>'
 }
-function chatShell(o){
-  return title(o.title,'')+
-    '<div class="card chat">'+
-      '<div class="messages" id="'+o.messagesId+'">'+o.messages.map(o.messageRenderer).join('')+'</div>'+
-      '<div id="'+o.typingId+'" class="typing-indicator"></div>'+
-      '<form class="chatform" onsubmit="'+o.submit+'">'+
-        '<input id="'+o.inputId+'" oninput="'+o.typing+'" placeholder="Write a message...">'+
-        '<button type="submit" class="btn primary">➤</button>'+
-      '</form>'+
-    '</div>'
-}
-function messageHTML(m){
-  const reply=m.reply_to_id?'<div class="reply-preview"><b>↩ '+esc(m.reply_display_name||'Reply')+'</b><span>'+esc(m.reply_body||'')+'</span></div>':'';
-  const edited=m.edited_at?'<small class="edited">edited</small>':'';
-  return '<div class="msg '+(S.me&&Number(m.user_id)===Number(S.me.id)?'me':'')+'" onclick="messageMenu(event,'+m.id+')"><img class="avatar" src="'+esc(m.avatar_url||'/assets/logo.svg')+'"><div><b>'+esc(m.display_name||'Deleted user')+'</b>'+reply+'<div class="bubble">'+esc(m.body||'')+edited+'</div><small class="muted">'+esc(chatTime(m.created_at))+'</small></div></div>'
-}
+function messageHTML(m){const reply=m.reply_to_id?'<div class="reply-preview"><b>↩ '+esc(m.reply_display_name||'Reply')+'</b><span>'+esc(m.reply_body||'')+'</span></div>':'';const edited=m.edited_at?'<small class="edited">edited</small>':'';return '<div class="msg '+(S.me&&Number(m.user_id)===Number(S.me.id)?'me':'')+'" onclick="messageMenu(event,'+m.id+')"><img class="avatar" src="'+esc(m.avatar_url||'/assets/logo.svg')+'"><div><b>'+esc(m.display_name||'Deleted user')+'</b>'+reply+'<div class="bubble">'+esc(m.body||'')+edited+'</div><small class="muted">'+esc(chatTime(m.created_at))+'</small></div></div>'}
 function attendanceV(){if(!can('MANAGE_ATTENDANCE'))return title(t('attendance'),'Your attendance record.')+'<div class="card"><p>Attendance management is available to authorized staff.</p></div>';return title(t('attendance'),'<button class="btn primary" onclick="attendanceLoad()">Refresh</button>')+'<div id="attendanceRoot"></div>'}
 function adminV(){const cards=[['roles','Roles','MANAGE_ROLES'],['permissions','Permissions','MANAGE_PERMISSIONS'],['accounts','Accounts','MANAGE_ACCOUNTS'],['students','Manage Students','MANAGE_STUDENTS'],['teachers','Manage Teachers','MANAGE_TEACHERS'],['keys','Activation Keys','MANAGE_KEYS'],['badges','Manage Badges','MANAGE_BADGES'],['subjects','Manage Subjects','MANAGE_SUBJECTS'],['schedule','Manage Schedule','MANAGE_SCHEDULE'],['admins','Manage Admins','MANAGE_ADMINS'],['logs','View Logs','VIEW_LOGS'],['attendance','Attendance','MANAGE_ATTENDANCE']];if(Number(S.me?.is_super_admin)===1||can('MANAGE_DEVELOPERS'))cards.push(['developers','Manage Developers','MANAGE_DEVELOPERS']);return title(t('admin'),'Control center')+'<div class="grid c3 admin-cards">'+cards.filter(x=>can(x[2])).map(x=>'<button class="card admin-card" onclick="go(\'admin:'+x[0]+'\')"><span>◈</span><h3>'+x[1]+'</h3><small>Open management</small></button>').join('')+'</div>'}
 function teacherCenterV(){return title(t('teacherCenter'),'Teacher tools')+'<div class="grid c3">'+[['assignments','Create assignments','MANAGE_ASSIGNMENTS'],['assignment-submissions','Assignment submissions','MANAGE_ASSIGNMENTS'],['resources','Publish resources/PDFs','MANAGE_RESOURCES'],['exams','Create exams','MANAGE_EXAMS'],['announcements','Publish announcements','MANAGE_ANNOUNCEMENTS'],['subjects','Manage teaching subjects','MANAGE_SUBJECTS'],['schedule','View schedule','VIEW_CLASS']].filter(x=>can(x[2])).map(x=>'<button class="card admin-card" onclick="'+(x[0]==='assignment-submissions'?'assignmentSubmissions()':'go(\''+x[0]+'\')')+'"><span>✦</span><h3>'+x[1]+'</h3></button>').join('')+'</div>'}
@@ -360,62 +339,14 @@ async function askAI(e){
     out.textContent=d.answer||'No answer returned.';
   }catch(x){out.textContent='';toast(x.message)}
  }
-function applyChatMessages(messages){
-  const next=messages||[];
-  const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.messages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));
-  if(!changed)return;
-  S.messages=next;
-  const box=$('#messages');
-  if(box){const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;box.innerHTML=S.messages.map(messageHTML).join('');if(wasNearBottom)box.scrollTop=box.scrollHeight}
-}
-function applyProfileEvent(d){
-  if(!d?.userId)return;
-  const uid=Number(d.userId),avatar=d.avatar_url;
-  if(S.me&&Number(S.me.id)===uid)S.me.avatar_url=avatar;
-  S.messages=(S.messages||[]).map(m=>Number(m.user_id)===uid?{...m,avatar_url:avatar}:m);
-  S.students=(S.students||[]).map(x=>x.user_id&&Number(x.user_id)===uid?{...x,avatar_url:avatar}:x);
-  S.teachers=(S.teachers||[]).map(x=>x.user_id&&Number(x.user_id)===uid?{...x,avatar_url:avatar}:x);
-  const box=$('#messages');if(box)box.innerHTML=S.messages.map(messageHTML).join('');
-  if(S.me&&Number(S.me.id)===uid&&$('#topAvatar'))$('#topAvatar').src=avatar;
-}
-function ensureRealtime(){
-  if(!S.me)return;
-  if(window.realtimeStream&&window.realtimeStream.readyState!==2)return;
-  try{
-    window.realtimeStream=new EventSource(API+'/api/chat/stream',{withCredentials:true});
-    window.realtimeStream.addEventListener('open',()=>{window.realtimeOnline=true});
-    window.realtimeStream.addEventListener('chat',e=>{
-      try{
-        const d=JSON.parse(e.data);
-        if(d.type==='created'&&!S.messages.some(m=>Number(m.id)===Number(d.message.id)))applyChatMessages([...S.messages,d.message]);
-        else if(d.type==='updated')applyChatMessages(S.messages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));
-        else if(d.type==='deleted')applyChatMessages(S.messages.filter(m=>Number(m.id)!==Number(d.id)));
-      }catch{}
-    });
-    window.realtimeStream.addEventListener('profile',e=>{try{applyProfileEvent(JSON.parse(e.data))}catch{}});
-    window.realtimeStream.onerror=()=>{window.realtimeOnline=false};
-  }catch{window.realtimeOnline=false}
-}
-function chatLoop(){
-  clearInterval(window.chatTimer);clearInterval(window.chatTypingTimer);
-  if(!S.me||S.view!=='chat')return;
-  ensureRealtime();
-  const sync=async()=>{try{const d=await api('/api/chat/messages?_='+Date.now(),{cache:'no-store'});applyChatMessages(d.messages||[])}catch{}};
-  window.chatTimer=setInterval(sync,1500);
-  window.chatTypingTimer=setInterval(async()=>{if(S.view!=='chat')return;try{const ty=await api('/api/chat/typing');const el=$('#typing');if(el)el.textContent=(ty.users||[]).filter(x=>Number(x.user_id)!==Number(S.me.id)).map(x=>x.display_name+' is typing…').join(' • ')}catch{}},1000);
-  sync();
-}
-async function sendChat(e){
-  e.preventDefault();const i=$('#chatInput');if(!i.value.trim())return;
-  try{
-    await api('/api/chat/messages',{method:'POST',body:JSON.stringify({body:i.value.trim(),replyToId:window.replyTo||null})});
-    i.value='';i.placeholder='Write a message...';window.replyTo=null;typing(false);toast('Message sent ✓');
-  }catch(x){toast(x.message)}
-}
+function applyChatMessages(messages){const next=messages||[];const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.messages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));if(!changed)return;S.messages=next;const box=$('#messages');if(box){const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;box.innerHTML=S.messages.map(messageHTML).join('');if(wasNearBottom)box.scrollTop=box.scrollHeight}}
+function ensureRealtime(){if(!S.me)return;if(window.realtimeStream&&window.realtimeStream.readyState!==2)return;try{window.realtimeStream=new EventSource(API+'/api/chat/stream',{withCredentials:true});window.realtimeStream.addEventListener('open',()=>{window.realtimeOnline=true});window.realtimeStream.addEventListener('chat',e=>{try{const d=JSON.parse(e.data);if(d.type==='created'&&!S.messages.some(m=>Number(m.id)===Number(d.message.id)))applyChatMessages([...S.messages,d.message]);else if(d.type==='updated')applyChatMessages(S.messages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));else if(d.type==='deleted')applyChatMessages(S.messages.filter(m=>Number(m.id)!==Number(d.id)))}catch{}});window.realtimeStream.addEventListener('profile',e=>{try{applyProfileEvent(JSON.parse(e.data))}catch{}});window.realtimeStream.onerror=()=>{window.realtimeOnline=false}}catch{window.realtimeOnline=false}}
+function chatLoop(){clearInterval(window.chatTimer);clearInterval(window.chatTypingTimer);if(!S.me||S.view!=='chat')return;ensureRealtime();const sync=async()=>{try{const d=await api('/api/chat/messages?_='+Date.now(),{cache:'no-store'});applyChatMessages(d.messages||[])}catch{}};window.chatTimer=setInterval(sync,1500);window.chatTypingTimer=setInterval(async()=>{if(S.view!=='chat')return;try{const ty=await api('/api/chat/typing');const el=$('#typing');if(el)el.textContent=(ty.users||[]).filter(x=>Number(x.user_id)!==Number(S.me.id)).map(x=>x.display_name+' is typing…').join(' • ')}catch{}},1000);sync()}
+async function sendChat(e){e.preventDefault();const i=$('#chatInput');if(!i.value.trim())return;api('/api/chat/messages',{method:'POST',body:JSON.stringify({body:i.value.trim(),replyToId:window.replyTo||null})}).then(()=>{i.value='';i.placeholder='Write a message...';window.replyTo=null;typing(false);toast('Message sent ✓')}).catch(x=>toast(x.message))}
 function typing(v){if(!S.me)return;api('/api/chat/typing',{method:'POST',body:JSON.stringify({typing:v})}).catch(()=>{});if(window.typingT)clearTimeout(window.typingT);if(v)window.typingT=setTimeout(()=>typing(false),1600)}
 function messageMenu(e,id){e.preventDefault();if(!S.me)return;const m=S.messages.find(x=>Number(x.id)===Number(id));if(!m)return;const own=Number(m.user_id)===Number(S.me.id),moderator=can('MANAGE_CHAT');modal('<div class="modalhead"><h2>Message</h2><button class="close" onclick="b4Close()">×</button></div><button class="btn ghost" onclick="replyMessage('+id+')">Reply</button>'+(own?'<button class="btn ghost" onclick="editMessage('+id+')">Edit</button>':'')+((own||moderator)?'<button class="btn danger" onclick="deleteMessage('+id+')">Delete</button>':'')+'<button class="btn ghost" onclick="b4Close()">Close</button>')}
-function replyMessage(id){const m=S.messages.find(x=>Number(x.id)===Number(id));close();window.replyTo=id;const input=$('#chatInput');if(input){input.value='';input.placeholder='Replying to '+(m?.display_name||'message')+'…';input.focus();}toast('Reply mode enabled')}
-async function editMessage(id){const m=S.messages.find(x=>Number(x.id)===Number(id));if(!m)return;modal('<div class="modalhead"><h2>Edit message</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveMessage(event,'+id+')"><textarea id="editMsg" rows="4">'+esc(m.body)+'</textarea><button class="btn primary">Save</button></form>')}
+function replyMessage(id){const m=S.messages.find(x=>Number(x.id)===Number(id));close();window.replyTo=id;const input=$('#chatInput');if(input){input.value='';input.placeholder='Replying to '+(m?.display_name||'message')+'…';input.focus()}toast('Reply mode enabled')}
+function editMessage(id){const m=S.messages.find(x=>Number(x.id)===Number(id));if(!m)return;modal('<div class="modalhead"><h2>Edit message</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveMessage(event,'+id+')"><textarea id="editMsg" rows="4">'+esc(m.body)+'</textarea><button class="btn primary">Save</button></form>')}
 async function saveMessage(e,id){e.preventDefault();try{await api('/api/chat/messages/'+id,{method:'PATCH',body:JSON.stringify({body:$('#editMsg').value})});close();toast('Message updated ✓')}catch(x){toast(x.message)}}
 async function deleteMessage(id){if(!await confirmAction('Delete message?'))return;try{await api('/api/chat/messages/'+id,{method:'DELETE'});close();toast('Message deleted ✓')}catch(x){toast(x.message)}}
 function applyTeacherMessages(messages){const next=messages||[];const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.teacherMessages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));if(!changed)return;S.teacherMessages=next;const box=$('#teacherMessages');if(box){const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;box.innerHTML=S.teacherMessages.map(teacherMessageHTML).join('');if(wasNearBottom)box.scrollTop=box.scrollHeight}}
