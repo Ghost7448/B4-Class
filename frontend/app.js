@@ -240,7 +240,7 @@ async function loadKeys(){
           <div class="key-value mono">${esc(k.key_value||k.key_preview)}</div>
           <div class="key-person"><span>♙</span><b>${esc(k.person_name||'Unassigned')}</b><small>${esc(k.person_type||'')}</small></div>
         </div>
-        <div class="key-actions">${k.key_value?`<button type="button" class="btn ghost key-copy" data-key-id="${esc(String(k.id))}">Copy</button>`:''}${k.status==='ACTIVE'?`<button type="button" class="btn key-revoke key-revoke-action" data-key-id="${esc(String(k.id))}">Revoke</button>`:''}<button type="button" class="btn danger key-delete" data-key-id="${esc(String(k.id))}">Delete</button></div>
+        <div class="key-actions">${k.key_value?`<button type="button" class="btn ghost key-copy" data-key-id="${esc(String(k.id))}">Copy</button>`:''}${k.status==='ACTIVE'?`<button type="button" class="btn key-revoke key-revoke-action" data-key-id="${esc(String(k.id))}">Revoke</button>`:''}</div>
       </article>`).join('')||'<div class="card empty">No activation keys yet.</div>'}</div>`;
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
   r.querySelectorAll('.key-copy').forEach(btn=>btn.addEventListener('click',()=>copyKey(btn.dataset.keyId)));
