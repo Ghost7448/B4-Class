@@ -7,14 +7,45 @@ const PERMS=[['MANAGE_CHAT','Manage Chat / Moderate messages'],['MANAGE_ACCOUNTS
 const api=async(path,opt={})=>{const r=await fetch(API+path,{credentials:'include',...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Request failed');return d};
 const toast=m=>{const e=document.createElement('div');e.className='toast';e.textContent=m;document.body.append(e);setTimeout(()=>e.remove(),2500)};
 let deferredInstallPrompt=null;
+let b4InstallState='unknown';
 window.addEventListener('beforeinstallprompt',e=>{
   e.preventDefault();
   deferredInstallPrompt=e;
+  b4InstallState='available';
 });
-window.addEventListener('appinstalled',()=>{deferredInstallPrompt=null;toast('B4 installed ✓')});
+window.addEventListener('appinstalled',()=>{
+  deferredInstallPrompt=null;
+  b4InstallState='installed';
+  localStorage.setItem('b4Installed','1');
+  toast('B4 installed ✓');
+});
+function isB4Standalone(){
+  return !!(
+    window.matchMedia?.('(display-mode: standalone)').matches ||
+    window.matchMedia?.('(display-mode: fullscreen)').matches ||
+    window.matchMedia?.('(display-mode: minimal-ui)').matches ||
+    window.navigator.standalone===true ||
+    String(document.referrer||'').startsWith('android-app://')
+  );
+}
+async function detectB4Installed(){
+  if(isB4Standalone())return true;
+  if(localStorage.getItem('b4Installed')==='1')return true;
+  try{
+    if(typeof navigator.getInstalledRelatedApps==='function'){
+      const apps=await navigator.getInstalledRelatedApps();
+      if(Array.isArray(apps)&&apps.some(x=>x?.platform==='webapp')){
+        localStorage.setItem('b4Installed','1');
+        return true;
+      }
+    }
+  }catch{}
+  return false;
+}
 async function installB4(){
-  if(window.matchMedia?.('(display-mode: standalone)').matches||window.navigator.standalone===true){
-    return toast('B4 is already installed');
+  if(await detectB4Installed()){
+    b4InstallState='installed';
+    return toast('B4 is already installed ✓');
   }
   if(!deferredInstallPrompt){
     return toast('Install is not available in this browser yet');
@@ -24,8 +55,16 @@ async function installB4(){
   try{
     await prompt.prompt();
     const result=await prompt.userChoice;
-    if(result?.outcome==='accepted')toast('Installing B4…');
+    if(result?.outcome==='accepted'){
+      b4InstallState='installed';
+      localStorage.setItem('b4Installed','1');
+      toast('Installing B4…');
+    }else{
+      b4InstallState='available';
+      deferredInstallPrompt=prompt;
+    }
   }catch(e){
+    b4InstallState='available';
     deferredInstallPrompt=prompt;
     toast('Could not open the install prompt');
   }
