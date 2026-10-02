@@ -232,8 +232,16 @@ async function loadKeys(){
   const r=$('#adminRoot');
   try{
     const d=await api('/api/admin/activation-keys');
-    r.innerHTML=`<div class="head"><div><h3>Activation keys</h3><p class="muted">Copy and revoke keys.</p></div><button class="btn primary" onclick="createKey()">＋ Generate key</button></div>
-      <div class="list">${(d.keys||[]).map(k=>`<div class="item key-row"><span class="grow"><b>${esc(k.key_value||k.key_preview)}</b><small>${esc(k.person_name||'')} • ${esc(k.person_type||'')}</small></span><span class="badge">${esc(k.status)}</span>${k.key_value?'<button class="btn ghost" onclick="copyKey('+k.id+')">Copy</button>':''}${k.status==='ACTIVE'?'<button class="btn danger" onclick="revokeKey('+k.id+')">Revoke</button>':''}</div>`).join('')||'<div class="card empty">No activation keys yet.</div>'}</div>`;
+    r.innerHTML=`<div class="keys-toolbar"><div><div class="eyebrow">ACCESS CONTROL</div><h3>Activation keys</h3><p class="muted">Create, copy and revoke B4 access keys.</p></div><button class="btn primary" onclick="createKey()">＋ Generate key</button></div>
+      <div class="keys-list">${(d.keys||[]).map((k,i)=>`<article class="key-card" style="--i:${i}">
+        <div class="key-icon">⌁</div>
+        <div class="key-main">
+          <div class="key-top"><span class="key-label">ACTIVATION KEY</span><span class="badge ${String(k.status||'').toUpperCase()==='ACTIVE'?'good':String(k.status||'').toUpperCase()==='REVOKED'?'red':''}">${esc(k.status)}</span></div>
+          <div class="key-value mono">${esc(k.key_value||k.key_preview)}</div>
+          <div class="key-person"><span>♙</span><b>${esc(k.person_name||'Unassigned')}</b><small>${esc(k.person_type||'')}</small></div>
+        </div>
+        <div class="key-actions">${k.key_value?'<button class="btn ghost" onclick="copyKey('+k.id+')">Copy</button>':''}${k.status==='ACTIVE'?'<button class="btn danger" onclick="revokeKey('+k.id+')">Revoke</button>':''}</div>
+      </article>`).join('')||'<div class="card empty">No activation keys yet.</div>'}</div>`;
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
 async function copyKey(id){
