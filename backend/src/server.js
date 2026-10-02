@@ -72,7 +72,7 @@ const q = (sql, args = []) => pool.execute(sql, args);
 function cairoDate(value) {
   if (value == null || value === '') return null;
   const s = String(value).trim().replace(' ', 'T');
-  const m = s.match(/^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})(?::(\\d{2}))?$/);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) return new Date(value);
   const utcMs = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] || 0));
   return new Date(utcMs - 3 * 60 * 60 * 1000);
