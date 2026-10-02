@@ -516,3 +516,25 @@ body{overflow-x:hidden}
   .key-actions{width:100%;padding-left:53px;justify-content:flex-start}
   .key-actions .btn{flex:1;min-width:100px}
 }
+
+/* Activation key action colors */
+.key-actions .key-revoke{
+  background:#f59e0b18;
+  color:#d97706;
+  border:1px solid #f59e0b45;
+}
+.key-actions .key-revoke:hover{
+  background:#f59e0b28;
+  border-color:#f59e0b77;
+  box-shadow:0 10px 22px #f59e0b18;
+}
+.key-actions .danger{
+  background:#dc262614;
+  color:#dc2626;
+  border:1px solid #dc262638;
+}
+.key-actions .danger:hover{
+  background:#dc262624;
+  border-color:#dc262668;
+  box-shadow:0 10px 22px #dc262614;
+}
