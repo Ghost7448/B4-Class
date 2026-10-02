@@ -1,11 +1,26 @@
 {
-  "name":"B4 Telecommunication Class",
-  "short_name":"B4",
-  "start_url":"./",
-  "scope":"./",
-  "display":"standalone",
-  "background_color":"#0b1020",
-  "theme_color":"#7c3aed",
-  "description":"B4 Telecommunication Class Portal",
-  "icons":[{"src":"assets/logo.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+  "name": "B4 Telecommunication Class",
+  "short_name": "B4",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b1020",
+  "theme_color": "#7c3aed",
+  "description": "B4 Telecommunication Class Portal",
+  "icons": [
+    {
+      "src": "assets/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "id": "b4-telecommunication",
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "id": "b4-telecommunication"
+    }
+  ],
+  "prefer_related_applications": false
 }
