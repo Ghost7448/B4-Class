@@ -390,3 +390,13 @@ body{overflow-x:hidden}
 
 /* Google account identity in Accounts */
 .account-google-email{display:block;margin-top:4px;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+
+
+/* ===== SIDEBAR EXTRA SPACE BELOW DEVELOPERS — SMALL SCREENS ===== */
+@media(max-width:800px){
+  /* Keep a little breathing room after the last navigation item (Developers). */
+  nav#nav{
+    padding-bottom:280px;
+    scroll-padding-bottom:280px;
+  }
+}
