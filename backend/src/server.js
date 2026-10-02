@@ -275,7 +275,7 @@ async function getBootstrap(req) {
   const [teachers] = await q(`SELECT t.id,t.teacher_code,t.official_name,u.id user_id,COALESCE(u.display_name,t.display_name) display_name,COALESCE(u.avatar_url,t.avatar_url) avatar_url FROM teachers t LEFT JOIN users u ON u.teacher_id=t.id AND u.status='ACTIVE' WHERE t.class_name='B4' ORDER BY t.display_name`);
   const [subjects] = await q(`SELECT id,name,teacher_name,progress FROM subjects WHERE class_name='B4' ORDER BY name`);
   const [assignments] = await q(`
-    SELECT a.id,a.title,a.description,a.status,a.subject_id,a.due_at,a.created_by,a.created_at,UNIX_TIMESTAMP(a.created_at)*1000 assignment_start_ms,CASE WHEN a.due_at IS NULL THEN NULL ELSE UNIX_TIMESTAMP(CONVERT_TZ(a.due_at,'+03:00','+00:00'))*1000 END assignment_due_ms,s.name subject_name,af.id attachment_id,af.filename attachment_name,af.mime_type attachment_mime
+    SELECT a.id,a.title,a.description,a.status,a.subject_id,a.due_at,a.created_by,a.created_at,s.name subject_name,af.id attachment_id,af.filename attachment_name,af.mime_type attachment_mime
     FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id LEFT JOIN assignment_files af ON af.assignment_id=a.id
     WHERE a.class_name='B4' ORDER BY a.due_at IS NULL,a.due_at
   `);
@@ -293,17 +293,22 @@ async function getBootstrap(req) {
     WHERE r.class_name='B4' ORDER BY r.created_at DESC LIMIT 100
   `);
   const [exams] = await q(`
-    SELECT e.id,e.title,e.description,e.subject_id,e.created_by,s.name subject_name,DATE_FORMAT(e.starts_at,'%Y-%m-%d %H:%i:%s') starts_at,DATE_FORMAT(e.ends_at,'%Y-%m-%d %H:%i:%s') ends_at,e.duration_minutes
+    SELECT e.id,e.title,e.description,e.subject_id,e.created_by,e.created_at,s.name subject_name,DATE_FORMAT(e.starts_at,'%Y-%m-%d %H:%i:%s') starts_at,DATE_FORMAT(e.ends_at,'%Y-%m-%d %H:%i:%s') ends_at,e.duration_minutes
     FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id
     WHERE e.class_name='B4' ORDER BY e.starts_at IS NULL,e.starts_at
   `);
   const nowMs = Date.now();
+  for (const assignment of assignments) {
+    assignment.assignment_start_ms = cairoEpoch(assignment.created_at);
+    assignment.assignment_due_ms = cairoEpoch(assignment.due_at);
+  }
   for (const exam of exams) {
-    const startMs = cairoEpoch(exam.starts_at);
+    const startMs = cairoEpoch(exam.created_at);
     const endMs = cairoEpoch(exam.ends_at);
+    exam.exam_start_ms = startMs;
     exam.start_ms = startMs;
     exam.end_ms = endMs;
-    exam.status = startMs !== null && nowMs < startMs ? 'SCHEDULED' : (endMs !== null && nowMs >= endMs ? 'CLOSED' : 'OPEN');
+    exam.status = endMs !== null && nowMs >= endMs ? 'CLOSED' : 'OPEN';
   }
   let attendance=[],messages=[],notifications=[];
   if(req.session.userId) {
