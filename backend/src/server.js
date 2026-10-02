@@ -66,6 +66,18 @@ app.use(session({
 
 const q = (sql, args = []) => pool.execute(sql, args);
 
+// Exam/assignment datetime inputs are entered as Egypt local time (UTC+03:00).
+// MySQL DATETIME has no timezone, so parse exam values explicitly instead of
+// relying on Node's environment timezone (which is commonly UTC on Railway).
+function cairoDate(value) {
+  if (value == null || value === '') return null;
+  const s = String(value).trim().replace(' ', 'T');
+  const m = s.match(/^(\\d{4})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2})(?::(\\d{2}))?$/);
+  if (!m) return new Date(value);
+  const utcMs = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] || 0));
+  return new Date(utcMs - 3 * 60 * 60 * 1000);
+}
+
 const chatStreams = new Set();
 const teacherChatStreams = new Set();
 function pushChatEvent(event, payload) {
