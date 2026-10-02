@@ -218,7 +218,7 @@ async function loadAccounts(){
   try{
     const d=await api('/api/admin/accounts');
     r.innerHTML=`<div class="tablewrap"><table class="table"><thead><tr><th>Name</th><th>Role</th><th>Activation</th><th>Google</th><th>Session</th><th>Actions</th></tr></thead><tbody>
-      ${(d.accounts||[]).map(a=>`<tr><td>${esc(a.display_name)}</td><td>${esc(a.role)}</td><td>${(a.activation_key_preview||a.identity_code)?'<span class="identity-code">'+esc(a.activation_key_preview||a.identity_code)+'</span>':'<span class="identity-code empty-code">—</span>'}</td><td>${a.google_linked?'✓':'—'}</td><td>${esc(a.status)}</td><td><button class="btn ghost" onclick="resetAccount(${a.id})">Reset password</button><button class="btn ghost" onclick="endSession(${a.id})">End session</button><button class="btn danger" onclick="deleteAccount(${a.id})">Delete</button></td></tr>`).join('')}
+      ${(d.accounts||[]).map(a=>`<tr><td>${esc(a.display_name)}</td><td>${esc(a.role)}</td><td>${(a.activation_key_preview||a.identity_code)?'<span class="identity-code">'+esc(a.activation_key_preview||a.identity_code)+'</span>':'<span class="identity-code empty-code">—</span>'}</td><td>${a.google_linked?'<div><span class="badge">✓ Google Linked</span>'+(a.google_email?'<small class="muted account-google-email">'+esc(a.google_email)+'</small>':'')+'</div>':'<span class="muted">Not linked</span>'}</td><td>${esc(a.status)}</td><td><button class="btn ghost" onclick="resetAccount(${a.id})">Reset password</button><button class="btn ghost" onclick="endSession(${a.id})">End session</button><button class="btn danger" onclick="deleteAccount(${a.id})">Delete</button></td></tr>`).join('')}
     </tbody></table></div>`;
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
