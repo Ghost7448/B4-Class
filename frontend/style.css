@@ -262,7 +262,32 @@ body{overflow-x:hidden}
     height:100dvh;
     max-height:100dvh;
     overflow:hidden;
+    display:flex;
+    flex-direction:column;
     transition:transform .38s cubic-bezier(.22,.8,.22,1),box-shadow .38s ease;
+  }
+
+  .app aside .brand,
+  .app aside .live,
+  .app aside .side-bottom{
+    flex:0 0 auto;
+  }
+
+  .app aside nav#nav{
+    flex:1 1 auto;
+    min-height:0;
+  }
+
+  .app aside .side-bottom{
+    position:static;
+    left:auto;
+    right:auto;
+    bottom:auto;
+    margin:8px 0 0;
+  }
+
+  #content{
+    padding-bottom:150px;
   }
 
   /* Fade the page behind the drawer while it is open. */
