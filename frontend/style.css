@@ -437,3 +437,24 @@ body{overflow-x:hidden}
     background:linear-gradient(to bottom,transparent 0%,var(--s) 22%,var(--s) 100%);
   }
 }
+
+
+/* ===== HIDE SIDEBAR SCROLLBAR UNDER BOTTOM CONTROLS ===== */
+.app aside nav#nav{
+  scrollbar-gutter:auto;
+}
+.app aside nav#nav::-webkit-scrollbar{
+  width:4px;
+}
+.app aside nav#nav::-webkit-scrollbar-track{
+  background:transparent;
+}
+@media(min-width:1051px){
+  .app aside nav#nav{
+    scrollbar-width:none;
+    -ms-overflow-style:none;
+  }
+  .app aside nav#nav::-webkit-scrollbar{
+    display:none;
+  }
+}
