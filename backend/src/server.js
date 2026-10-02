@@ -41,6 +41,7 @@ const corsOptions = frontend
 app.set('trust proxy', 1);
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
+const assignmentUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 }, fileFilter: (req,file,cb) => cb(null, file.mimetype === 'application/pdf' || /^image\/(png|jpe?g|webp|gif)$/i.test(file.mimetype)) });
 const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 }, fileFilter: (req,file,cb) => cb(null, file.mimetype === 'application/pdf') });
 
 const MySQLStore = MySQLStoreFactory(session);
@@ -159,6 +160,7 @@ async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS b4_teacher_message_edits(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,message_id BIGINT UNSIGNED NOT NULL,editor_user_id BIGINT UNSIGNED NULL,old_body TEXT NOT NULL,new_body TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_teacher_message_edits(message_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_teacher_typing(user_id BIGINT UNSIGNED PRIMARY KEY,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 await q('CREATE TABLE IF NOT EXISTS resource_files( id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, resource_id BIGINT UNSIGNED NOT NULL, filename VARCHAR(255) NOT NULL, mime_type VARCHAR(120) NOT NULL DEFAULT \'application/pdf\', data MEDIUMBLOB NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(resource_id) REFERENCES resources(id) ON DELETE CASCADE, INDEX idx_resource_files_resource(resource_id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+  await q('CREATE TABLE IF NOT EXISTS assignment_files( id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, assignment_id BIGINT UNSIGNED NOT NULL, filename VARCHAR(255) NOT NULL, mime_type VARCHAR(120) NOT NULL, data MEDIUMBLOB NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(assignment_id) REFERENCES assignments(id) ON DELETE CASCADE, UNIQUE KEY uq_assignment_file(assignment_id) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   const [activationKeyValueCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='activation_keys' AND COLUMN_NAME='key_value' LIMIT 1");
   if (!activationKeyValueCol.length) await q("ALTER TABLE activation_keys ADD COLUMN key_value VARCHAR(80) NULL AFTER key_preview");
   const [developerLinkCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='b4_developers' AND COLUMN_NAME='link_url' LIMIT 1");
@@ -237,8 +239,8 @@ async function getBootstrap(req) {
   const [teachers] = await q(`SELECT t.id,t.teacher_code,t.official_name,u.id user_id,COALESCE(u.display_name,t.display_name) display_name,COALESCE(u.avatar_url,t.avatar_url) avatar_url FROM teachers t LEFT JOIN users u ON u.teacher_id=t.id AND u.status='ACTIVE' WHERE t.class_name='B4' ORDER BY t.display_name`);
   const [subjects] = await q(`SELECT id,name,teacher_name,progress FROM subjects WHERE class_name='B4' ORDER BY name`);
   const [assignments] = await q(`
-    SELECT a.id,a.title,a.description,a.status,a.subject_id,a.due_at,a.created_by,s.name subject_name
-    FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id
+    SELECT a.id,a.title,a.description,a.status,a.subject_id,a.due_at,a.created_by,s.name subject_name,af.id attachment_id,af.filename attachment_name,af.mime_type attachment_mime
+    FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id LEFT JOIN assignment_files af ON af.assignment_id=a.id
     WHERE a.class_name='B4' ORDER BY a.due_at IS NULL,a.due_at
   `);
   const [announcements] = await q(`
@@ -660,6 +662,8 @@ app.post('/api/admin/assignments', requirePermission('MANAGE_ASSIGNMENTS'), asyn
     [title.trim(),description.trim(),subjectId||null,dueAt||null,req.session.userId]);
   await audit(req,'ASSIGNMENT_CREATED','assignment',r.insertId,{title:title.trim()});res.json({ok:true,id:r.insertId});
 });
+app.post('/api/admin/assignments/:id/file', requirePermission('MANAGE_ASSIGNMENTS'), assignmentUpload.single('file'), async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id)||!req.file)return res.status(400).json({error:'Valid assignment id and image/PDF file are required'});try{await assertTeacherOwner(req,'assignments',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const [a]=await q("SELECT id FROM assignments WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!a[0])return res.status(404).json({error:'Assignment not found'});await q('DELETE FROM assignment_files WHERE assignment_id=?',[id]);const [r]=await q('INSERT INTO assignment_files(assignment_id,filename,mime_type,data) VALUES(?,?,?,?)',[id,req.file.originalname,req.file.mimetype,req.file.buffer]);await audit(req,'ASSIGNMENT_FILE_UPLOADED','assignment',id,{filename:req.file.originalname});res.json({ok:true,fileId:r.insertId})});
+app.get('/api/assignments/files/:id', requireAuth, async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).end();const [rows]=await q('SELECT af.filename,af.mime_type,af.data FROM assignment_files af JOIN assignments a ON a.id=af.assignment_id WHERE af.id=? AND a.class_name=\'B4\' LIMIT 1',[id]);if(!rows[0])return res.status(404).end();res.setHeader('Content-Type',rows[0].mime_type);res.setHeader('Content-Disposition','inline; filename*=UTF-8\'\''+encodeURIComponent(rows[0].filename));res.send(rows[0].data)});
 
 app.post('/api/admin/announcements', requirePermission('MANAGE_ANNOUNCEMENTS'), async (req,res) => {
   const {title,body,category='General'} = req.body || {};
