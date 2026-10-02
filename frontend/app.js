@@ -240,7 +240,7 @@ async function loadKeys(){
           <div class="key-value mono">${esc(k.key_value||k.key_preview)}</div>
           <div class="key-person"><span>♙</span><b>${esc(k.person_name||'Unassigned')}</b><small>${esc(k.person_type||'')}</small></div>
         </div>
-        <div class="key-actions">${k.key_value?'<button class="btn ghost" onclick="copyKey('+k.id+')">Copy</button>':''}${k.status==='ACTIVE'?'<button class="btn danger" onclick="revokeKey('+k.id+')">Revoke</button>':''}</div>
+        <div class="key-actions">${k.key_value?'<button class="btn ghost" onclick="copyKey('+k.id+')">Copy</button>':''}${k.status==='ACTIVE'?'<button class="btn key-revoke" onclick="revokeKey('+k.id+')">Revoke</button>':''}<button class="btn danger" onclick="deleteKey('+k.id+')">Delete</button></div>
       </article>`).join('')||'<div class="card empty">No activation keys yet.</div>'}</div>`;
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
@@ -250,6 +250,10 @@ async function copyKey(id){
 async function revokeKey(id){
   if(!confirm('Revoke this activation key?'))return;
   try{await api('/api/admin/activation-keys/'+id+'/revoke',{method:'POST'});loadKeys();toast('Key revoked ✓')}catch(e){toast(e.message)}
+}
+async function deleteKey(id){
+  if(!confirm('Delete this activation key permanently? This cannot be undone.'))return;
+  try{await api('/api/admin/activation-keys/'+id,{method:'DELETE'});loadKeys();toast('Key deleted ✓')}catch(e){toast(e.message)}
 }
 async function createKey(){try{const d=await api('/api/admin/people');const opts=[...d.students.map(x=>'<option value="STUDENT:'+x.id+'">'+esc(x.display_name)+'</option>'),...d.teachers.map(x=>'<option value="TEACHER:'+x.id+'">'+esc(x.display_name)+'</option>')].join('');modal('<div class="modalhead"><h2>Generate activation key</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="makeKey(event)"><select id="keyPerson">'+opts+'</select><button class="btn primary">Generate</button></form>')}catch(e){toast(e.message)}}
 async function makeKey(e){e.preventDefault();const [personType,personId]=$('#keyPerson').value.split(':');try{const d=await api('/api/admin/activation-keys',{method:'POST',body:JSON.stringify({personType,personId:Number(personId)})});close();await navigator.clipboard?.writeText(d.key);modal('<div class="modalhead"><h2>Activation key</h2><button class="close" onclick="b4Close()">×</button></div><div class="notice mono">'+esc(d.key)+'</div>')}catch(x){toast(x.message)}}
