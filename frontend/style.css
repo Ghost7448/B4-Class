@@ -386,3 +386,7 @@ body{overflow-x:hidden}
   .more-option b{font-size:13px}
   .more-option small{font-size:9px}
 }
+
+
+/* Google account identity in Accounts */
+.account-google-email{display:block;margin-top:4px;max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
