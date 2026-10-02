@@ -96,11 +96,7 @@ function cairoNow() {
   const get=t=>parts.find(x=>x.type===t)?.value||'00';
   return {epoch_ms:now.getTime(),time_zone:'Africa/Cairo',utc_offset_minutes:Math.round(cairoOffsetMs(now.getTime())/60000),local_iso:get('year')+'-'+get('month')+'-'+get('day')+'T'+get('hour')+':'+get('minute')+':'+get('second')};
 }
-function cairoEpoch(value) {
-  const d = cairoDate(value);
-  const ms = d?.getTime();
-  return Number.isFinite(ms) ? ms : null;
-}
+
 
 const chatStreams = new Set();
 const teacherChatStreams = new Set();
