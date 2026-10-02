@@ -240,7 +240,7 @@ async function loadKeys(){
           <div class="key-value mono">${esc(k.key_value||k.key_preview)}</div>
           <div class="key-person"><span>♙</span><b>${esc(k.person_name||'Unassigned')}</b><small>${esc(k.person_type||'')}</small></div>
         </div>
-        <div class="key-actions">${k.key_value?'<button class="btn ghost" onclick="copyKey('+k.id+')">Copy</button>':''}${k.status==='ACTIVE'?'<button class="btn key-revoke" onclick="revokeKey('+k.id+')">Revoke</button>':''}<button class="btn danger" onclick="deleteKey('+k.id+')">Delete</button></div>
+        <div class="key-actions">${k.key_value?'<button class="btn ghost" onclick="copyKey('+k.id+')">Copy</button>':''}${k.status==='ACTIVE'?'<button class="btn key-revoke" onclick="revokeKey('+k.id+')">Revoke</button>':''}<button class="btn danger" onclick="deleteKey(String(k.id))">Delete</button></div>
       </article>`).join('')||'<div class="card empty">No activation keys yet.</div>'}</div>`;
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
