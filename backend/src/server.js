@@ -571,11 +571,11 @@ app.post('/api/admin/activation-keys/:id/revoke', requirePermission('MANAGE_KEYS
 });
 
 app.delete('/api/admin/activation-keys/:id', requirePermission('MANAGE_KEYS'), async (req,res)=>{
-  const id=Number(req.params.id);
-  if(!Number.isSafeInteger(id)) return res.status(400).json({error:'Invalid activation key'});
+  const id=String(req.params.id||'').trim();
+  if(!id) return res.status(400).json({error:'Invalid activation key'});
   const [r]=await q('DELETE FROM activation_keys WHERE id=?',[id]);
   if(!r.affectedRows) return res.status(404).json({error:'Activation key not found'});
-  await q("INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)",[req.session.userId,'ACTIVATION_DELETED',String(id)]);
+  await q("INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)",[req.session.userId,'ACTIVATION_DELETED',id]);
   await audit(req,'ACTIVATION_DELETED','activation_key',id);
   res.json({ok:true});
 });
