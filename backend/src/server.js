@@ -1004,7 +1004,7 @@ app.post('/api/admin/resources/publish', requirePermission('MANAGE_RESOURCES'), 
     const hasFile=!!req.file;
     const resourceType=hasFile?'FILE':(url?'LINK':'NOTE');
     const [r]=await q(
-      'INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,\'B4\',?,?)',
+      'INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,?,\'B4\',?)',
       [title,description,url||null,resourceType,subjectId,req.session.userId]
     );
     let fileUrl=null;
