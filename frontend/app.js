@@ -185,7 +185,7 @@ function examTime(e){
 }
 function updateExamCountdowns(){document.querySelectorAll('[data-exam-id]').forEach(el=>{const e=S.exams.find(x=>Number(x.id)===Number(el.dataset.examId));if(!e)return;const tm=examTime(e);el.textContent=tm.label;el.className='countdown '+tm.tone;const bar=document.querySelector('[data-exam-bar="'+e.id+'"]');if(bar){bar.className=tm.tone;bar.style.width=tm.pct+'%'}const open=el.closest('.card')?.querySelector('[data-exam-open]');if(open){const closed=tm.label==='Exam closed';open.disabled=closed;open.classList.toggle('disabled',closed);open.title=tm.label}}
 )}
-function assignmentCard(a){const tm=assignmentTime(a);const studentExpired=!!(S.me&&S.me.role==='STUDENT'&&tm.label==='Deadline passed');return '<article class="card assignment-card"><div class="head"><div><span class="badge">'+esc(a.status||'OPEN')+'</span><h3>'+esc(a.title)+'</h3></div><span class="assignment-subject">'+esc(a.subject_name||'')+'</span></div><p>'+esc(a.description||'')+'</p><div class="assignment-countdown"><span>Time left</span><b class="countdown '+tm.tone+'" data-assignment-id="'+a.id+'">'+tm.label+'</b></div><div class="assignment-bar"><span class="'+tm.tone+'" data-assignment-bar="'+a.id+'" style="width:'+tm.pct+'%"></span></div><div class="assignment-file">'+(a.attachment_id?'<span>📎 '+esc(a.attachment_name||'Assignment file')+'</span>':'<span class="muted">No file attached</span>')+'<button type="button" data-assignment-open="'+a.id+'" class="btn primary'+(studentExpired?' disabled':'')+'" '+(studentExpired?'disabled ':'')+'onclick="openAssignment('+a.id+')">'+(studentExpired?'Deadline passed':'Open Assignment →')+'</button></div>'+(can('MANAGE_ASSIGNMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="assignmentEdit('+a.id+')">Edit</button><button class="btn ghost" onclick="assignmentSubmissions('+a.id+')">Submissions</button><button class="btn danger" onclick="delAPI(\'/api/admin/assignments/'+a.id+'\',\'Assignment deleted\')">Delete</button></div>':'')+'</article>'}
+function assignmentCard(a){const tm=assignmentTime(a);const studentExpired=!!(S.me&&S.me.role==='STUDENT'&&tm.label==='Deadline passed');return '<article class="card assignment-card" data-live-id="'+esc(a.id)+'"><div class="head"><div><span class="badge">'+esc(a.status||'OPEN')+'</span><h3>'+esc(a.title)+'</h3></div><span class="assignment-subject">'+esc(a.subject_name||'')+'</span></div><p>'+esc(a.description||'')+'</p><div class="assignment-countdown"><span>Time left</span><b class="countdown '+tm.tone+'" data-assignment-id="'+a.id+'">'+tm.label+'</b></div><div class="assignment-bar"><span class="'+tm.tone+'" data-assignment-bar="'+a.id+'" style="width:'+tm.pct+'%"></span></div><div class="assignment-file">'+(a.attachment_id?'<span>📎 '+esc(a.attachment_name||'Assignment file')+'</span>':'<span class="muted">No file attached</span>')+'<button type="button" data-assignment-open="'+a.id+'" class="btn primary'+(studentExpired?' disabled':'')+'" '+(studentExpired?'disabled ':'')+'onclick="openAssignment('+a.id+')">'+(studentExpired?'Deadline passed':'Open Assignment →')+'</button></div>'+(can('MANAGE_ASSIGNMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="assignmentEdit('+a.id+')">Edit</button><button class="btn ghost" onclick="assignmentSubmissions('+a.id+')">Submissions</button><button class="btn danger" onclick="delAPI(\'/api/admin/assignments/'+a.id+'\',\'Assignment deleted\')">Delete</button></div>':'')+'</article>'}
 function tasksV(){return title(t('assignments'),' ',can('MANAGE_ASSIGNMENTS')?'<button class="btn primary" onclick="assignmentEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid c2">'+S.assignments.map(assignmentCard).join('')+'</div>'}
 function updateAssignmentCountdowns(){if(S.view!=='assignments')return;document.querySelectorAll('[data-assignment-id]').forEach(el=>{const a=S.assignments.find(x=>Number(x.id)===Number(el.dataset.assignmentId));if(!a)return;const tm=assignmentTime(a);el.textContent=tm.label;el.className='countdown '+tm.tone;const bar=document.querySelector('[data-assignment-bar="'+a.id+'"]');if(bar){bar.className=tm.tone;bar.style.width=tm.pct+'%'}const open=document.querySelector('[data-assignment-open="'+a.id+'"]');if(open&&S.me?.role==='STUDENT'){const expired=tm.label==='Deadline passed';open.disabled=expired;open.classList.toggle('disabled',expired);open.textContent=expired?'Deadline passed':'Open Assignment →'}})}
 function siteNowMs(){const o=Number(S.serverClockOffsetMs);return Date.now()+(Number.isFinite(o)?o:0)}
@@ -241,13 +241,28 @@ async function syncLiveData(){
     const changed=before!==liveDataSignature();
     if(!changed)return;
     if($('#back')?.classList.contains('show'))return;
-    const active=document.activeElement;
-    if(active&&['INPUT','TEXTAREA','SELECT'].includes(active.tagName))return;
+    if(S.view==='chat'||S.view==='teacherChat')return;
+    if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName||''))return;
+    if(S.view==='assignments'){
+      patchLiveCards('#content > .grid.c2',S.assignments,assignmentCard);
+      updateAssignmentCountdowns();
+      return;
+    }
+    if(S.view==='exams'){
+      patchLiveCards('#content > .grid.c2',S.exams,e=>{
+        const tm=examTime(e);
+        return '<article class="card" data-live-id="'+esc(e.id)+'"><div class="head"><span class="badge">'+esc(e.status)+'</span><span class="muted">'+esc(e.subject_name||'')+'</span></div><h3>'+esc(e.title)+'</h3><p class="muted">'+esc(e.description||'')+'</p><div class="meter"><span>Exam time</span><b class="countdown '+tm.tone+'" data-exam-id="'+e.id+'">'+tm.label+'</b></div><div class="assignment-bar exam-time-bar"><span class="'+tm.tone+'" data-exam-bar="'+e.id+'" style="width:'+tm.pct+'%"></span></div><div class="actions-row"><button class="btn primary" data-exam-open '+(tm.label==='Exam closed'?'disabled':'')+' onclick="startExam('+e.id+')">Open</button>'+(can('MANAGE_EXAMS')?'<button class="btn ghost" onclick="examEdit('+e.id+')">Edit</button><button class="btn danger" onclick="delAPI(\\' /api/admin/exams/'+e.id+'\\',\\'Exam deleted\\')">Delete</button><button class="btn ghost" onclick="submissions('+e.id+')">Submissions</button>':'')+'</div></article>';
+      });
+      updateExamCountdowns();
+      return;
+    }
+    if(S.view==='announcements'){
+      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(a.created_at||'')+'</small></div><h3>'+esc(a.title)+'</h3><p>'+esc(a.body||'')+'</p>'+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\\' /api/admin/announcements/'+a.id+'\\',\\'Announcement deleted\\')">Delete</button></div>':'')+'</article>');
+      return;
+    }
     const scrollY=window.scrollY;
     document.documentElement.classList.add('live-update');
-    if(S.view!=='chat'&&S.view!=='teacherChat')render();
-    else if(S.view==='chat')applyChatMessages(S.messages);
-    else if(S.view==='teacherChat')applyTeacherMessages(S.teacherMessages);
+    render();
     requestAnimationFrame(()=>{window.scrollTo({top:scrollY,left:0,behavior:'instant'});document.documentElement.classList.remove('live-update')});
   }catch{}
   finally{liveSyncBusy=false}
@@ -290,8 +305,8 @@ async function deleteMySubmission(id){if(!await confirmAction('Delete your uploa
 async function deleteAssignmentFile(id){if(!await confirmAction('Remove this assignment file?'))return;try{await api('/api/admin/assignments/'+id+'/file',{method:'DELETE'});await loadData();render();assignmentEdit(id);toast('Assignment file removed ✓')}catch(e){toast(e.message)}}
 async function submitAssignment(e,id){e.preventDefault();const file=$('#submissionFile')?.files?.[0];if(!file)return;const fd=new FormData();fd.append('file',file);try{const r=await fetch(API+'/api/assignments/'+id+'/submission',{method:'POST',credentials:'include',body:fd});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Submission upload failed');await loadData();render();openAssignment(id);toast('Assignment submitted ✓')}catch(x){toast(x.message)}}
 function resourcesV(){return title(t('resources'),'Lessons, links and PDFs.',can('MANAGE_RESOURCES')?'<button class="btn primary" onclick="resourceEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid c3">'+S.resources.map(r=>'<article class="card"><span class="badge">'+esc(r.resource_type||'RESOURCE')+'</span><h3>'+esc(r.title)+'</h3><p class="muted">'+esc(r.description||'')+'</p>'+(r.subject_id?'<button class="btn primary" onclick="openSubject('+Number(r.subject_id)+')">Open subject →</button>':(r.url||r.file_url?'<a class="btn primary" href="'+esc(r.url||r.file_url)+'" target="_blank" rel="noopener">'+t('open')+' →</a>':''))+(can('MANAGE_RESOURCES')?'<div class="actions-row"><button class="btn ghost" onclick="resourceEdit('+r.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/resources/'+r.id+'\',\'Resource deleted\')">Delete</button></div>':'')+'</article>').join('')||'<div class="card empty">No resources.</div>'+'</div>'}
-function examsV(){return title(t('exams'),'Exams, submissions and results.',can('MANAGE_EXAMS')?'<button class="btn primary" onclick="examEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid c2">'+S.exams.map(e=>{const tm=examTime(e);return '<article class="card"><div class="head"><span class="badge">'+esc(e.status)+'</span><span class="muted">'+esc(e.subject_name||'')+'</span></div><h3>'+esc(e.title)+'</h3><p class="muted">'+esc(e.description||'')+'</p><div class="meter"><span>Exam time</span><b class="countdown '+tm.tone+'" data-exam-id="'+e.id+'">'+tm.label+'</b></div><div class="assignment-bar exam-time-bar"><span class="'+tm.tone+'" data-exam-bar="'+e.id+'" style="width:'+tm.pct+'%"></span></div><div class="actions-row"><button class="btn primary" data-exam-open '+(tm.label==='Exam closed'?'disabled':'')+' onclick="startExam('+e.id+')">Open</button>'+(can('MANAGE_EXAMS')?'<button class="btn ghost" onclick="examEdit('+e.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/exams/'+e.id+'\',\'Exam deleted\')">Delete</button><button class="btn ghost" onclick="submissions('+e.id+')">Submissions</button>':'')+'</div></article>'}).join('')||'<div class="card empty">No exams.</div>'+'</div>'}
-function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(a.created_at||'')+'</small></div><h3>'+esc(a.title)+'</h3><p>'+esc(a.body||'')+'</p>'+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
+function examsV(){return title(t('exams'),'Exams, submissions and results.',can('MANAGE_EXAMS')?'<button class="btn primary" onclick="examEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid c2">'+S.exams.map(e=>{const tm=examTime(e);return '<article class="card" data-live-id="'+esc(e.id)+'"><div class="head"><span class="badge">'+esc(e.status)+'</span><span class="muted">'+esc(e.subject_name||'')+'</span></div><h3>'+esc(e.title)+'</h3><p class="muted">'+esc(e.description||'')+'</p><div class="meter"><span>Exam time</span><b class="countdown '+tm.tone+'" data-exam-id="'+e.id+'">'+tm.label+'</b></div><div class="assignment-bar exam-time-bar"><span class="'+tm.tone+'" data-exam-bar="'+e.id+'" style="width:'+tm.pct+'%"></span></div><div class="actions-row"><button class="btn primary" data-exam-open '+(tm.label==='Exam closed'?'disabled':'')+' onclick="startExam('+e.id+')">Open</button>'+(can('MANAGE_EXAMS')?'<button class="btn ghost" onclick="examEdit('+e.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/exams/'+e.id+'\',\'Exam deleted\')">Delete</button><button class="btn ghost" onclick="submissions('+e.id+')">Submissions</button>':'')+'</div></article>'}).join('')||'<div class="card empty">No exams.</div>'+'</div>'}
+function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(a.created_at||'')+'</small></div><h3>'+esc(a.title)+'</h3><p>'+esc(a.body||'')+'</p>'+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
 function chatTime(value){
   const d=new Date(value);
   if(!Number.isFinite(d.getTime()))return String(value||'');
@@ -393,73 +408,7 @@ async function loadMe(){
 }
 async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}updateNotificationBadge();S.error=''}catch(e){S.error=e.message}}
 
-function liveSnapshot(d){
-  return JSON.stringify({
-    students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],
-    schedule:d.schedule||[],assignments:d.assignments||[],
-    announcements:d.announcements||[],resources:d.resources||[],
-    exams:d.exams||[],attendance:d.attendance||[],
-    messages:d.messages||[],notifications:d.notifications||[]
-  });
-}
 
-function applyLiveBootstrap(d){
-  const previous=liveSnapshot(S);
-  const next=liveSnapshot(d);
-  const server=Number(d.server_now_ms)||Date.now();
-  S.serverNowMs=server;
-  if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs){
-    S.serverClockOffsetMs=server-Date.now();
-  }
-  if(previous===next)return false;
-  Object.assign(S,{
-    students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],
-    schedule:d.schedule||[],assignments:d.assignments||[],
-    announcements:d.announcements||[],resources:d.resources||[],
-    exams:d.exams||[],attendance:d.attendance||[],
-    messages:d.messages||[],notifications:d.notifications||[]
-  });
-  return true;
-}
-
-async function liveDataTick(){
-  try{
-    const d=await api('/api/bootstrap?live='+Date.now(),{cache:'no-store'});
-    const changed=applyLiveBootstrap(d);
-    if(!changed)return;
-
-    // Update the visible page only when the server data actually changed.
-    // This is not a browser refresh and keeps the current URL, scroll position
-    // and open app state intact.
-    if(S.view==='dashboard'){
-      const stats=document.querySelectorAll('[data-stat-count]');
-      const values=[S.students.length,S.teachers.length,S.subjects.length,S.assignments.length];
-      stats.forEach((el,i)=>{
-        if(values[i]!==undefined)el.textContent=String(values[i]);
-      });
-      const list=document.querySelector('.dashboard-announcements');
-      if(list){
-        list.innerHTML=S.announcements.slice(0,5).map(a=>'<div class="item"><div class="grow"><b>'+esc(a.title)+'</b><p class="muted">'+esc(a.body||'')+'</p></div></div>').join('')||'<div class="empty">No announcements.</div>';
-      }
-    }else if(S.view==='chat'){
-      applyChatMessages(S.messages);
-    }else if(S.view==='teacherChat'){
-      applyTeacherMessages(S.teacherMessages);
-    }else if(S.view==='assignments'){
-      render();
-      startAssignmentCountdown();
-    }else if(S.view==='exams'){
-      render();
-    }
-  }catch{}
-}
-
-function liveDataLoop(){
-  clearInterval(window.liveDataTimer);
-  if(!S.me)return;
-  liveDataTick();
-  window.liveDataTimer=setInterval(liveDataTick,3000);
-}
 async function login(e){e.preventDefault();try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({login:$('#loginName').value.trim(),password:$('#loginPassword').value})});close();await loadMe();toast('Login successful ✓')}catch(x){toast(x.message)}}
 function loginModal(){modal('<div class="modalhead"><h2>'+t('login')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="login(event)"><label>Display name<input id="loginName" required autocomplete="username"></label><label>Password<input id="loginPassword" type="password" required autocomplete="current-password"></label><button class="btn primary">'+t('login')+' →</button></form><div class="login-divider"><span>or</span></div><button class="google-btn" onclick="googleLogin()">Continue with Google</button><button class="btn ghost" onclick="forgotPassword()">Forgot my password</button><button class="btn ghost" onclick="activationModal()">'+t('activate')+'</button>')}
 function activationModal(){modal('<div class="modalhead"><h2>'+t('activate')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="activate(event)"><label>One-time key<input id="actKey" required></label><label>Display name<input id="actName" required></label><label>Password<input id="actPw" type="password" minlength="8" required></label><button class="btn primary">Create account</button></form>')}
@@ -596,7 +545,86 @@ async function askAI(e){
     out.textContent=d.answer||'No answer returned.';
   }catch(x){out.textContent='';toast(x.message)}
  }
-function applyChatMessages(messages){const next=messages||[];const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.messages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));if(!changed)return;S.messages=next;const box=$('#messages');if(box){const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;box.innerHTML=S.messages.map(messageHTML).join('');if(wasNearBottom)box.scrollTop=box.scrollHeight}}
+function patchLiveCards(selector,items,renderItem){
+  const root=document.querySelector(selector);
+  if(!root)return;
+  const nextItems=Array.isArray(items)?items:[];
+  const existing=[...root.children].filter(el=>el.dataset?.liveId);
+  const byId=new Map(existing.map(el=>[String(el.dataset.liveId),el]));
+  const keep=new Set();
+  if(!nextItems.length){
+    if(existing.length===0)return;
+    root.innerHTML='<div class="card empty">No items yet.</div>';
+    return;
+  }
+  root.querySelectorAll(':scope > .empty, :scope > .card.empty').forEach(el=>el.remove());
+  nextItems.forEach(item=>{
+    const id=String(item.id);
+    let node=byId.get(id);
+    const holder=document.createElement('div');
+    holder.innerHTML=String(renderItem(item)).trim();
+    const next=holder.firstElementChild;
+    if(!next)return;
+    next.dataset.liveId=id;
+    if(node){
+      keep.add(id);
+      if(node.outerHTML!==next.outerHTML){
+        node.replaceWith(next);
+        node=next;
+      }
+    }else{
+      node=next;
+      keep.add(id);
+    }
+    root.appendChild(node);
+  });
+  existing.forEach(node=>{
+    if(!keep.has(String(node.dataset.liveId)))node.remove();
+  });
+}
+function patchChatList(box,next,htmlFn){
+  if(!box)return;
+  const items=Array.isArray(next)?next:[];
+  const existing=[...box.children];
+  const byId=new Map(existing.map(el=>[String(el.dataset.messageId||''),el]).filter(([id])=>id));
+  const keep=new Set();
+  items.forEach(message=>{
+    const id=String(message.id);
+    const holder=document.createElement('div');
+    holder.innerHTML=String(htmlFn(message)).trim();
+    const nextNode=holder.firstElementChild;
+    if(!nextNode)return;
+    nextNode.dataset.messageId=id;
+    let node=byId.get(id);
+    if(node){
+      keep.add(id);
+      if(node.outerHTML!==nextNode.outerHTML){
+        node.replaceWith(nextNode);
+        node=nextNode;
+      }
+    }else{
+      node=nextNode;
+      keep.add(id);
+    }
+    box.appendChild(node);
+  });
+  existing.forEach(node=>{
+    const id=String(node.dataset.messageId||'');
+    if(id&&!keep.has(id))node.remove();
+  });
+}
+function applyChatMessages(messages){
+  const next=messages||[];
+  const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.messages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));
+  if(!changed)return;
+  S.messages=next;
+  const box=$('#messages');
+  if(box){
+    const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;
+    patchChatList(box,S.messages,messageHTML);
+    if(wasNearBottom)box.scrollTop=box.scrollHeight;
+  }
+}
 function ensureRealtime(){if(!S.me)return;if(window.realtimeStream&&window.realtimeStream.readyState!==2)return;try{window.realtimeStream=new EventSource(API+'/api/chat/stream',{withCredentials:true});window.realtimeStream.addEventListener('open',()=>{window.realtimeOnline=true});window.realtimeStream.addEventListener('chat',e=>{try{const d=JSON.parse(e.data);if(d.type==='created'&&!S.messages.some(m=>Number(m.id)===Number(d.message.id)))applyChatMessages([...S.messages,d.message]);else if(d.type==='updated')applyChatMessages(S.messages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));else if(d.type==='deleted')applyChatMessages(S.messages.filter(m=>Number(m.id)!==Number(d.id)))}catch{}});window.realtimeStream.addEventListener('profile',e=>{try{applyProfileEvent(JSON.parse(e.data))}catch{}});window.realtimeStream.onerror=()=>{window.realtimeOnline=false}}catch{window.realtimeOnline=false}}
 function chatLoop(){clearInterval(window.chatTimer);clearInterval(window.chatTypingTimer);if(!S.me||S.view!=='chat')return;ensureRealtime();const sync=async()=>{try{const d=await api('/api/chat/messages?_='+Date.now(),{cache:'no-store'});applyChatMessages(d.messages||[])}catch{}};window.chatTimer=setInterval(sync,1500);window.chatTypingTimer=setInterval(async()=>{if(S.view!=='chat')return;try{const ty=await api('/api/chat/typing');const el=$('#typing');if(el)el.textContent=(ty.users||[]).filter(x=>Number(x.user_id)!==Number(S.me.id)).map(x=>x.display_name+' is typing…').join(' • ')}catch{}},1000);sync()}
 async function sendChat(e){e.preventDefault();const i=$('#chatInput');if(i.dataset.sending==='1'||!i.value.trim())return;i.dataset.sending='1';const btn=e.submitter||e.target.querySelector('button');if(btn)btn.disabled=true;const body=i.value.trim(),replyToId=window.replyTo||null;try{await api('/api/chat/messages',{method:'POST',body:JSON.stringify({body,replyToId})});i.value='';i.placeholder='Write a message...';window.replyTo=null;typing(false);toast('Message sent ✓')}catch(x){toast(x.message)}finally{i.dataset.sending='0';if(btn)btn.disabled=false}}
@@ -606,7 +634,18 @@ function replyMessage(id){const m=S.messages.find(x=>Number(x.id)===Number(id));
 function editMessage(id){const m=S.messages.find(x=>Number(x.id)===Number(id));if(!m)return;modal('<div class="modalhead"><h2>Edit message</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveMessage(event,'+id+')"><textarea id="editMsg" rows="4">'+esc(m.body)+'</textarea><button class="btn primary">Save</button></form>')}
 async function saveMessage(e,id){e.preventDefault();try{await api('/api/chat/messages/'+id,{method:'PATCH',body:JSON.stringify({body:$('#editMsg').value})});close();toast('Message updated ✓')}catch(x){toast(x.message)}}
 async function deleteMessage(id){if(!await confirmAction('Delete message?'))return;try{await api('/api/chat/messages/'+id,{method:'DELETE'});close();toast('Message deleted ✓')}catch(x){toast(x.message)}}
-function applyTeacherMessages(messages){const next=messages||[];const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.teacherMessages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));if(!changed)return;S.teacherMessages=next;const box=$('#teacherMessages');if(box){const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;box.innerHTML=S.teacherMessages.map(teacherMessageHTML).join('');if(wasNearBottom)box.scrollTop=box.scrollHeight}}
+function applyTeacherMessages(messages){
+  const next=messages||[];
+  const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.teacherMessages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));
+  if(!changed)return;
+  S.teacherMessages=next;
+  const box=$('#teacherMessages');
+  if(box){
+    const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;
+    patchChatList(box,S.teacherMessages,teacherMessageHTML);
+    if(wasNearBottom)box.scrollTop=box.scrollHeight;
+  }
+}
 function ensureTeacherRealtime(){if(!S.me)return;if(window.teacherRealtimeStream&&window.teacherRealtimeStream.readyState!==2)return;try{window.teacherRealtimeStream=new EventSource(API+'/api/teacher-chat/stream',{withCredentials:true});window.teacherRealtimeStream.addEventListener('open',()=>{window.teacherRealtimeOnline=true});window.teacherRealtimeStream.addEventListener('teacher-chat',e=>{try{const d=JSON.parse(e.data);if(d.type==='created'&&!S.teacherMessages.some(m=>Number(m.id)===Number(d.message.id)))applyTeacherMessages([...S.teacherMessages,d.message]);else if(d.type==='updated')applyTeacherMessages(S.teacherMessages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));else if(d.type==='deleted')applyTeacherMessages(S.teacherMessages.filter(m=>Number(m.id)!==Number(d.id)))}catch{}});window.teacherRealtimeStream.addEventListener('profile',e=>{try{applyProfileEvent(JSON.parse(e.data))}catch{}});window.teacherRealtimeStream.onerror=()=>{window.teacherRealtimeOnline=false}}catch{window.teacherRealtimeOnline=false}}
 function teacherChatLoop(){clearInterval(window.teacherTimer);clearInterval(window.teacherTypingTimer);if(!S.me||S.view!=='teacherChat')return;ensureTeacherRealtime();const sync=async()=>{try{const d=await api('/api/teacher-chat/messages?_='+Date.now(),{cache:'no-store'});applyTeacherMessages(d.messages||[])}catch{}};window.teacherTimer=setInterval(sync,1500);window.teacherTypingTimer=setInterval(async()=>{if(S.view!=='teacherChat')return;try{const ty=await api('/api/teacher-chat/typing');const el=$('#teacherTyping');if(el)el.textContent=(ty.users||[]).filter(x=>Number(x.user_id)!==Number(S.me.id)).map(x=>x.display_name+' is typing…').join(' • ')}catch{}},1000);sync()}
 async function sendTeacherChat(e){e.preventDefault();const i=$('#teacherInput');if(i.dataset.sending==='1'||!i.value.trim())return;i.dataset.sending='1';const btn=e.submitter||e.target.querySelector('button');if(btn)btn.disabled=true;const body=i.value.trim(),replyToId=window.teacherReplyTo||null;try{await api('/api/teacher-chat/messages',{method:'POST',body:JSON.stringify({body,replyToId})});i.value='';i.placeholder='Write a message...';window.teacherReplyTo=null;teacherTyping(false);toast('Message sent ✓')}catch(x){toast(x.message)}finally{i.dataset.sending='0';if(btn)btn.disabled=false}}
