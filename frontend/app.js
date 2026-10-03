@@ -506,7 +506,7 @@ function notificationMeta(n){
 async function openNotifications(){
   try{
     await loadData();
-    const list=S.notifications||[];
+    const list=(S.notifications||[]).filter(n=>!n.read_at);
     const ar=S.lang==='ar';
     const unread=list.filter(n=>!n.read_at).length;
     const items=list.length?list.map((n,i)=>{
