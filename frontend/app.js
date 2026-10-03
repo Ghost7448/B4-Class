@@ -412,9 +412,46 @@ function loginModal(){modal('<div class="modalhead"><h2>'+t('login')+'</h2><butt
 function activationModal(){modal('<div class="modalhead"><h2>'+t('activate')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="activate(event)"><label>One-time key<input id="actKey" required></label><label>Display name<input id="actName" required></label><label>Password<input id="actPw" type="password" minlength="8" required></label><button class="btn primary">Create account</button></form>')}
 async function activate(e){e.preventDefault();try{await api('/api/auth/activate',{method:'POST',body:JSON.stringify({key:$('#actKey').value.trim(),displayName:$('#actName').value.trim(),password:$('#actPw').value})});close();toast('Account created ✓');loginModal()}catch(x){toast(x.message)}}
 function googleLogin(){location.href=API+'/api/auth/google/login'}
+function base64ToUint8Array(base64){const pad='='.repeat((4-base64.length%4)%4),s=(base64+pad).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(s);return Uint8Array.from([...raw].map(ch=>ch.charCodeAt(0)))}
+async function syncPushSubscription(showErrors=true){
+  try{
+    if(!('serviceWorker' in navigator)||!('PushManager' in window))throw Error('Push notifications are not supported by this browser');
+    const cfg=await api('/api/notifications/settings');const publicKey=cfg.vapidPublicKey;if(!publicKey)throw Error('Push notifications are not configured yet');
+    const permission=Notification.permission;
+    if(permission!=='granted')throw Error(permission==='denied'?'Browser notifications are blocked. Enable them in browser settings.':'Notification permission is required');
+    const registration=await navigator.serviceWorker.ready;
+    let subscription=await registration.pushManager.getSubscription();
+    if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:base64ToUint8Array(publicKey)});
+    await api('/api/notifications/push/subscribe',{method:'POST',body:JSON.stringify(subscription.toJSON())});
+    S.notificationSettings={...(S.notificationSettings||{}),push_enabled:1};updateNotificationBadge();
+    return true;
+  }catch(e){if(showErrors)toast(e.message);return false}
+}
+async function togglePushNotifications(enabled){
+  if(enabled){
+    if(!('Notification' in window)){toast('This browser does not support device notifications');return}
+    const permission=await Notification.requestPermission();
+    if(permission!=='granted'){toast('Notification permission was not granted');return}
+    if(await syncPushSubscription(true)){render()}
+  }else{
+    try{
+      const registration=await navigator.serviceWorker.ready;const sub=await registration.pushManager.getSubscription();
+      await api('/api/notifications/push/unsubscribe',{method:'POST',body:JSON.stringify({endpoint:sub?.endpoint||''})});
+      await sub?.unsubscribe();
+      S.notificationSettings={...(S.notificationSettings||{}),push_enabled:0};render();
+    }catch(e){toast(e.message)}
+  }
+}
+async function toggleNotificationSetting(key,enabled){
+  try{
+    const next={...(S.notificationSettings||{}),[key]:enabled?1:0};
+    const d=await api('/api/notifications/settings',{method:'PATCH',body:JSON.stringify(next)});
+    S.notificationSettings=d.settings||next;render();toast(enabled?'Notification enabled ✓':'Notification disabled');
+  }catch(e){toast(e.message)}
+}
 function updateNotificationBadge(){const count=(S.notifications||[]).filter(n=>!n.read_at).length;const dot=$('#bell i');if(dot)dot.style.display=count?'block':'none';const mobile=$('#mobileAlerts');if(mobile)mobile.innerHTML='♢'+(count?' <sup>'+Math.min(count,99)+'</sup>':'')+'<br>Alerts'}
 async function markNotificationRead(id){try{await api('/api/notifications/'+id+'/read',{method:'POST'});S.notifications=(S.notifications||[]).map(n=>Number(n.id)===Number(id)?{...n,read_at:new Date().toISOString()}:n);updateNotificationBadge()}catch{}}
-function openNotificationTarget(n){if(n?.id)markNotificationRead(n.id);close();const type=String(n?.type||'');const id=Number(n?.entity_id||0);if(type.includes('chat'))go(type==='teacher_chat_reply'?'teacherChat':'chat');else if(type.includes('exam')){go('exams');if(id)setTimeout(()=>startExam(id),80)}else if(type.includes('assignment')){go('assignments');if(id)setTimeout(()=>openAssignment(id),80)}else if(type==='announcement')go('announcements');}
+function openNotificationTarget(id){const n=(S.notifications||[]).find(x=>Number(x.id)===Number(id));if(!n)return;if(n.id)markNotificationRead(n.id);close();const type=String(n.type||'');const entityId=Number(n.entity_id||0);if(type.includes('chat'))go(type==='teacher_chat_reply'?'teacherChat':'chat');else if(type.includes('exam')){go('exams');if(entityId)setTimeout(()=>startExam(entityId),80)}else if(type.includes('assignment')){go('assignments');if(entityId)setTimeout(()=>openAssignment(entityId),80)}else if(type==='announcement')go('announcements');}
 async function openNotifications(){try{await loadData();const list=S.notifications||[];modal('<div class="modalhead"><h2>Notifications</h2><div class="actions"><button class="btn ghost" onclick="markAllNotifications()">Mark all read</button><button class="close" onclick="b4Close()">×</button></div></div><div class="list">'+(list.length?list.map(n=>'<button class="item '+(n.read_at?'':'unread')+'" style="width:100%;text-align:inherit" onclick="openNotificationTarget('+Number(n.id)+')" data-notification-id="'+Number(n.id)+'"><span class="grow"><b>'+esc(n.title)+'</b><small class="muted">'+esc(n.body||'')+'</small></span><small class="muted">'+esc(n.created_at||'')+'</small></button>').join(''):'<div class="empty">No notifications.</div>')+'</div>')}catch(e){toast(e.message)}}
 async function markAllNotifications(){try{await api('/api/notifications/read-all',{method:'POST'});S.notifications=(S.notifications||[]).map(n=>({...n,read_at:n.read_at||new Date().toISOString()}));updateNotificationBadge();openNotifications()}catch(e){toast(e.message)}}
 async function forgotPassword(){try{const d=await api('/api/auth/forgot-password',{method:'POST'});location.href=d.whatsapp}catch(e){toast('WhatsApp support is unavailable')}} 
@@ -784,4 +821,5 @@ function setupMobileDockAutoHide(){
 function cancelReply(){window.replyTo=null;const i=$('#chatInput');if(i){i.value='';i.placeholder='Write a message...'}close()}
 window.addEventListener('beforeunload',()=>clearInterval(window.examTimer));
 document.addEventListener('DOMContentLoaded',async()=>{
-setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=installB4;$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe();startAssignmentCountdown()});
+const params=new URLSearchParams(location.search);const requestedView=params.get('view');const requestedId=Number(params.get('id')||0);if(['dashboard','students','teachers','subjects','schedule','assignments','resources','exams','announcements','chat','teacherChat','attendance','admin','teacherCenter','settings','developers'].includes(requestedView))S.view=requestedView;
+setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=installB4;$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe();if(requestedView&&requestedId&&requestedView==='assignments')setTimeout(()=>openAssignment(requestedId),120);if(requestedView&&requestedId&&requestedView==='exams')setTimeout(()=>startExam(requestedId),120);startAssignmentCountdown()});
