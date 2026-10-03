@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import mysql from 'mysql2/promise';
 import { GoogleGenAI } from '@google/genai';
 import multer from 'multer';
+import webpush from 'web-push';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -65,6 +66,62 @@ app.use(session({
 }));
 
 const q = (sql, args = []) => pool.execute(sql, args);
+
+const VAPID_READY=!!(process.env.VAPID_PUBLIC_KEY&&process.env.VAPID_PRIVATE_KEY&&process.env.VAPID_SUBJECT);
+if(VAPID_READY){
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT,process.env.VAPID_PUBLIC_KEY,process.env.VAPID_PRIVATE_KEY);
+}
+
+const NOTIFICATION_SETTING_COLUMNS={
+  class_chat_reply:'class_chat_reply',
+  teacher_chat_reply:'teacher_chat_reply',
+  exam:'exam_notifications',
+  announcement:'announcement_notifications',
+  assignment:'assignment_notifications',
+  system:'system_notifications'
+};
+function notificationUrl(type,id){
+  const n=Number(id)||0;
+  if(type==='class_chat_reply'||type==='teacher_chat_reply')return '/';
+  if(type==='exam'||type==='exam_submission')return n?'/#exam-'+n:'/';
+  if(type==='announcement')return '/#announcements';
+  if(type==='assignment'||type==='assignment_submission')return n?'/#assignment-'+n:'/';
+  return '/';
+}
+async function ensureNotificationSettings(userId){
+  await q('INSERT INTO notification_settings(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=user_id',[userId]);
+  const [rows]=await q('SELECT class_chat_reply,teacher_chat_reply,exam_notifications,announcement_notifications,assignment_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
+  return rows[0]||{class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0};
+}
+async function createNotification(userId,{type='system',title,body='',entityId=null,url=null}={}){
+  if(!userId||!title)return;
+  const settings=await ensureNotificationSettings(userId);
+  const column=NOTIFICATION_SETTING_COLUMNS[type]||NOTIFICATION_SETTING_COLUMNS.system;
+  if(Number(settings[column])!==1)return;
+  const targetUrl=url||notificationUrl(type,entityId);
+  const [r]=await q('INSERT INTO notifications(user_id,type,title,body,target_url) VALUES(?,?,?,?,?)',[userId,type,String(title).slice(0,220),String(body||'').slice(0,4000),targetUrl]);
+  if(!VAPID_READY||Number(settings.push_enabled)!==1)return r.insertId;
+  try{
+    const [subs]=await q('SELECT id,endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=?',[userId]);
+    const payload=JSON.stringify({title:String(title).slice(0,220),body:String(body||'').slice(0,4000),url:targetUrl,type});
+    await Promise.all(subs.map(async sub=>{
+      try{
+        await webpush.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},payload,{TTL:60,urgency:'high'});
+      }catch(e){
+        if(Number(e.statusCode)===404||Number(e.statusCode)===410)await q('DELETE FROM push_subscriptions WHERE id=?',[sub.id]);
+      }
+    }));
+  }catch(e){console.error('Push notification failed:',e.message)}
+  return r.insertId;
+}
+async function notifyUsers(userIds,options){
+  const ids=[...new Set((userIds||[]).map(Number).filter(Boolean))];
+  await Promise.all(ids.map(id=>createNotification(id,options).catch(e=>console.error('Notification failed:',e.message))));
+}
+async function notifyClassExcept(actorUserId,options){
+  const [rows]=await q("SELECT id FROM users WHERE status='ACTIVE' AND id<>?",[actorUserId||0]);
+  await notifyUsers(rows.map(x=>x.id),options);
+}
 
 // Exam/assignment datetime inputs are entered as Egypt local time (UTC+03:00).
 // MySQL DATETIME has no timezone, so parse exam values explicitly instead of
@@ -154,6 +211,14 @@ const PERMISSION_DEFS = [
 async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS profile_images(entity_type VARCHAR(20) NOT NULL,entity_id BIGINT UNSIGNED NOT NULL,mime_type VARCHAR(120) NOT NULL,data MEDIUMBLOB NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(entity_type,entity_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS chat_typing(user_id BIGINT UNSIGNED PRIMARY KEY,typing TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS push_subscriptions(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,endpoint TEXT NOT NULL,endpoint_hash CHAR(64) NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,expiration_time BIGINT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,INDEX idx_push_user(user_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS notifications(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NULL,title VARCHAR(220) NOT NULL,body TEXT,read_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  for(const [name,definition] of Object.entries({type:"VARCHAR(50) NOT NULL DEFAULT 'system'",target_url:'VARCHAR(500) NULL'})){
+    const [col]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notifications' AND COLUMN_NAME=? LIMIT 1",[name]);
+    if(!col.length)await q("ALTER TABLE notifications ADD COLUMN "+name+" "+definition);
+  }
+
   // MySQL does not support ADD COLUMN IF NOT EXISTS on all supported 8.x builds.
   // Check INFORMATION_SCHEMA first so bootstrap is safe and idempotent.
   // Keep the resources enum compatible with older Railway databases that were created before NOTE resources existed.
@@ -367,6 +432,38 @@ async function getBootstrap(req) {
   if(!req.session.userId) return {students,teachers,subjects,schedule,assignments:[],announcements:[],resources:[],exams:[],attendance:[],messages:[],notifications:[]};
   return {server_now_ms:Date.now(),students,teachers,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications};
 }
+
+app.get('/api/notifications/settings',requireAuth,async(req,res)=>{
+  try{res.json({settings:await ensureNotificationSettings(req.session.userId),vapidPublicKey:VAPID_READY?process.env.VAPID_PUBLIC_KEY:null})}
+  catch(e){res.status(500).json({error:'Could not load notification settings'})}
+});
+app.patch('/api/notifications/settings',requireAuth,async(req,res)=>{
+  try{
+    const current=await ensureNotificationSettings(req.session.userId);
+    const allowed=['class_chat_reply','teacher_chat_reply','exam_notifications','announcement_notifications','assignment_notifications','system_notifications','push_enabled'];
+    const next={}; for(const key of allowed)next[key]=req.body?.[key]===undefined?Number(current[key])?1:0:(req.body[key]?1:0);
+    await q('UPDATE notification_settings SET class_chat_reply=?,teacher_chat_reply=?,exam_notifications=?,announcement_notifications=?,assignment_notifications=?,system_notifications=?,push_enabled=? WHERE user_id=?',[next.class_chat_reply,next.teacher_chat_reply,next.exam_notifications,next.announcement_notifications,next.assignment_notifications,next.system_notifications,next.push_enabled,req.session.userId]);
+    res.json({settings:await ensureNotificationSettings(req.session.userId),vapidPublicKey:VAPID_READY?process.env.VAPID_PUBLIC_KEY:null});
+  }catch(e){res.status(500).json({error:'Could not save notification settings'})}
+});
+app.post('/api/notifications/push/subscribe',requireAuth,async(req,res)=>{
+  if(!VAPID_READY)return res.status(503).json({error:'Push notifications are not configured on the server'});
+  const sub=req.body||{},endpoint=String(sub.endpoint||'').trim(),p256dh=String(sub.keys?.p256dh||'').trim(),auth=String(sub.keys?.auth||'').trim();
+  if(!endpoint||!p256dh||!auth)return res.status(400).json({error:'Invalid push subscription'});
+  const hash=crypto.createHash('sha256').update(endpoint).digest('hex');
+  await q('INSERT INTO push_subscriptions(user_id,endpoint,endpoint_hash,p256dh,auth,expiration_time) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),p256dh=VALUES(p256dh),auth=VALUES(auth),expiration_time=VALUES(expiration_time),updated_at=CURRENT_TIMESTAMP',[req.session.userId,endpoint,hash,p256dh,auth,sub.expirationTime?Number(sub.expirationTime):null]);
+  await q('UPDATE notification_settings SET push_enabled=1 WHERE user_id=?',[req.session.userId]);
+  res.json({ok:true});
+});
+app.post('/api/notifications/push/unsubscribe',requireAuth,async(req,res)=>{
+  const endpoint=String(req.body?.endpoint||'').trim();
+  if(endpoint)await q('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint_hash=?',[req.session.userId,crypto.createHash('sha256').update(endpoint).digest('hex')]);
+  else await q('DELETE FROM push_subscriptions WHERE user_id=?',[req.session.userId]);
+  await q('UPDATE notification_settings SET push_enabled=0 WHERE user_id=?',[req.session.userId]);
+  res.json({ok:true});
+});
+app.post('/api/notifications/:id/read',requireAuth,async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid notification'});await q('UPDATE notifications SET read_at=COALESCE(read_at,NOW()) WHERE id=? AND user_id=?',[id,req.session.userId]);res.json({ok:true})});
+app.post('/api/notifications/read-all',requireAuth,async(req,res)=>{await q('UPDATE notifications SET read_at=COALESCE(read_at,NOW()) WHERE user_id=?',[req.session.userId]);res.json({ok:true})});
 
 app.get('/api/time',(req,res)=>res.json(cairoNow()));
 app.get('/api/bootstrap', async (req, res) => {
