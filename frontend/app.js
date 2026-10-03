@@ -488,8 +488,62 @@ async function toggleNotificationSetting(key,enabled){
 function updateNotificationBadge(){const count=(S.notifications||[]).filter(n=>!n.read_at).length;const dot=$('#bell i');if(dot)dot.style.display=count?'block':'none';const mobile=$('#mobileAlerts');if(mobile)mobile.innerHTML='♢'+(count?' <sup>'+Math.min(count,99)+'</sup>':'')+'<br>Alerts'}
 async function markNotificationRead(id){try{await api('/api/notifications/'+id+'/read',{method:'POST'});S.notifications=(S.notifications||[]).map(n=>Number(n.id)===Number(id)?{...n,read_at:new Date().toISOString()}:n);updateNotificationBadge()}catch{}}
 function openNotificationTarget(id){const n=(S.notifications||[]).find(x=>Number(x.id)===Number(id));if(!n)return;if(n.id)markNotificationRead(n.id);close();const type=String(n.type||'');const entityId=Number(n.entity_id||0);if(type.includes('chat'))go(type==='teacher_chat_reply'?'teacherChat':'chat');else if(type.includes('exam')){go('exams');if(entityId)setTimeout(()=>startExam(entityId),80)}else if(type.includes('assignment')){go('assignments');if(entityId)setTimeout(()=>openAssignment(entityId),80)}else if(type==='announcement')go('announcements');}
-async function openNotifications(){try{await loadData();const list=S.notifications||[];modal('<div class="modalhead"><h2>Notifications</h2><div class="actions"><button class="btn ghost" onclick="markAllNotifications()">Mark all read</button><button class="close" onclick="b4Close()">×</button></div></div><div class="list">'+(list.length?list.map(n=>'<button class="item '+(n.read_at?'':'unread')+'" style="width:100%;text-align:inherit" onclick="openNotificationTarget('+Number(n.id)+')" data-notification-id="'+Number(n.id)+'"><span class="grow"><b>'+esc(n.title)+'</b><small class="muted">'+esc(n.body||'')+'</small></span><small class="muted">'+esc(n.created_at||'')+'</small></button>').join(''):'<div class="empty">No notifications.</div>')+'</div>')}catch(e){toast(e.message)}}
-async function markAllNotifications(){try{await api('/api/notifications/read-all',{method:'POST'});S.notifications=(S.notifications||[]).map(n=>({...n,read_at:n.read_at||new Date().toISOString()}));updateNotificationBadge();openNotifications()}catch(e){toast(e.message)}}
+async function notificationTime(value){
+  if(!value)return '';
+  const d=new Date(value);
+  if(Number.isNaN(d.getTime()))return String(value);
+  return d.toLocaleString(S.lang==='ar'?'ar-EG':'en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit',hour12:false});
+}
+function notificationMeta(n){
+  const type=String(n?.type||'');
+  if(type==='class_chat_reply')return {icon:'💬',tone:'chat'};
+  if(type==='teacher_chat_reply')return {icon:'☷',tone:'teacher'};
+  if(type==='exam'||type==='exam_submission')return {icon:'📝',tone:'exam'};
+  if(type==='announcement')return {icon:'📢',tone:'announcement'};
+  if(type==='assignment'||type==='assignment_submission')return {icon:'✓',tone:'assignment'};
+  return {icon:'⚙',tone:'system'};
+}
+async function openNotifications(){
+  try{
+    await loadData();
+    const list=S.notifications||[];
+    const ar=S.lang==='ar';
+    const unread=list.filter(n=>!n.read_at).length;
+    const items=list.length?list.map((n,i)=>{
+      const meta=notificationMeta(n);
+      return '<button class="notification-row '+(n.read_at?'':'unread')+'" style="width:100%;text-align:inherit;--notification-i:'+i+';" onclick="openNotificationTarget('+Number(n.id)+')" data-notification-id="'+Number(n.id)+'">'+
+        '<span class="notification-dot"></span>'+
+        '<span class="notification-icon '+meta.tone+'">'+meta.icon+'</span>'+
+        '<span class="notification-copy">'+
+          '<span class="notification-title">'+esc(n.title)+'</span>'+
+          '<span class="notification-body">'+esc(n.body||'')+'</span>'+
+        '</span>'+
+        '<span class="notification-time">'+esc(notificationTime(n.created_at))+'</span>'+
+        '<span class="notification-arrow">›</span>'+
+      '</button>';
+    }).join(''):'<div class="notification-empty"><span>🔔</span><b>'+(ar?'لا توجد إشعارات':'No notifications')+'</b><small>'+(ar?'كل الإشعارات المقروءة تم إخفاؤها':'Read notifications are hidden here')+'</small></div>';
+    modal(
+      '<div class="notification-modal">'+
+        '<div class="notification-head">'+
+          '<div class="notification-heading"><span class="notification-heading-icon">🔔</span><div><h2>'+(ar?'الإشعارات':'Notifications')+'</h2><p>'+(ar?'آخر نشاط في الفصل':'Latest activity in your class')+'</p></div></div>'+
+          '<div class="notification-actions">'+
+            '<button class="btn ghost notification-readall" onclick="markAllNotifications()">'+(ar?'إخفاء الكل':'Mark all read')+(unread?' <span>'+unread+'</span>':'')+'</button>'+
+            '<button class="close notification-close" onclick="b4Close()">×</button>'+
+          '</div>'+
+        '</div>'+
+        '<div class="notification-list">'+items+'</div>'+
+      '</div>'
+    );
+  }catch(e){toast(e.message)}
+}
+async function markAllNotifications(){
+  try{
+    await api('/api/notifications/read-all',{method:'POST'});
+    S.notifications=[];
+    updateNotificationBadge();
+    openNotifications();
+  }catch(e){toast(e.message)}
+}
 async function forgotPassword(){try{const d=await api('/api/auth/forgot-password',{method:'POST'});location.href=d.whatsapp}catch(e){toast('WhatsApp support is unavailable')}} 
 function passwordModal(){modal('<div class="modalhead"><h2>Change password</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="changePassword(event)"><label>Current password<input id="oldPw" type="password" required></label><label>New password<input id="newPw" type="password" minlength="8" required></label><button class="btn primary">Save</button></form>')}
 async function changePassword(e){e.preventDefault();try{await api('/api/auth/password',{method:'POST',body:JSON.stringify({currentPassword:$('#oldPw').value,newPassword:$('#newPw').value})});close();toast('Password changed ✓')}catch(x){toast(x.message)}}
