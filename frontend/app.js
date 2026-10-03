@@ -337,7 +337,28 @@ async function syncProfiles(){
   }catch{}
 }
 function profileSyncLoop(){clearInterval(window.profileSyncTimer);if(!S.me)return;syncProfiles();window.profileSyncTimer=setInterval(syncProfiles,1500)}
-async function loadMe(){try{const d=await api('/api/auth/me');S.me=d.user;S.linked=(await api('/api/auth/linked')).linked||[];try{S.notificationSettings=(await api('/api/notifications/settings')).settings||S.notificationSettings}catch{}ensureRealtime()}catch{S.me=null;S.linked=[];S.notificationSettings={class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0}}await loadData();render();updateNotificationBadge();profileSyncLoop();startAssignmentCountdown();liveDataLoop();if(S.me&&Number(S.notificationSettings?.push_enabled)===1)syncPushSubscription(false)}
+async function loadMe(){
+  try{
+    const d=await api('/api/auth/me');
+    S.me=d.user;
+    S.linked=(await api('/api/auth/linked')).linked||[];
+    try{
+      const ns=await api('/api/notifications/settings');
+      S.notificationSettings={...(S.notificationSettings||{}),...(ns.settings||{})};
+      S.vapidPublicKey=ns.vapidPublicKey||'';
+    }catch{
+      S.notificationSettings={...(S.notificationSettings||{}),push_enabled:0};
+      S.vapidPublicKey='';
+    }
+    ensureRealtime();
+  }catch{
+    S.me=null;S.linked=[];
+    S.notificationSettings={class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0};
+    S.vapidPublicKey='';
+  }
+  await loadData();render();updateNotificationBadge();profileSyncLoop();startAssignmentCountdown();liveDataLoop();
+  if(S.me) maybeEnableDeviceNotifications();
+}
 async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}updateNotificationBadge();S.error=''}catch(e){S.error=e.message}}
 
 function liveSnapshot(d){
@@ -412,11 +433,26 @@ function loginModal(){modal('<div class="modalhead"><h2>'+t('login')+'</h2><butt
 function activationModal(){modal('<div class="modalhead"><h2>'+t('activate')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="activate(event)"><label>One-time key<input id="actKey" required></label><label>Display name<input id="actName" required></label><label>Password<input id="actPw" type="password" minlength="8" required></label><button class="btn primary">Create account</button></form>')}
 async function activate(e){e.preventDefault();try{await api('/api/auth/activate',{method:'POST',body:JSON.stringify({key:$('#actKey').value.trim(),displayName:$('#actName').value.trim(),password:$('#actPw').value})});close();toast('Account created ✓');loginModal()}catch(x){toast(x.message)}}
 function googleLogin(){location.href=API+'/api/auth/google/login'}
+async function maybeEnableDeviceNotifications(){
+  try{
+    if(!S.me||!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))return;
+    if(Number(S.notificationSettings?.push_enabled)===1){
+      if(Notification.permission==='granted')await syncPushSubscription(false);
+      return;
+    }
+    if(Notification.permission!=='default')return;
+    const permission=await Notification.requestPermission();
+    if(permission==='granted'){
+      await syncPushSubscription(false);
+      render();
+    }
+  }catch{}
+}
 function base64ToUint8Array(base64){const pad='='.repeat((4-base64.length%4)%4),s=(base64+pad).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(s);return Uint8Array.from([...raw].map(ch=>ch.charCodeAt(0)))}
 async function syncPushSubscription(showErrors=true){
   try{
     if(!('serviceWorker' in navigator)||!('PushManager' in window))throw Error('Push notifications are not supported by this browser');
-    const cfg=await api('/api/notifications/settings');const publicKey=cfg.vapidPublicKey;if(!publicKey)throw Error('Push notifications are not configured yet');
+    const cfg=S.vapidPublicKey?{vapidPublicKey:S.vapidPublicKey}:await api('/api/notifications/settings');const publicKey=cfg.vapidPublicKey;if(!publicKey)throw Error('Push notifications are not configured yet');
     const permission=Notification.permission;
     if(permission!=='granted')throw Error(permission==='denied'?'Browser notifications are blocked. Enable them in browser settings.':'Notification permission is required');
     const registration=await navigator.serviceWorker.ready;
