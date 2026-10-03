@@ -322,33 +322,68 @@ async function syncProfiles(){
   }catch{}
 }
 function profileSyncLoop(){clearInterval(window.profileSyncTimer);if(!S.me)return;syncProfiles();window.profileSyncTimer=setInterval(syncProfiles,1500)}
-async function loadMe(){try{const d=await api('/api/auth/me');S.me=d.user;S.linked=(await api('/api/auth/linked')).linked||[];ensureRealtime()}catch{S.me=null;S.linked=[]}await loadData();render();profileSyncLoop();startAssignmentCountdown();liveDataLoop();if(S.me)setTimeout(()=>setupPushNotifications(true),1200)}
+async function loadMe(){try{const d=await api('/api/auth/me');S.me=d.user;S.linked=(await api('/api/auth/linked')).linked||[];ensureRealtime()}catch{S.me=null;S.linked=[]}await loadData();render();profileSyncLoop();startAssignmentCountdown();liveDataLoop();if(S.me)setTimeout(()=>setupPushNotifications(false),500)}
 async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[],notificationSettings:d.notification_settings||S.notificationSettings||{pushEnabled:true}});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}S.error=''}catch(e){S.error=e.message}}
 async function login(e){e.preventDefault();try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({login:$('#loginName').value.trim(),password:$('#loginPassword').value})});close();await loadMe();toast('Login successful ✓')}catch(x){toast(x.message)}}
 function loginModal(){modal('<div class="modalhead"><h2>'+t('login')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="login(event)"><label>Display name<input id="loginName" required autocomplete="username"></label><label>Password<input id="loginPassword" type="password" required autocomplete="current-password"></label><button class="btn primary">'+t('login')+' →</button></form><div class="login-divider"><span>or</span></div><button class="google-btn" onclick="googleLogin()">Continue with Google</button><button class="btn ghost" onclick="forgotPassword()">Forgot my password</button><button class="btn ghost" onclick="activationModal()">'+t('activate')+'</button>')}
 function activationModal(){modal('<div class="modalhead"><h2>'+t('activate')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="activate(event)"><label>One-time key<input id="actKey" required></label><label>Display name<input id="actName" required></label><label>Password<input id="actPw" type="password" minlength="8" required></label><button class="btn primary">Create account</button></form>')}
 async function activate(e){e.preventDefault();try{await api('/api/auth/activate',{method:'POST',body:JSON.stringify({key:$('#actKey').value.trim(),displayName:$('#actName').value.trim(),password:$('#actPw').value})});close();toast('Account created ✓');loginModal()}catch(x){toast(x.message)}}
 function googleLogin(){location.href=API+'/api/auth/google/login'}
-async function openNotifications(){try{const d=await api('/api/bootstrap');const list=d.notifications||[];modal('<div class="modalhead"><h2>Notifications</h2><button class="close" onclick="b4Close()">×</button></div><div class="list">'+(list.length?list.map(n=>'<div class="item"><span class="grow"><b>'+esc(n.title)+'</b><small class="muted">'+esc(n.body||'')+'</small></span><small class="muted">'+esc(n.created_at||'')+'</small></div>').join(''):'<div class="empty">No notifications.</div>')+'</div>')}catch(e){toast(e.message)}}
+async async function openNotifications(){
+  try{
+    const d=await api('/api/bootstrap');
+    const list=d.notifications||[];
+    S.notifications=list;
+    const unread=list.filter(n=>!n.read_at).length;
+    modal(
+      '<div class="modalhead"><h2>Notifications'+(unread?' <span class="badge">'+unread+'</span>':'')+'</h2><button class="close" onclick="b4Close()">×</button></div>'+
+      '<div class="notification-toolbar">'+(unread?'<button class="btn ghost" id="markAllNotifications">Mark all as read</button>':'')+'</div>'+
+      '<div class="list notification-list">'+
+      (list.length?list.map(n=>'<button type="button" class="item notification-item '+(n.read_at?'':'unread')+'" data-notification-id="'+esc(String(n.id))+'" data-notification-url="'+esc(n.url||'/')+'"><span class="grow"><b>'+esc(n.title)+'</b><small class="muted">'+esc(n.body||'')+'</small></span><small class="muted">'+chatTime(n.created_at)+'</small></button>').join(''):'<div class="empty">No notifications.</div>')+
+      '</div>'
+    );
+    document.querySelectorAll('.notification-item').forEach(el=>el.addEventListener('click',async()=>{
+      const id=Number(el.dataset.notificationId);
+      try{await api('/api/notifications/'+id+'/read',{method:'PATCH'});const n=S.notifications.find(x=>Number(x.id)===id);if(n)n.read_at=new Date().toISOString();el.classList.remove('unread')}catch{}
+      const url=el.dataset.notificationUrl||'/';
+      close();
+      if(url.startsWith('/')){const view=url.slice(1).split('/')[0]||'dashboard';const allowed=['assignments','exams','announcements','resources','chat','teacherChat'];if(allowed.includes(view)){go(view);return}}
+      if(/^https?:\\/\\//i.test(url))window.open(url,'_blank','noopener');
+    }));
+    $('#markAllNotifications')?.addEventListener('click',async()=>{
+      try{await api('/api/notifications/read-all',{method:'POST'});S.notifications.forEach(n=>n.read_at=new Date().toISOString());close();openNotifications()}catch(e){toast(e.message)}
+    });
+  }catch(e){toast(e.message)}
+}
 async function forgotPassword(){try{const d=await api('/api/auth/forgot-password',{method:'POST'});location.href=d.whatsapp}catch(e){toast('WhatsApp support is unavailable')}} 
 function passwordModal(){modal('<div class="modalhead"><h2>Change password</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="changePassword(event)"><label>Current password<input id="oldPw" type="password" required></label><label>New password<input id="newPw" type="password" minlength="8" required></label><button class="btn primary">Save</button></form>')}
 async function changePassword(e){e.preventDefault();try{await api('/api/auth/password',{method:'POST',body:JSON.stringify({currentPassword:$('#oldPw').value,newPassword:$('#newPw').value})});close();toast('Password changed ✓')}catch(x){toast(x.message)}}
 function urlBase64ToUint8Array(base64String){const padding='='.repeat((4-(base64String.length%4))%4);const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)))}
 async function setupPushNotifications(promptPermission=false){
-  if(!S.me||S.notificationSettings.pushEnabled===false||!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))return;
-  if(!promptPermission && Notification.permission!=='granted')return;
-  if(Notification.permission==='denied'){if(promptPermission)toast(t('permissionDenied'));return}
-  if(Notification.permission==='default'){if(!promptPermission)return;const permission=await Notification.requestPermission();if(permission!=='granted'){toast(t('permissionDenied'));return}}
+  if(!S.me||!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))return false;
+  if(Notification.permission==='denied'){if(promptPermission)toast(t('permissionDenied'));return false}
+  if(Notification.permission==='default'){
+    if(!promptPermission)return false;
+    const permission=await Notification.requestPermission();
+    if(permission!=='granted'){toast(t('permissionDenied'));return false}
+  }
   try{
-    const key=(await api('/api/notifications/vapid-public-key')).publicKey;if(!key)return;
+    const key=(await api('/api/notifications/vapid-public-key')).publicKey;
+    if(!key)throw Error('Push notifications are not configured on the server');
     const reg=await navigator.serviceWorker.ready;
     let sub=await reg.pushManager.getSubscription();
     if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(key)});
     await api('/api/notifications/subscribe',{method:'POST',body:JSON.stringify(sub.toJSON())});
-    S.notificationSettings={pushEnabled:true};render();
-    toast('Notifications enabled ✓');
-  }catch(e){if(promptPermission)toast(e.message||'Could not enable notifications')}
+    S.notificationSettings={pushEnabled:true};
+    render();
+    if(promptPermission)toast('Notifications enabled ✓');
+    return true;
+  }catch(e){
+    if(promptPermission)toast(e.message||'Could not enable notifications');
+    return false;
+  }
 }
+async function testNotification(){try{await api('/api/notifications/test',{method:'POST'});toast('Test notification sent ✓')}catch(e){toast(e.message)}}
 async function togglePushNotifications(){
   if(!S.me)return;
   const enabled=!!S.notificationSettings.pushEnabled;
