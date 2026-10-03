@@ -324,6 +324,74 @@ async function syncProfiles(){
 function profileSyncLoop(){clearInterval(window.profileSyncTimer);if(!S.me)return;syncProfiles();window.profileSyncTimer=setInterval(syncProfiles,1500)}
 async function loadMe(){try{const d=await api('/api/auth/me');S.me=d.user;S.linked=(await api('/api/auth/linked')).linked||[];ensureRealtime()}catch{S.me=null;S.linked=[]}await loadData();render();profileSyncLoop();startAssignmentCountdown();liveDataLoop()}
 async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}S.error=''}catch(e){S.error=e.message}}
+
+function liveSnapshot(d){
+  return JSON.stringify({
+    students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],
+    schedule:d.schedule||[],assignments:d.assignments||[],
+    announcements:d.announcements||[],resources:d.resources||[],
+    exams:d.exams||[],attendance:d.attendance||[],
+    messages:d.messages||[],notifications:d.notifications||[]
+  });
+}
+
+function applyLiveBootstrap(d){
+  const previous=liveSnapshot(S);
+  const next=liveSnapshot(d);
+  const server=Number(d.server_now_ms)||Date.now();
+  S.serverNowMs=server;
+  if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs){
+    S.serverClockOffsetMs=server-Date.now();
+  }
+  if(previous===next)return false;
+  Object.assign(S,{
+    students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],
+    schedule:d.schedule||[],assignments:d.assignments||[],
+    announcements:d.announcements||[],resources:d.resources||[],
+    exams:d.exams||[],attendance:d.attendance||[],
+    messages:d.messages||[],notifications:d.notifications||[]
+  });
+  return true;
+}
+
+async function liveDataTick(){
+  try{
+    const d=await api('/api/bootstrap?live='+Date.now(),{cache:'no-store'});
+    const changed=applyLiveBootstrap(d);
+    if(!changed)return;
+
+    // Update the visible page only when the server data actually changed.
+    // This is not a browser refresh and keeps the current URL, scroll position
+    // and open app state intact.
+    if(S.view==='dashboard'){
+      const stats=document.querySelectorAll('[data-stat-count]');
+      const values=[S.students.length,S.teachers.length,S.subjects.length,S.assignments.length];
+      stats.forEach((el,i)=>{
+        if(values[i]!==undefined)el.textContent=String(values[i]);
+      });
+      const list=document.querySelector('.dashboard-announcements');
+      if(list){
+        list.innerHTML=S.announcements.slice(0,5).map(a=>'<div class="item"><div class="grow"><b>'+esc(a.title)+'</b><p class="muted">'+esc(a.body||'')+'</p></div></div>').join('')||'<div class="empty">No announcements.</div>';
+      }
+    }else if(S.view==='chat'){
+      applyChatMessages(S.messages);
+    }else if(S.view==='teacherChat'){
+      applyTeacherMessages(S.teacherMessages);
+    }else if(S.view==='assignments'){
+      render();
+      startAssignmentCountdown();
+    }else if(S.view==='exams'){
+      render();
+    }
+  }catch{}
+}
+
+function liveDataLoop(){
+  clearInterval(window.liveDataTimer);
+  if(!S.me)return;
+  liveDataTick();
+  window.liveDataTimer=setInterval(liveDataTick,3000);
+}
 async function login(e){e.preventDefault();try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({login:$('#loginName').value.trim(),password:$('#loginPassword').value})});close();await loadMe();toast('Login successful ✓')}catch(x){toast(x.message)}}
 function loginModal(){modal('<div class="modalhead"><h2>'+t('login')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="login(event)"><label>Display name<input id="loginName" required autocomplete="username"></label><label>Password<input id="loginPassword" type="password" required autocomplete="current-password"></label><button class="btn primary">'+t('login')+' →</button></form><div class="login-divider"><span>or</span></div><button class="google-btn" onclick="googleLogin()">Continue with Google</button><button class="btn ghost" onclick="forgotPassword()">Forgot my password</button><button class="btn ghost" onclick="activationModal()">'+t('activate')+'</button>')}
 function activationModal(){modal('<div class="modalhead"><h2>'+t('activate')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="activate(event)"><label>One-time key<input id="actKey" required></label><label>Display name<input id="actName" required></label><label>Password<input id="actPw" type="password" minlength="8" required></label><button class="btn primary">Create account</button></form>')}
