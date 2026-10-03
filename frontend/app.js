@@ -365,22 +365,6 @@ function markChatSeen(boxId){
   if(!nodes.length)return;
   const latest=nodes[nodes.length-1];
   localStorage.setItem(chatSeenKey(boxId),String(latest.dataset.messageId));
-  box.querySelectorAll('.chat-new-divider').forEach(x=>x.remove());
-}
-function updateChatNewDivider(boxId){
-  const box=document.getElementById(boxId);
-  if(!box)return;
-  box.querySelectorAll('.chat-new-divider').forEach(x=>x.remove());
-  const saved=Number(localStorage.getItem(chatSeenKey(boxId)||'')||0);
-  if(!saved)return;
-  const nodes=[...box.querySelectorAll('[data-message-id]')];
-  const target=nodes.find(x=>Number(x.dataset.messageId)>saved);
-  if(target){
-    const divider=document.createElement('div');
-    divider.className='chat-new-divider';
-    divider.innerHTML='<span>NEW</span>';
-    target.before(divider);
-  }
 }
 function setupChatPosition(boxId){
   const box=document.getElementById(boxId);
@@ -389,7 +373,6 @@ function setupChatPosition(boxId){
   box.addEventListener('scroll',()=>{
     if(box.scrollHeight-box.scrollTop-box.clientHeight<80)markChatSeen(boxId);
   },{passive:true});
-  updateChatNewDivider(boxId);
 }
 function setupChatJumpButton(boxId,buttonId){
   const box=document.getElementById(boxId),button=document.getElementById(buttonId);
@@ -674,7 +657,15 @@ function patchChatList(box,next,htmlFn){
   const existing=[...box.children];
   const byId=new Map(existing.map(el=>[String(el.dataset.messageId||''),el]).filter(([id])=>id));
   const keep=new Set();
-  items.forEach(message=>{
+  const unique=[];
+  const seen=new Set();
+  for(const message of items){
+    const id=String(message?.id||'');
+    if(!id||seen.has(id))continue;
+    seen.add(id);
+    unique.push(message);
+  }
+  unique.forEach(message=>{
     const id=String(message.id);
     const holder=document.createElement('div');
     holder.innerHTML=String(htmlFn(message)).trim();
@@ -687,12 +678,14 @@ function patchChatList(box,next,htmlFn){
       if(node.outerHTML!==nextNode.outerHTML){
         node.replaceWith(nextNode);
         node=nextNode;
+        byId.set(id,node);
       }
     }else{
       node=nextNode;
       keep.add(id);
+      byId.set(id,node);
+      box.appendChild(node);
     }
-    box.appendChild(node);
   });
   existing.forEach(node=>{
     const id=String(node.dataset.messageId||'');
@@ -773,7 +766,6 @@ function applyTeacherMessages(messages){
     const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;
     patchChatList(box,S.teacherMessages,teacherMessageHTML);
     if(wasNearBottom)box.scrollTop=box.scrollHeight;
-    updateChatNewDivider('teacherMessages');
   }
 }
 function ensureTeacherRealtime(){if(!S.me)return;if(window.teacherRealtimeStream&&window.teacherRealtimeStream.readyState!==2)return;try{window.teacherRealtimeStream=new EventSource(API+'/api/teacher-chat/stream',{withCredentials:true});window.teacherRealtimeStream.addEventListener('open',()=>{window.teacherRealtimeOnline=true});window.teacherRealtimeStream.addEventListener('teacher-chat',e=>{try{const d=JSON.parse(e.data);if(d.type==='created'&&!S.teacherMessages.some(m=>Number(m.id)===Number(d.message.id)))applyTeacherMessages([...S.teacherMessages,d.message]);else if(d.type==='updated')applyTeacherMessages(S.teacherMessages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));else if(d.type==='deleted')applyTeacherMessages(S.teacherMessages.filter(m=>Number(m.id)!==Number(d.id)))}catch{}});window.teacherRealtimeStream.addEventListener('profile',e=>{try{applyProfileEvent(JSON.parse(e.data))}catch{}});window.teacherRealtimeStream.onerror=()=>{window.teacherRealtimeOnline=false}}catch{window.teacherRealtimeOnline=false}}
