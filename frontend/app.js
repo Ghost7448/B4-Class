@@ -534,23 +534,35 @@ async function resourceEdit(id){
 }
 async function saveResource(e,id){
   e.preventDefault();
+  const file=$('#rf')?.files?.[0];
+  if(file){
+    if(file.type!=='application/pdf')return toast('Please select a PDF file');
+    if(file.size>15*1024*1024)return toast('PDF is too large — maximum size is 15 MB');
+  }
   try{
-    const file=$('#rf')?.files?.[0];
-    let resourceId=id;
-    if(id){
-      await api('/api/admin/resources/'+id,{method:'PATCH',body:JSON.stringify({title:$('#rt').value,description:$('#rd').value,url:$('#ru').value,subjectId:Number($('#rs').value)||null})});
+    const title=$('#rt').value.trim(),description=$('#rd').value,subjectId=Number($('#rs').value)||null,url=$('#ru').value.trim();
+    if(!title)return toast('Resource title is required');
+    if(!id&&file){
+      const fd=new FormData();
+      fd.append('title',title);
+      fd.append('description',description);
+      fd.append('subjectId',String(subjectId||''));
+      fd.append('file',file);
+      const rr=await fetch(API+'/api/admin/resources/pdf',{method:'POST',credentials:'include',body:fd});
+      let d={};try{d=await rr.json()}catch{}
+      if(!rr.ok)throw Error(d.error||('Upload failed ('+rr.status+')'));
     }else{
-      const d=await api('/api/admin/resources',{method:'POST',body:JSON.stringify({title:$('#rt').value,description:$('#rd').value,url:$('#ru').value,subjectId:Number($('#rs').value)||null,resourceType:file?'FILE':'LINK'})});
-      resourceId=d.id;
+      const resourceId=id;
+      await api(id?'/api/admin/resources/'+id:'/api/admin/resources',{method:id?'PATCH':'POST',body:JSON.stringify({title,description,url,subjectId,resourceType:file?'FILE':'LINK'})});
+      if(file){
+        const fd=new FormData();fd.append('file',file);
+        const rr=await fetch(API+'/api/admin/resources/'+resourceId+'/pdf',{method:'POST',credentials:'include',body:fd});
+        let d={};try{d=await rr.json()}catch{}
+        if(!rr.ok)throw Error(d.error||('PDF upload failed ('+rr.status+')'));
+      }
     }
-    if(file){
-      const fd=new FormData();fd.append('file',file);
-      const rr=await fetch(API+'/api/admin/resources/'+resourceId+'/pdf',{method:'POST',credentials:'include',body:fd});
-      let rd={};try{rd=await rr.json()}catch{}
-      if(!rr.ok)throw Error(rd.error||'PDF upload failed');
-    }
-    close();await loadData();render();toast('Resource saved ✓');
-  }catch(x){toast(x.message)}
+    close();await loadData();render();toast('Resource published ✓');
+  }catch(x){toast(x.message||'Resource upload failed')}
 }
 function announcementEdit(id){const x=S.announcements.find(a=>Number(a.id)===Number(id))||{};modal('<div class="modalhead"><h2>Announcement</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveAnnouncement(event,'+(id||'null')+')"><input id="nt" value="'+esc(x.title||'')+'" placeholder="Title" required><input id="nc" value="'+esc(x.category||'General')+'" placeholder="Category"><textarea id="nb" required>'+esc(x.body||'')+'</textarea><button class="btn primary">Publish</button></form>')}
 async function saveAnnouncement(e,id){e.preventDefault();try{await api(id?'/api/admin/announcements/'+id:'/api/admin/announcements',{method:id?'PATCH':'POST',body:JSON.stringify({title:$('#nt').value,category:$('#nc').value,body:$('#nb').value})});close();await loadData();render()}catch(x){toast(x.message)}}
