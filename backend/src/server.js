@@ -90,9 +90,17 @@ function notificationUrl(type,id){
   return '/';
 }
 async function ensureNotificationSettings(userId){
-  await q('INSERT INTO notification_settings(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=user_id',[userId]);
-  const [rows]=await q('SELECT class_chat_reply,teacher_chat_reply,exam_notifications,announcement_notifications,assignment_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
-  return rows[0]||{class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0};
+  const defaults={class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0};
+  if(!userId)return defaults;
+  try{
+    await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await q('INSERT INTO notification_settings(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=user_id',[userId]);
+    const [rows]=await q('SELECT class_chat_reply,teacher_chat_reply,exam_notifications,announcement_notifications,assignment_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
+    return rows[0]||defaults;
+  }catch(e){
+    console.error('Notification settings bootstrap failed:',e.message);
+    return defaults;
+  }
 }
 async function createNotification(userId,{type='system',title,body='',entityId=null,url=null}={}){
   if(!userId||!title)return;
@@ -435,8 +443,8 @@ async function getBootstrap(req) {
 }
 
 app.get('/api/notifications/settings',requireAuth,async(req,res)=>{
-  try{res.json({settings:await ensureNotificationSettings(req.session.userId),vapidPublicKey:VAPID_READY?process.env.VAPID_PUBLIC_KEY:null})}
-  catch(e){res.status(500).json({error:'Could not load notification settings'})}
+  const settings=await ensureNotificationSettings(req.session.userId);
+  res.json({settings,vapidPublicKey:VAPID_READY?process.env.VAPID_PUBLIC_KEY:null});
 });
 app.patch('/api/notifications/settings',requireAuth,async(req,res)=>{
   try{
