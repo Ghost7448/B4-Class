@@ -329,7 +329,7 @@ function loginModal(){modal('<div class="modalhead"><h2>'+t('login')+'</h2><butt
 function activationModal(){modal('<div class="modalhead"><h2>'+t('activate')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="activate(event)"><label>One-time key<input id="actKey" required></label><label>Display name<input id="actName" required></label><label>Password<input id="actPw" type="password" minlength="8" required></label><button class="btn primary">Create account</button></form>')}
 async function activate(e){e.preventDefault();try{await api('/api/auth/activate',{method:'POST',body:JSON.stringify({key:$('#actKey').value.trim(),displayName:$('#actName').value.trim(),password:$('#actPw').value})});close();toast('Account created ✓');loginModal()}catch(x){toast(x.message)}}
 function googleLogin(){location.href=API+'/api/auth/google/login'}
-async async function updateNotificationBell(){
+async function updateNotificationBell(){
   const unread=(S.notifications||[]).filter(n=>!n.read_at).length;
   const bell=$('#bell');
   if(!bell)return;
