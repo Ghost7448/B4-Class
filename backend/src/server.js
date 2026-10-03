@@ -373,6 +373,12 @@ async function getBootstrap(req) {
     WHERE class_name='B4' ORDER BY created_at DESC LIMIT 20
   `);
   const [schedule] = await q(`SELECT day_name,p1,p2,p3,p4 FROM schedule WHERE class_name='B4' ORDER BY day_order`);
+  let notification_settings={pushEnabled:true};
+  if(req.session.userId){
+    await q("INSERT INTO notification_settings(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=user_id",[req.session.userId]);
+    const [ns]=await q("SELECT push_enabled FROM notification_settings WHERE user_id=? LIMIT 1",[req.session.userId]);
+    notification_settings={pushEnabled:Number(ns[0]?.push_enabled??1)===1};
+  }
   const [resources] = await q(`
     SELECT r.id,r.title,r.description,r.url,r.created_by,
            COALESCE(r.file_url,CASE WHEN rf.id IS NOT NULL THEN CONCAT('/api/resources/files/',rf.id) END) file_url,
@@ -423,7 +429,7 @@ async function getBootstrap(req) {
     `,[req.session.userId]);
   }
   if(!req.session.userId) return {students,teachers,subjects,schedule,assignments:[],announcements:[],resources:[],exams:[],attendance:[],messages:[],notifications:[]};
-  return {server_now_ms:Date.now(),students,teachers,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications};
+  return {server_now_ms:Date.now(),students,teachers,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications,notification_settings};
 }
 
 app.get('/api/notifications/vapid-public-key',requireAuth,async(req,res)=>{
