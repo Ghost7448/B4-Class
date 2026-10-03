@@ -43,7 +43,22 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '2mb' }));
 const assignmentUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const submissionUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 }, fileFilter: (req,file,cb) => cb(null, file.mimetype === 'application/pdf') });
+const pdfUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req,file,cb) => {
+    if(file.mimetype === 'application/pdf') return cb(null,true);
+    const err=new Error('Only PDF files are allowed');
+    err.code='INVALID_PDF_TYPE';
+    cb(err);
+  }
+});
+const pdfUploadSingle=(req,res,next)=>pdfUpload.single('file')(req,res,err=>{
+  if(!err)return next();
+  if(err.code==='LIMIT_FILE_SIZE')return res.status(413).json({error:'PDF is too large — maximum size is 20 MB'});
+  if(err.code==='INVALID_PDF_TYPE')return res.status(400).json({error:'Only PDF files are allowed'});
+  return res.status(400).json({error:err.message||'PDF upload failed'});
+});
 
 const MySQLStore = MySQLStoreFactory(session);
 app.use(session({
@@ -992,7 +1007,7 @@ app.post('/api/admin/resources', requirePermission('MANAGE_RESOURCES'), async(re
 
 // Unified resource publisher: supports a normal link/note, a PDF, or both in one request.
 // The PDF is optional, so publishing without choosing a file no longer hits the PDF-only endpoint.
-app.post('/api/admin/resources/publish', requirePermission('MANAGE_RESOURCES'), pdfUpload.single('file'), async(req,res)=>{
+app.post('/api/admin/resources/publish', requirePermission('MANAGE_RESOURCES'), pdfUploadSingle, async(req,res)=>{
   try{
     const title=String(req.body?.title||'').trim();
     const description=String(req.body?.description||'').trim();
@@ -1023,7 +1038,7 @@ app.post('/api/admin/resources/publish', requirePermission('MANAGE_RESOURCES'), 
   }
 });
 
-app.post('/api/admin/resources/pdf', requirePermission('MANAGE_RESOURCES'), pdfUpload.single('file'), async(req,res)=>{
+app.post('/api/admin/resources/pdf', requirePermission('MANAGE_RESOURCES'), pdfUploadSingle, async(req,res)=>{
   if(!req.file) return res.status(400).json({error:'PDF file is required'});
   try{
     const title=String(req.body?.title||req.file.originalname).trim();
@@ -1046,7 +1061,7 @@ app.get('/api/resources/files/:id', requireAuth, async(req,res)=>{
   res.setHeader('Content-Disposition','inline; filename*=UTF-8\'\''+encodeURIComponent(rows[0].filename));
   res.send(rows[0].data);
 });
-app.post('/api/admin/resources/:id/pdf', requirePermission('MANAGE_RESOURCES'), pdfUpload.single('file'), async(req,res)=>{
+app.post('/api/admin/resources/:id/pdf', requirePermission('MANAGE_RESOURCES'), pdfUploadSingle, async(req,res)=>{
   const id=Number(req.params.id);
   if(!Number.isSafeInteger(id)||!req.file) return res.status(400).json({error:'Valid resource id and PDF file are required'});
   try{ await assertTeacherOwner(req,'resources',id); }catch(e){ return res.status(e.statusCode||403).json({error:e.message}); }
