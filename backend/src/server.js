@@ -82,10 +82,11 @@ const NOTIFICATION_SETTING_COLUMNS={
 };
 function notificationUrl(type,id){
   const n=Number(id)||0;
-  if(type==='class_chat_reply'||type==='teacher_chat_reply')return '/';
-  if(type==='exam'||type==='exam_submission')return n?'/#exam-'+n:'/';
-  if(type==='announcement')return '/#announcements';
-  if(type==='assignment'||type==='assignment_submission')return n?'/#assignment-'+n:'/';
+  if(type==='class_chat_reply')return '/?view=chat';
+  if(type==='teacher_chat_reply')return '/?view=teacherChat';
+  if(type==='exam'||type==='exam_submission')return n?'/?view=exams&id='+n:'/?view=exams';
+  if(type==='announcement')return '/?view=announcements';
+  if(type==='assignment'||type==='assignment_submission')return n?'/?view=assignments&id='+n:'/?view=assignments';
   return '/';
 }
 async function ensureNotificationSettings(userId){
