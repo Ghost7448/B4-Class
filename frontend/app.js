@@ -356,7 +356,7 @@ async function openNotifications(){
       const url=el.dataset.notificationUrl||'/';
       close();
       if(url.startsWith('/')){const view=url.slice(1).split('/')[0]||'dashboard';const allowed=['assignments','exams','announcements','resources','chat','teacherChat'];if(allowed.includes(view)){go(view);return}}
-      if(/^https?:\\/\\//i.test(url))window.open(url,'_blank','noopener');
+      if(/^https?:\/\//i.test(url))window.open(url,'_blank','noopener');
     }));
     $('#markAllNotifications')?.addEventListener('click',async()=>{
       try{await api('/api/notifications/read-all',{method:'POST'});S.notifications.forEach(n=>n.read_at=new Date().toISOString());updateNotificationBell();close();openNotifications()}catch(e){toast(e.message)}
