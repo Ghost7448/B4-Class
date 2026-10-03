@@ -530,7 +530,7 @@ async function resourceEdit(id){
     '<label>Subject<select id="rs">'+S.subjects.map(s=>'<option value="'+s.id+'" '+(Number(s.id)===Number(x.subject_id)?'selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></label>'+
     '<label>Description<textarea id="rd" rows="3">'+esc(x.description||'')+'</textarea></label>'+
     '<label>Link (optional)<input id="ru" value="'+esc(x.url||'')+'" placeholder="https://..."></label>'+
-    '<label>PDF (optional)<input id="rf" type="file" accept="application/pdf"><small class="muted">PDF files up to 15 MB.</small></label>'+
+    '<label>PDF (optional)<input id="rf" type="file" accept="application/pdf"><small class="muted">PDF files up to 20 MB.</small></label>'+
     (x.filename?'<div class="notice">Current PDF: '+esc(x.filename)+'</div>':'')+
     '<button class="btn primary">'+(id?'Save changes':'Publish resource')+'</button></form>');
 }
@@ -539,11 +539,16 @@ async function saveResource(e,id){
   const file=$('#rf')?.files?.[0];
   if(file){
     if(file.type!=='application/pdf')return toast('Please select a PDF file');
-    if(file.size>15*1024*1024)return toast('PDF is too large — maximum size is 15 MB');
+    if(file.size>20*1024*1024)return toast('PDF is too large — maximum size is 20 MB');
   }
   try{
-    const title=$('#rt').value.trim(),description=$('#rd').value,subjectId=Number($('#rs').value)||null,url=$('#ru').value.trim();
+    const title=$('#rt').value.trim();
+    const description=$('#rd').value.trim();
+    const subjectId=Number($('#rs').value)||null;
+    const url=$('#ru').value.trim();
     if(!title)return toast('Resource title is required');
+    if(url&&!/^https?:\/\//i.test(url))return toast('Link must start with http:// or https://');
+
     if(!id&&file){
       const fd=new FormData();
       fd.append('title',title);
@@ -552,15 +557,21 @@ async function saveResource(e,id){
       fd.append('file',file);
       const rr=await fetch(API+'/api/admin/resources/pdf',{method:'POST',credentials:'include',body:fd});
       let d={};try{d=await rr.json()}catch{}
-      if(!rr.ok)throw Error(d.error||('Upload failed ('+rr.status+')'));
+      if(!rr.ok)throw Error(d.error||('PDF upload failed ('+rr.status+')'));
     }else{
       const resourceId=id;
-      await api(id?'/api/admin/resources/'+id:'/api/admin/resources',{method:id?'PATCH':'POST',body:JSON.stringify({title,description,url,subjectId,resourceType:file?'FILE':'LINK'})});
+      const resourceType=file?'FILE':(url?'LINK':'NOTE');
+      const d=await api(id?'/api/admin/resources/'+id:'/api/admin/resources',{
+        method:id?'PATCH':'POST',
+        body:JSON.stringify({title,description,url,subjectId,resourceType})
+      });
+      const createdId=id||d.id;
       if(file){
-        const fd=new FormData();fd.append('file',file);
-        const rr=await fetch(API+'/api/admin/resources/'+resourceId+'/pdf',{method:'POST',credentials:'include',body:fd});
-        let d={};try{d=await rr.json()}catch{}
-        if(!rr.ok)throw Error(d.error||('PDF upload failed ('+rr.status+')'));
+        const fd=new FormData();
+        fd.append('file',file);
+        const rr=await fetch(API+'/api/admin/resources/'+createdId+'/pdf',{method:'POST',credentials:'include',body:fd});
+        let out={};try{out=await rr.json()}catch{}
+        if(!rr.ok)throw Error(out.error||('PDF upload failed ('+rr.status+')'));
       }
     }
     close();await loadData();render();toast('Resource published ✓');
