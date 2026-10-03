@@ -166,17 +166,27 @@ function cairoNow() {
 
 const chatStreams = new Set();
 const teacherChatStreams = new Set();
+const globalStreams = new Set();
+
 function pushChatEvent(event, payload) {
   const packet = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
   for (const client of chatStreams) { try { client.res.write(packet); } catch { chatStreams.delete(client); } }
 }
 function pushTeacherChatEvent(event, payload) {
-  const packet = `event: ${event}\\ndata: ${JSON.stringify(payload)}\\n\\n`;
+  const packet = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
   for (const client of teacherChatStreams) { try { client.res.write(packet); } catch { teacherChatStreams.delete(client); } }
+}
+function pushGlobalEvent(event='data', payload={}) {
+  const packet = `event: ${event}\ndata: ${JSON.stringify({ ...payload, at: Date.now() })}\n\n`;
+  for (const client of globalStreams) {
+    try { client.res.write(packet); }
+    catch { globalStreams.delete(client); }
+  }
 }
 setInterval(() => {
   for (const client of chatStreams) { try { client.res.write(': ping\n\n'); } catch { chatStreams.delete(client); } }
-  for (const client of teacherChatStreams) { try { client.res.write(': ping\\n\\n'); } catch { teacherChatStreams.delete(client); } }
+  for (const client of teacherChatStreams) { try { client.res.write(': ping\n\n'); } catch { teacherChatStreams.delete(client); } }
+  for (const client of globalStreams) { try { client.res.write(': ping\n\n'); } catch { globalStreams.delete(client); } }
 }, 25000);
 
 async function audit(req, action, entityType = null, entityId = null, details = null) {
@@ -357,6 +367,40 @@ async function userById(id) {
   if(!r[0]) return null;
   return {...r[0],permissions:await getPermissionCodes(id)};
 }
+
+// Push a single lightweight "data changed" event after successful write requests.
+// The browser then syncs the current bootstrap silently instead of reloading the page.
+app.use((req,res,next)=>{
+  const method=String(req.method||'GET').toUpperCase();
+  const path=String(req.path||req.url||'');
+  const isWrite=['POST','PUT','PATCH','DELETE'].includes(method);
+  const ignored=
+    path.startsWith('/api/notifications/') ||
+    path==='/api/notifications/settings' ||
+    path==='/api/chat/typing' ||
+    path==='/api/teacher-chat/typing' ||
+    path==='/api/profile/live';
+  if(isWrite&&!ignored){
+    res.on('finish',()=>{
+      if(res.statusCode>=200&&res.statusCode<400)pushGlobalEvent('data-changed',{path,method});
+    });
+  }
+  next();
+});
+
+app.get('/api/live/stream',requireAuth,async(req,res)=>{
+  res.status(200).set({
+    'Content-Type':'text/event-stream; charset=utf-8',
+    'Cache-Control':'no-cache, no-transform',
+    'Connection':'keep-alive',
+    'X-Accel-Buffering':'no'
+  });
+  res.flushHeaders?.();
+  const client={res,userId:req.session.userId};
+  globalStreams.add(client);
+  res.write('event: ready\ndata: {"ok":true}\n\n');
+  req.on('close',()=>globalStreams.delete(client));
+});
 
 app.get('/api/health', async (req, res) => {
   try {
