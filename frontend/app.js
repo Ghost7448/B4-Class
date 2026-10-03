@@ -337,7 +337,7 @@ async function updateNotificationBell(){
   if(dot)dot.style.display=unread?'block':'none';
   bell.title=unread?('Notifications ('+unread+' unread)'):'Notifications';
 }
-function openNotifications(){
+async function openNotifications(){
   try{
     const d=await api('/api/bootstrap');
     const list=d.notifications||[];
