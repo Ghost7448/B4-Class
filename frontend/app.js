@@ -1,7 +1,7 @@
 const $=s=>document.querySelector(s),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const API=(window.B4_API_URL||'').replace(/\/$/,'');
-const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'light',view:'dashboard',me:null,linked:[],students:[],teachers:[],subjects:[],schedule:[],assignments:[],resources:[],exams:[],announcements:[],messages:[],attendance:[],developers:[],badges:[],accounts:[],permissions:[],users:[],teacherMessages:[],notifications:[],notificationSettings:{pushEnabled:true},examReview:null,serverNowMs:0,serverClockOffsetMs:0,serverTimeZone:'Africa/Cairo',error:''};
-const L={en:{dashboard:'Dashboard',students:'Students',teachers:'Teachers',subjects:'Subjects',schedule:'Schedule',assignments:'Assignments',resources:'Resources',exams:'Exam Center',announcements:'Announcements',chat:'Class Chat',teacherChat:'Teacher Chat',attendance:'Attendance',admin:'Admin Center',teacherCenter:'Teacher Center',settings:'Settings',developers:'Developers',login:'Login',logout:'Log out',activate:'Activation Key',ai:'B4 AI',search:'Search everything...',guest:'Guest',save:'Save',add:'Add',edit:'Edit',delete:'Delete',open:'Open resource',light:'Light mode',dark:'Dark mode',english:'English',arabic:'Arabic',administrator:'Administrator — all permissions',superAdmin:'Super Admin',classRole:'Class role',systemAccess:'System access',notifications:'Notifications',pushNotifications:'Push notifications',notificationsOn:'Notifications are ON',notificationsOff:'Notifications are OFF',enableNotifications:'Enable notifications',disableNotifications:'Disable notifications',permissionDenied:'Notification permission is blocked in your browser settings.',notificationsUnsupported:'This browser does not support push notifications.'},ar:{dashboard:'الرئيسية',students:'الطلاب',teachers:'المدرسين',subjects:'المواد',schedule:'الجدول',assignments:'الواجبات',resources:'المصادر',exams:'الامتحانات',announcements:'الإعلانات',chat:'شات الفصل',teacherChat:'شات المدرسين',attendance:'الحضور',admin:'مركز الإدارة',teacherCenter:'مركز المدرس',settings:'الإعدادات',developers:'المطورون',login:'تسجيل الدخول',logout:'تسجيل الخروج',activate:'مفتاح التفعيل',ai:'مساعد B4',search:'ابحث...',guest:'زائر',save:'حفظ',add:'إضافة',edit:'تعديل',delete:'حذف',open:'فتح المصدر',light:'الوضع النهاري',dark:'الوضع الليلي',english:'الإنجليزية',arabic:'العربية',administrator:'Administrator — كل الصلاحيات',superAdmin:'Super Admin',classRole:'دور الحساب',systemAccess:'صلاحية النظام',notifications:'الإشعارات',pushNotifications:'إشعارات الهاتف',notificationsOn:'الإشعارات مفعلة',notificationsOff:'الإشعارات متوقفة',enableNotifications:'تشغيل الإشعارات',disableNotifications:'إيقاف الإشعارات',permissionDenied:'إذن الإشعارات مرفوض من إعدادات المتصفح.',notificationsUnsupported:'المتصفح لا يدعم الإشعارات.'}};
+const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'light',view:'dashboard',me:null,linked:[],students:[],teachers:[],subjects:[],schedule:[],assignments:[],resources:[],exams:[],announcements:[],messages:[],attendance:[],developers:[],badges:[],accounts:[],permissions:[],users:[],teacherMessages:[],notifications:[],examReview:null,serverNowMs:0,serverClockOffsetMs:0,serverTimeZone:'Africa/Cairo',error:''};
+const L={en:{dashboard:'Dashboard',students:'Students',teachers:'Teachers',subjects:'Subjects',schedule:'Schedule',assignments:'Assignments',resources:'Resources',exams:'Exam Center',announcements:'Announcements',chat:'Class Chat',teacherChat:'Teacher Chat',attendance:'Attendance',admin:'Admin Center',teacherCenter:'Teacher Center',settings:'Settings',developers:'Developers',login:'Login',logout:'Log out',activate:'Activation Key',ai:'B4 AI',search:'Search everything...',guest:'Guest',save:'Save',add:'Add',edit:'Edit',delete:'Delete',open:'Open resource',light:'Light mode',dark:'Dark mode',english:'English',arabic:'Arabic',administrator:'Administrator — all permissions',superAdmin:'Super Admin',classRole:'Class role',systemAccess:'System access'},ar:{dashboard:'الرئيسية',students:'الطلاب',teachers:'المدرسين',subjects:'المواد',schedule:'الجدول',assignments:'الواجبات',resources:'المصادر',exams:'الامتحانات',announcements:'الإعلانات',chat:'شات الفصل',teacherChat:'شات المدرسين',attendance:'الحضور',admin:'مركز الإدارة',teacherCenter:'مركز المدرس',settings:'الإعدادات',developers:'المطورون',login:'تسجيل الدخول',logout:'تسجيل الخروج',activate:'مفتاح التفعيل',ai:'مساعد B4',search:'ابحث...',guest:'زائر',save:'حفظ',add:'إضافة',edit:'تعديل',delete:'حذف',open:'فتح المصدر',light:'الوضع النهاري',dark:'الوضع الليلي',english:'الإنجليزية',arabic:'العربية',administrator:'Administrator — كل الصلاحيات',superAdmin:'Super Admin',classRole:'دور الحساب',systemAccess:'صلاحية النظام'}};
 const t=k=>L[S.lang][k]||k;
 const PERMS=[['MANAGE_CHAT','Manage Chat / Moderate messages'],['MANAGE_ACCOUNTS','Manage Accounts'],['MANAGE_PERMISSIONS','Manage Permissions'],['VIEW_LOGS','View Logs'],['VIEW_ADMIN_CENTER','View Admin Center'],['MANAGE_STUDENTS','Manage Students'],['MANAGE_TEACHERS','Manage Teachers'],['MANAGE_ROLES','Manage Roles'],['MANAGE_ADMINS','Manage Admins'],['MANAGE_KEYS','Manage Activation Keys'],['MANAGE_BADGES','Manage Badges'],['MANAGE_SUBJECTS','Manage Subjects'],['MANAGE_SCHEDULE','Manage Schedule'],['MANAGE_ASSIGNMENTS','Manage Assignments'],['MANAGE_RESOURCES','Manage Resources / PDFs'],['MANAGE_EXAMS','Manage Exams'],['MANAGE_ANNOUNCEMENTS','Manage Announcements'],['MANAGE_ATTENDANCE','Manage Attendance'],['MANAGE_TEACHER_CHAT','Teacher Chat'],['MANAGE_ANALYTICS','Attendance Analytics'],['USE_AI','Use AI'],['MANAGE_DEVELOPERS','Manage Developers'],['VIEW_CLASS','View Class'],['ADMINISTRATOR','Administrator — ALL permissions']];
 const api=async(path,opt={})=>{const r=await fetch(API+path,{credentials:'include',...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Request failed');return d};
@@ -281,7 +281,7 @@ function settingsV(){
   const ar=S.lang==='ar';
   return title(t('settings'),ar?'إعدادات الحساب واللغة والمظهر وربط Google.':'Account, language, theme and Google linking.')+
   '<div class="grid c2"><div class="card"><h3>'+ (ar?'الملف الشخصي':'Profile') +'</h3><form class="form" onsubmit="saveProfile(event)"><label>'+ (ar?'اسم العرض':'Display name') +'<input id="displayName" value="'+esc(S.me?.display_name||'')+'" required></label><label>'+ (ar?'صورة الملف الشخصي':'Profile image') +'<input id="profileAvatar" type="file" accept="image/png,image/jpeg,image/webp"></label><button class="btn primary">'+t('save')+'</button></form><button class="btn ghost" onclick="passwordModal()">'+(ar?'تغيير كلمة المرور':'Change password')+'</button><button class="btn danger" onclick="logout()"> '+t('logout')+'</button></div>'+
-  '<div class="card"><h3>'+ (ar?'التفضيلات':'Preferences') +'</h3><div class="settings-lang"><span class="muted">'+t('arabic')+' / '+t('english')+'</span><div><button class="btn '+(S.lang==='en'?'primary':'ghost')+'" onclick="setLang(\'en\')">EN</button><button class="btn '+(S.lang==='ar'?'primary':'ghost')+'" onclick="setLang(\'ar\')">عربي</button></div></div><button class="btn ghost" onclick="toggleTheme()">'+(S.theme==='dark'?t('light'):t('dark'))+'</button><hr><h3>'+t('notifications')+'</h3><p class="muted">'+t('pushNotifications')+'</p><div class="settings-lang"><span class="muted">'+(S.notificationSettings.pushEnabled?t('notificationsOn'):t('notificationsOff'))+'</span><button class="btn '+(S.notificationSettings.pushEnabled?'primary':'ghost')+'" onclick="togglePushNotifications()">'+(S.notificationSettings.pushEnabled?t('disableNotifications'):t('enableNotifications'))+'</button></div><hr><h3>Google</h3><p class="muted">'+(S.linked.length?(ar?'Google مرتبط':'Google linked'):(ar?'Google غير مرتبط':'Google not linked'))+'</p><button class="btn primary" onclick="googleLink()">'+(S.linked.length?(ar?'إعادة ربط Google':'Relink Google'):(ar?'ربط Google':'Link Google'))+'</button>'+(S.linked.length?'<button class="btn danger" onclick="unlinkGoogle()">'+(ar?'إلغاء ربط Google':'Unlink Google')+'</button>':'')+'</div></div>';
+  '<div class="card"><h3>'+ (ar?'التفضيلات':'Preferences') +'</h3><div class="settings-lang"><span class="muted">'+t('arabic')+' / '+t('english')+'</span><div><button class="btn '+(S.lang==='en'?'primary':'ghost')+'" onclick="setLang(\'en\')">EN</button><button class="btn '+(S.lang==='ar'?'primary':'ghost')+'" onclick="setLang(\'ar\')">عربي</button></div></div><button class="btn ghost" onclick="toggleTheme()">'+(S.theme==='dark'?t('light'):t('dark'))+'</button><hr><h3>Google</h3><p class="muted">'+(S.linked.length?(ar?'Google مرتبط':'Google linked'):(ar?'Google غير مرتبط':'Google not linked'))+'</p><button class="btn primary" onclick="googleLink()">'+(S.linked.length?(ar?'إعادة ربط Google':'Relink Google'):(ar?'ربط Google':'Link Google'))+'</button>'+(S.linked.length?'<button class="btn danger" onclick="unlinkGoogle()">'+(ar?'إلغاء ربط Google':'Unlink Google')+'</button>':'')+'</div></div>';
 }
 function devV(){return title(t('developers'),'The Wep Devoleper')+'<div class="grid developers-grid">'+S.developers.map(d=>'<article class="card developer-card"><div class="developer-photo"><img class="avatar xl" src="'+esc(d.avatar_url||'/assets/logo.svg')+'" onerror="this.src=\'assets/logo.svg\'"></div><div class="developer-info"><span class="badge">B4 DEVELOPER</span>'+(d.title?'<span class="developer-title">'+esc(d.title)+'</span>':'')+(d.title2?'<span class="developer-title">'+esc(d.title2)+'</span>':'')+'<h3>'+esc(d.name)+'</h3>'+(d.link_url?'<a class="btn ghost developer-link" href="'+esc(d.link_url)+'" target="_blank" rel="noopener">Open profile ↗</a>':'')+'</div></article>').join('')||'<div class="card empty">No developers added yet.</div>'+'</div>'}
 function animateDashboardStats(){
@@ -322,90 +322,17 @@ async function syncProfiles(){
   }catch{}
 }
 function profileSyncLoop(){clearInterval(window.profileSyncTimer);if(!S.me)return;syncProfiles();window.profileSyncTimer=setInterval(syncProfiles,1500)}
-async function loadMe(){try{const d=await api('/api/auth/me');S.me=d.user;S.linked=(await api('/api/auth/linked')).linked||[];ensureRealtime()}catch{S.me=null;S.linked=[]}await loadData();render();profileSyncLoop();startAssignmentCountdown();liveDataLoop();if(S.me)setTimeout(()=>setupPushNotifications(false),500)}
-async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[],notificationSettings:d.notification_settings||S.notificationSettings||{pushEnabled:true}});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}S.error='';updateNotificationBell()}catch(e){S.error=e.message}}
+async function loadMe(){try{const d=await api('/api/auth/me');S.me=d.user;S.linked=(await api('/api/auth/linked')).linked||[];ensureRealtime()}catch{S.me=null;S.linked=[]}await loadData();render();profileSyncLoop();startAssignmentCountdown();liveDataLoop()}
+async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}S.error=''}catch(e){S.error=e.message}}
 async function login(e){e.preventDefault();try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({login:$('#loginName').value.trim(),password:$('#loginPassword').value})});close();await loadMe();toast('Login successful ✓')}catch(x){toast(x.message)}}
 function loginModal(){modal('<div class="modalhead"><h2>'+t('login')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="login(event)"><label>Display name<input id="loginName" required autocomplete="username"></label><label>Password<input id="loginPassword" type="password" required autocomplete="current-password"></label><button class="btn primary">'+t('login')+' →</button></form><div class="login-divider"><span>or</span></div><button class="google-btn" onclick="googleLogin()">Continue with Google</button><button class="btn ghost" onclick="forgotPassword()">Forgot my password</button><button class="btn ghost" onclick="activationModal()">'+t('activate')+'</button>')}
 function activationModal(){modal('<div class="modalhead"><h2>'+t('activate')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="activate(event)"><label>One-time key<input id="actKey" required></label><label>Display name<input id="actName" required></label><label>Password<input id="actPw" type="password" minlength="8" required></label><button class="btn primary">Create account</button></form>')}
 async function activate(e){e.preventDefault();try{await api('/api/auth/activate',{method:'POST',body:JSON.stringify({key:$('#actKey').value.trim(),displayName:$('#actName').value.trim(),password:$('#actPw').value})});close();toast('Account created ✓');loginModal()}catch(x){toast(x.message)}}
 function googleLogin(){location.href=API+'/api/auth/google/login'}
-async function updateNotificationBell(){
-  const unread=(S.notifications||[]).filter(n=>!n.read_at).length;
-  const bell=$('#bell');
-  if(!bell)return;
-  const dot=bell.querySelector('i');
-  if(dot)dot.style.display=unread?'block':'none';
-  bell.title=unread?('Notifications ('+unread+' unread)'):'Notifications';
-}
-async function openNotifications(){
-  try{
-    const d=await api('/api/bootstrap');
-    const list=d.notifications||[];
-    S.notifications=list;updateNotificationBell();
-    const unread=list.filter(n=>!n.read_at).length;
-    modal(
-      '<div class="modalhead"><h2>Notifications'+(unread?' <span class="badge">'+unread+'</span>':'')+'</h2><button class="close" onclick="b4Close()">×</button></div>'+
-      '<div class="notification-toolbar">'+(unread?'<button class="btn ghost" id="markAllNotifications">Mark all as read</button>':'')+'</div>'+
-      '<div class="list notification-list">'+
-      (list.length?list.map(n=>'<button type="button" class="item notification-item '+(n.read_at?'':'unread')+'" data-notification-id="'+esc(String(n.id))+'" data-notification-url="'+esc(n.url||'/')+'"><span class="grow"><b>'+esc(n.title)+'</b><small class="muted">'+esc(n.body||'')+'</small></span><small class="muted">'+chatTime(n.created_at)+'</small></button>').join(''):'<div class="empty">No notifications.</div>')+
-      '</div>'
-    );
-    document.querySelectorAll('.notification-item').forEach(el=>el.addEventListener('click',async()=>{
-      const id=Number(el.dataset.notificationId);
-      try{await api('/api/notifications/'+id+'/read',{method:'PATCH'});const n=S.notifications.find(x=>Number(x.id)===id);if(n)n.read_at=new Date().toISOString();el.classList.remove('unread');updateNotificationBell()}catch{}
-      const url=el.dataset.notificationUrl||'/';
-      close();
-      if(url.startsWith('/')){const view=url.slice(1).split('/')[0]||'dashboard';const allowed=['assignments','exams','announcements','resources','chat','teacherChat'];if(allowed.includes(view)){go(view);return}}
-      if(/^https?:\/\//i.test(url))window.open(url,'_blank','noopener');
-    }));
-    $('#markAllNotifications')?.addEventListener('click',async()=>{
-      try{await api('/api/notifications/read-all',{method:'POST'});S.notifications.forEach(n=>n.read_at=new Date().toISOString());updateNotificationBell();close();openNotifications()}catch(e){toast(e.message)}
-    });
-  }catch(e){toast(e.message)}
-}
+async function openNotifications(){try{const d=await api('/api/bootstrap');const list=d.notifications||[];modal('<div class="modalhead"><h2>Notifications</h2><button class="close" onclick="b4Close()">×</button></div><div class="list">'+(list.length?list.map(n=>'<div class="item"><span class="grow"><b>'+esc(n.title)+'</b><small class="muted">'+esc(n.body||'')+'</small></span><small class="muted">'+esc(n.created_at||'')+'</small></div>').join(''):'<div class="empty">No notifications.</div>')+'</div>')}catch(e){toast(e.message)}}
 async function forgotPassword(){try{const d=await api('/api/auth/forgot-password',{method:'POST'});location.href=d.whatsapp}catch(e){toast('WhatsApp support is unavailable')}} 
 function passwordModal(){modal('<div class="modalhead"><h2>Change password</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="changePassword(event)"><label>Current password<input id="oldPw" type="password" required></label><label>New password<input id="newPw" type="password" minlength="8" required></label><button class="btn primary">Save</button></form>')}
 async function changePassword(e){e.preventDefault();try{await api('/api/auth/password',{method:'POST',body:JSON.stringify({currentPassword:$('#oldPw').value,newPassword:$('#newPw').value})});close();toast('Password changed ✓')}catch(x){toast(x.message)}}
-function urlBase64ToUint8Array(base64String){const padding='='.repeat((4-(base64String.length%4))%4);const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(base64);return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)))}
-async function setupPushNotifications(promptPermission=false){
-  if(!S.me||!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))return false;
-  if(Notification.permission==='denied'){if(promptPermission)toast(t('permissionDenied'));return false}
-  if(Notification.permission==='default'){
-    if(!promptPermission)return false;
-    const permission=await Notification.requestPermission();
-    if(permission!=='granted'){toast(t('permissionDenied'));return false}
-  }
-  try{
-    const key=(await api('/api/notifications/vapid-public-key')).publicKey;
-    if(!key)throw Error('Push notifications are not configured on the server');
-    const reg=await navigator.serviceWorker.ready;
-    let sub=await reg.pushManager.getSubscription();
-    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(key)});
-    await api('/api/notifications/subscribe',{method:'POST',body:JSON.stringify(sub.toJSON())});
-    S.notificationSettings={pushEnabled:true};
-    render();
-    if(promptPermission)toast('Notifications enabled ✓');
-    return true;
-  }catch(e){
-    if(promptPermission)toast(e.message||'Could not enable notifications');
-    return false;
-  }
-}
-async function testNotification(){try{await api('/api/notifications/test',{method:'POST'});toast('Test notification sent ✓')}catch(e){toast(e.message)}}
-async function togglePushNotifications(){
-  if(!S.me)return;
-  const enabled=!!S.notificationSettings.pushEnabled;
-  if(enabled){
-    await api('/api/notifications/settings',{method:'PATCH',body:JSON.stringify({pushEnabled:false})});
-    S.notificationSettings.pushEnabled=false;render();toast('Notifications disabled');
-    return;
-  }
-  if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){toast(t('notificationsUnsupported'));return}
-  if(Notification.permission==='denied'){toast(t('permissionDenied'));return}
-  await api('/api/notifications/settings',{method:'PATCH',body:JSON.stringify({pushEnabled:true})});
-  S.notificationSettings.pushEnabled=true;
-  await setupPushNotifications(true);
-}
 async function saveProfile(e){e.preventDefault();try{await api('/api/auth/profile',{method:'PATCH',body:JSON.stringify({displayName:$('#displayName').value.trim()})});const f=$('#profileAvatar')?.files?.[0];if(f){const fd=new FormData();fd.append('file',f);const r=await fetch(API+'/api/auth/avatar',{method:'POST',credentials:'include',body:fd});if(!r.ok)throw Error('Image upload failed')}await loadMe();toast('Saved ✓')}catch(x){toast(x.message)}}
 async function logout(){await api('/api/auth/logout',{method:'POST'}).catch(()=>{});if(window.realtimeStream){window.realtimeStream.close();window.realtimeStream=null}S.me=null;clearInterval(window.profileSyncTimer);S.view='students';await loadData();render();toast('Logged out')}
 function googleLink(){location.href=API+'/api/auth/google/start'}async function unlinkGoogle(){try{await api('/api/auth/linked/GOOGLE',{method:'DELETE'});await loadMe()}catch(e){toast(e.message)}}
