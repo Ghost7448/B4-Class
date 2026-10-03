@@ -981,7 +981,7 @@ app.post('/api/admin/resources', requirePermission('MANAGE_RESOURCES'), async(re
     if(!title)return res.status(400).json({error:'Resource title is required'});
     if(subjectId!==null&&!Number.isSafeInteger(subjectId))return res.status(400).json({error:'Invalid subject'});
     if(url&& !/^https?:\/\//i.test(url))return res.status(400).json({error:'Link must start with http:// or https://'});
-    const [r]=await q('INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,\'B4\',?,?)',[title,description,url||null,resourceType,subjectId,req.session.userId]);
+    const [r]=await q('INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,?,\'B4\',?)',[title,description,url||null,resourceType,subjectId,req.session.userId]);
     await audit(req,'RESOURCE_CREATED','resource',r.insertId,{type:resourceType});
     res.json({ok:true,id:r.insertId});
   }catch(e){
