@@ -339,6 +339,3 @@ INSERT IGNORE INTO permissions(code,label) VALUES
 INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'TEACHER',id FROM permissions WHERE code IN
 ('MANAGE_SUBJECTS','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ATTENDANCE','MANAGE_ANNOUNCEMENTS','MANAGE_CHAT','USE_AI','VIEW_CLASS','MANAGE_TEACHER_CHAT');
 INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'STUDENT',id FROM permissions WHERE code IN('USE_AI','VIEW_CLASS')
-
--- If the notifications table already exists on Railway, run this once:
-ALTER TABLE notifications ADD COLUMN url VARCHAR(1000) NULL AFTER body;
