@@ -1031,3 +1031,58 @@ html.live-update .notification-row{
 html.live-update #content{
   transition:none!important;
 }
+
+
+/* ===== CHAT JUMP TO LATEST ===== */
+.chat{position:relative}
+.chat-jump-bottom{
+  position:absolute;
+  right:20px;
+  bottom:72px;
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border:1px solid #7c3aed55;
+  border-radius:50%;
+  background:color-mix(in srgb,var(--s) 88%,transparent);
+  color:var(--p);
+  font-size:23px;
+  font-weight:900;
+  line-height:1;
+  cursor:pointer;
+  z-index:5;
+  opacity:0;
+  visibility:hidden;
+  transform:translateY(12px) scale(.82);
+  pointer-events:none;
+  box-shadow:0 12px 30px #7c3aed22,0 3px 12px #0002;
+  backdrop-filter:blur(12px);
+  transition:opacity .22s ease,transform .22s var(--ease),visibility .22s ease,background .22s ease;
+}
+.chat-jump-bottom.show{
+  opacity:1;
+  visibility:visible;
+  transform:translateY(0) scale(1);
+  pointer-events:auto;
+}
+.chat-jump-bottom:hover{
+  background:var(--s2);
+  transform:translateY(-2px) scale(1.04);
+  box-shadow:0 16px 34px #7c3aed2b,0 4px 14px #0002;
+}
+.chat-jump-bottom:active{transform:scale(.92)}
+.chat-jump-bottom::after{
+  content:'';
+  position:absolute;
+  inset:-5px;
+  border:1px solid #7c3aed30;
+  border-radius:50%;
+  animation:chatJumpPulse 1.8s ease-out infinite;
+  pointer-events:none;
+}
+@keyframes chatJumpPulse{0%{opacity:.8;transform:scale(.86)}100%{opacity:0;transform:scale(1.28)}}
+.dark .chat-jump-bottom{background:color-mix(in srgb,var(--s) 90%,transparent);border-color:#8b5cf655;box-shadow:0 14px 34px #0006,0 0 20px #7c3aed18}
+.ar .chat-jump-bottom{right:auto;left:20px}
+@media(max-width:600px){.chat-jump-bottom{right:14px;bottom:70px;width:40px;height:40px}.ar .chat-jump-bottom{right:auto;left:14px}}
+@media(prefers-reduced-motion:reduce){.chat-jump-bottom,.chat-jump-bottom::after{transition:none;animation:none}}
