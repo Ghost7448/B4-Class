@@ -549,26 +549,28 @@ async function saveResource(e,id){
     if(!title)return toast('Resource title is required');
     if(url&&!/^https?:\/\//i.test(url))return toast('Link must start with http:// or https://');
 
-    if(!id&&file){
+    if(!id){
+      // New resources (link, note, PDF, or link + PDF) use one optional-file request.
+      // This avoids sending a link/note through the PDF-only endpoint.
       const fd=new FormData();
       fd.append('title',title);
       fd.append('description',description);
+      fd.append('url',url);
       if(subjectId)fd.append('subjectId',String(subjectId));
-      fd.append('file',file);
-      const rr=await fetch(API+'/api/admin/resources/pdf',{method:'POST',credentials:'include',body:fd});
+      if(file)fd.append('file',file);
+      const rr=await fetch(API+'/api/admin/resources/publish',{method:'POST',credentials:'include',body:fd});
       let d={};try{d=await rr.json()}catch{}
-      if(!rr.ok)throw Error(d.error||('PDF upload failed ('+rr.status+')'));
+      if(!rr.ok)throw Error(d.error||('Could not publish resource ('+rr.status+')'));
     }else{
       const resourceType=file?'FILE':(url?'LINK':'NOTE');
-      const d=await api(id?'/api/admin/resources/'+id:'/api/admin/resources',{
-        method:id?'PATCH':'POST',
-        body:JSON.stringify({title,description,url: url||'',subjectId,resourceType})
+      const d=await api('/api/admin/resources/'+id,{
+        method:'PATCH',
+        body:JSON.stringify({title,description,url:url||'',subjectId,resourceType})
       });
-      const createdId=id||d.id;
       if(file){
         const fd=new FormData();
         fd.append('file',file);
-        const rr=await fetch(API+'/api/admin/resources/'+createdId+'/pdf',{method:'POST',credentials:'include',body:fd});
+        const rr=await fetch(API+'/api/admin/resources/'+id+'/pdf',{method:'POST',credentials:'include',body:fd});
         let out={};try{out=await rr.json()}catch{}
         if(!rr.ok)throw Error(out.error||('PDF upload failed ('+rr.status+')'));
       }
