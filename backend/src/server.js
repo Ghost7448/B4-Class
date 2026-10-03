@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import mysql from 'mysql2/promise';
 import { GoogleGenAI } from '@google/genai';
 import multer from 'multer';
+import webpush from 'web-push';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -80,6 +81,48 @@ app.use(session({
 }));
 
 const q = (sql, args = []) => pool.execute(sql, args);
+
+let pushReady=false;
+async function ensurePushSchema(){
+  await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,push_enabled TINYINT(1) NOT NULL DEFAULT 1,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS web_push_subscriptions(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,endpoint VARCHAR(2000) NOT NULL,p256dh VARCHAR(255) NOT NULL,auth VARCHAR(255) NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,UNIQUE KEY uq_push_endpoint(endpoint(191)),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS b4_push_config(id TINYINT UNSIGNED PRIMARY KEY,public_key VARCHAR(255) NOT NULL,private_key VARCHAR(255) NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  let [rows]=await q("SELECT public_key,private_key FROM b4_push_config WHERE id=1 LIMIT 1");
+  if(!rows[0]){
+    const keys=webpush.generateVAPIDKeys();
+    await q("INSERT INTO b4_push_config(id,public_key,private_key) VALUES(1,?,?)",[keys.publicKey,keys.privateKey]);
+    rows=[keys];
+  }
+  const publicKey=rows[0].public_key||rows[0].publicKey;
+  const privateKey=rows[0].private_key||rows[0].privateKey;
+  webpush.setVapidDetails(process.env.VAPID_SUBJECT||'mailto:b4-class@b4-class.app',publicKey,privateKey);
+  pushReady=Boolean(publicKey&&privateKey);
+}
+async function sendPush(userId,title,body,url='/'){
+  if(!pushReady)return;
+  try{
+    const [setting]=await q("SELECT push_enabled FROM notification_settings WHERE user_id=? LIMIT 1",[userId]);
+    if(setting[0]&&Number(setting[0].push_enabled)!==1)return;
+    const [subs]=await q("SELECT id,endpoint,p256dh,auth FROM web_push_subscriptions WHERE user_id=?",[userId]);
+    await Promise.all(subs.map(async sub=>{
+      try{
+        await webpush.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},JSON.stringify({title,body,url,icon:'/assets/logo.svg',badge:'/assets/logo.svg'}),{TTL:86400,urgency:'high'});
+      }catch(e){
+        if([404,410].includes(Number(e?.statusCode))) await q("DELETE FROM web_push_subscriptions WHERE id=?",[sub.id]);
+        else console.error('Push delivery failed:',e?.message||e);
+      }
+    }));
+  }catch(e){console.error('Push notification failed:',e?.message||e)}
+}
+async function notifyUser(userId,title,body,url='/'){
+  await q("INSERT INTO notifications(user_id,title,body) VALUES(?,?,?)",[userId,title,body]);
+  await sendPush(userId,title,body,url);
+}
+async function notifyStudents(title,body,url='/'){
+  const [users]=await q("SELECT id FROM users WHERE role='STUDENT' AND status='ACTIVE'");
+  await Promise.all(users.map(u=>notifyUser(u.id,title,body,url)));
+}
+
 
 // Exam/assignment datetime inputs are entered as Egypt local time (UTC+03:00).
 // MySQL DATETIME has no timezone, so parse exam values explicitly instead of
@@ -383,6 +426,32 @@ async function getBootstrap(req) {
   return {server_now_ms:Date.now(),students,teachers,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications};
 }
 
+app.get('/api/notifications/vapid-public-key',requireAuth,async(req,res)=>{
+  const [rows]=await q("SELECT public_key FROM b4_push_config WHERE id=1 LIMIT 1");
+  res.json({publicKey:rows[0]?.public_key||null});
+});
+app.get('/api/notifications/settings',requireAuth,async(req,res)=>{
+  await q("INSERT INTO notification_settings(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=user_id",[req.session.userId]);
+  const [rows]=await q("SELECT push_enabled FROM notification_settings WHERE user_id=? LIMIT 1",[req.session.userId]);
+  res.json({pushEnabled:Number(rows[0]?.push_enabled??1)===1});
+});
+app.patch('/api/notifications/settings',requireAuth,async(req,res)=>{
+  const enabled=req.body?.pushEnabled!==false;
+  await q("INSERT INTO notification_settings(user_id,push_enabled) VALUES(?,?) ON DUPLICATE KEY UPDATE push_enabled=VALUES(push_enabled)",[req.session.userId,enabled?1:0]);
+  res.json({pushEnabled:enabled});
+});
+app.post('/api/notifications/subscribe',requireAuth,async(req,res)=>{
+  const sub=req.body||{};
+  if(!sub.endpoint||!sub.keys?.p256dh||!sub.keys?.auth)return res.status(400).json({error:'Invalid push subscription'});
+  await q("INSERT INTO web_push_subscriptions(user_id,endpoint,p256dh,auth) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),p256dh=VALUES(p256dh),auth=VALUES(auth),updated_at=CURRENT_TIMESTAMP",[req.session.userId,String(sub.endpoint),String(sub.keys.p256dh),String(sub.keys.auth)]);
+  await q("INSERT INTO notification_settings(user_id,push_enabled) VALUES(?,1) ON DUPLICATE KEY UPDATE push_enabled=1",[req.session.userId]);
+  res.json({ok:true});
+});
+app.delete('/api/notifications/subscribe',requireAuth,async(req,res)=>{
+  const endpoint=String(req.body?.endpoint||'');
+  if(endpoint)await q("DELETE FROM web_push_subscriptions WHERE user_id=? AND endpoint=?",[req.session.userId,endpoint]);
+  res.json({ok:true});
+});
 app.get('/api/time',(req,res)=>res.json(cairoNow()));
 app.get('/api/bootstrap', async (req, res) => {
   try {
@@ -762,7 +831,9 @@ app.post('/api/admin/assignments', requirePermission('MANAGE_ASSIGNMENTS'), asyn
   if(dueMs!==null && dueMs<=startMs) return res.status(400).json({error:'Deadline must be after the current time'});
   const [r]=await q(`INSERT INTO assignments(title,description,subject_id,class_name,due_at,timer_started_ms,due_at_ms,created_by) VALUES(?,?,?,'B4',?,?,?,?)`,
     [title.trim(),description.trim(),subjectId||null,dueAt||null,startMs,dueMs,req.session.userId]);
-  await audit(req,'ASSIGNMENT_CREATED','assignment',r.insertId,{title:title.trim()});res.json({ok:true,id:r.insertId});
+  await audit(req,'ASSIGNMENT_CREATED','assignment',r.insertId,{title:title.trim()});
+  await notifyStudents('New Assignment',title.trim(),'/assignments');
+  res.json({ok:true,id:r.insertId});
 });
 app.post('/api/admin/assignments/:id/file', requirePermission('MANAGE_ASSIGNMENTS'), assignmentUpload.single('file'), async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id)||!req.file)return res.status(400).json({error:'Valid assignment id and image/PDF file are required'});try{await assertTeacherOwner(req,'assignments',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const [a]=await q("SELECT id FROM assignments WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!a[0])return res.status(404).json({error:'Assignment not found'});await q('DELETE FROM assignment_files WHERE assignment_id=?',[id]);const [r]=await q('INSERT INTO assignment_files(assignment_id,filename,mime_type,data) VALUES(?,?,?,?)',[id,req.file.originalname,req.file.mimetype,req.file.buffer]);await audit(req,'ASSIGNMENT_FILE_UPLOADED','assignment',id,{filename:req.file.originalname});res.json({ok:true,fileId:r.insertId})});
 app.delete('/api/admin/assignments/:id/file',requirePermission('MANAGE_ASSIGNMENTS'),async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid assignment id'});try{await assertTeacherOwner(req,'assignments',id);const [r]=await q('DELETE FROM assignment_files WHERE assignment_id=?',[id]);if(!r.affectedRows)return res.status(404).json({error:'Assignment file not found'});await audit(req,'ASSIGNMENT_FILE_DELETED','assignment',id,null);res.json({ok:true})}catch(e){res.status(e.statusCode||500).json({error:e.message||'Could not delete assignment file'})}});
@@ -874,6 +945,13 @@ app.post('/api/chat/messages',requireAuth,async(req,res)=>{
   const [r]=await q('INSERT INTO chat_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);
   const [rows]=await q(`SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM chat_messages m JOIN users u ON u.id=m.user_id LEFT JOIN chat_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?`,[r.insertId]);
   res.json({message:rows[0]});
+  if(replyToId && Number(rows[0]?.user_id)!==Number(req.session.userId)){
+    const [target]=await q("SELECT user_id FROM chat_messages WHERE id=? LIMIT 1",[replyToId]);
+    const targetUserId=Number(target[0]?.user_id||0);
+    if(targetUserId && targetUserId!==Number(req.session.userId)){
+      await notifyUser(targetUserId,'New Chat Reply',rows[0]?.display_name+' replied to your message.','/chat');
+    }
+  }
   pushChatEvent('chat',{type:'created',message:rows[0]});
 });
 app.patch('/api/chat/messages/:id',requireAuth,async(req,res)=>{
@@ -1094,7 +1172,9 @@ app.post('/api/admin/exams', requirePermission('MANAGE_EXAMS'), async(req,res)=>
       await conn.execute('INSERT INTO exam_questions(exam_id,question_text,question_type,options_json,correct_answer,points,sort_order) VALUES(?,?,?,?,?,?,?)',[e.insertId,text,type,opts?JSON.stringify(opts):null,correct,Math.max(.5,Number(qn.points)||1),inserted++]);
     }
     if(!inserted) throw new Error('Add at least one valid question');
-    await conn.commit();await audit(req,'EXAM_CREATED','exam',e.insertId,{title:title.trim()});res.json({ok:true,id:e.insertId});
+    await conn.commit();await audit(req,'EXAM_CREATED','exam',e.insertId,{title:title.trim()});
+    await notifyStudents('New Exam',title.trim(),'/exams');
+    res.json({ok:true,id:e.insertId});
   }catch(e){await conn.rollback();res.status(400).json({error:e.message})}finally{conn.release();}
 });
 
@@ -1230,7 +1310,15 @@ app.get('/api/developers/:id/avatar',async(req,res)=>{const [r]=await q('SELECT 
 async function teacherOnly(req,res,next){if(!req.session.userId)return res.status(401).json({error:'Login required'});const [u]=await q('SELECT role,is_super_admin,status FROM users WHERE id=?',[req.session.userId]);if(!u[0]||u[0].status!=='ACTIVE')return res.status(401).json({error:'Account disabled'});if(!Number(u[0].is_super_admin)&&u[0].role!=='TEACHER'&&!(await getPermissionCodes(req.session.userId)).includes('MANAGE_TEACHER_CHAT'))return res.status(403).json({error:'Teacher chat only'});next();}
 app.get('/api/teacher-chat/stream',teacherOnly,async(req,res)=>{res.status(200).set({'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform','Connection':'keep-alive','X-Accel-Buffering':'no'});res.flushHeaders?.();const client={res,userId:req.session.userId};teacherChatStreams.add(client);res.write(': connected\\n\\n');req.on('close',()=>teacherChatStreams.delete(client));});
 app.get('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m LEFT JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100');rows.reverse();res.json({messages:rows});});
-app.post('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const body=String(req.body?.body||'').trim(),replyToId=req.body?.replyToId?Number(req.body.replyToId):null;if(!body||body.length>4000)return res.status(400).json({error:'Message is empty or too long'});if(replyToId){const [reply]=await q('SELECT id FROM b4_teacher_messages WHERE id=? AND deleted_at IS NULL LIMIT 1',[replyToId]);if(!reply[0])return res.status(400).json({error:'Reply target not found'});}const [r]=await q('INSERT INTO b4_teacher_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?',[r.insertId]);await audit(req,'TEACHER_CHAT_MESSAGE','teacher_chat',r.insertId);res.json({message:rows[0]});pushTeacherChatEvent('teacher-chat',{type:'created',message:rows[0]});});
+app.post('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const body=String(req.body?.body||'').trim(),replyToId=req.body?.replyToId?Number(req.body.replyToId):null;if(!body||body.length>4000)return res.status(400).json({error:'Message is empty or too long'});if(replyToId){const [reply]=await q('SELECT id FROM b4_teacher_messages WHERE id=? AND deleted_at IS NULL LIMIT 1',[replyToId]);if(!reply[0])return res.status(400).json({error:'Reply target not found'});}const [r]=await q('INSERT INTO b4_teacher_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?',[r.insertId]);await audit(req,'TEACHER_CHAT_MESSAGE','teacher_chat',r.insertId);res.json({message:rows[0]});
+  if(replyToId && Number(rows[0]?.user_id)!==Number(req.session.userId)){
+    const [target]=await q("SELECT user_id FROM b4_teacher_messages WHERE id=? LIMIT 1",[replyToId]);
+    const targetUserId=Number(target[0]?.user_id||0);
+    if(targetUserId && targetUserId!==Number(req.session.userId)){
+      await notifyUser(targetUserId,'New Teacher Chat Reply',rows[0]?.display_name+' replied to your message.','/teacherChat');
+    }
+  }
+  pushTeacherChatEvent('teacher-chat',{type:'created',message:rows[0]});});
 app.patch('/api/teacher-chat/messages/:id',teacherOnly,async(req,res)=>{const id=Number(req.params.id),body=String(req.body?.body||'').trim();if(!Number.isSafeInteger(id)||!body||body.length>4000)return res.status(400).json({error:'Invalid message'});const [rows]=await q('SELECT id,user_id,body,deleted_at FROM b4_teacher_messages WHERE id=? LIMIT 1',[id]);const m=rows[0];if(!m)return res.status(404).json({error:'Message not found'});if(m.deleted_at)return res.status(400).json({error:'Deleted message cannot be edited'});const permissions=await getPermissionCodes(req.session.userId);const canEdit=Number(m.user_id)===Number(req.session.userId)||permissions.includes('MANAGE_TEACHER_CHAT');if(!canEdit)return res.status(403).json({error:'Permission denied'});if(body===m.body)return res.status(400).json({error:'No changes made'});await q('INSERT INTO b4_teacher_message_edits(message_id,editor_user_id,old_body,new_body) VALUES(?,?,?,?)',[id,req.session.userId,m.body,body]);await q('UPDATE b4_teacher_messages SET body=?,edited_at=NOW() WHERE id=?',[body,id]);await audit(req,'TEACHER_CHAT_MESSAGE_EDITED','teacher_chat',id,{old_body:m.body,new_body:body});const [updated]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?',[id]);res.json({message:updated[0]});pushTeacherChatEvent('teacher-chat',{type:'updated',message:updated[0]});});
 app.delete('/api/teacher-chat/messages/:id',teacherOnly,async(req,res)=>{const id=Number(req.params.id);const [rows]=await q('SELECT id,user_id,deleted_at FROM b4_teacher_messages WHERE id=? LIMIT 1',[id]);const m=rows[0];if(!m)return res.status(404).json({error:'Message not found'});const permissions=await getPermissionCodes(req.session.userId);const canDelete=Number(m.user_id)===Number(req.session.userId)||permissions.includes('MANAGE_TEACHER_CHAT');if(!canDelete)return res.status(403).json({error:'Permission denied'});if(m.deleted_at)return res.json({ok:true});await q('UPDATE b4_teacher_messages SET deleted_at=NOW(),deleted_by=? WHERE id=?',[req.session.userId,id]);await audit(req,'TEACHER_CHAT_MESSAGE_DELETED','teacher_chat',id,'Message deleted');res.json({ok:true});pushTeacherChatEvent('teacher-chat',{type:'deleted',id});});
 app.post('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{if(req.body?.typing)await q('INSERT INTO b4_teacher_typing(user_id) VALUES(?) ON DUPLICATE KEY UPDATE updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM b4_teacher_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
@@ -1254,4 +1342,4 @@ app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-ensurePermissionSchema().then(()=>app.listen(PORT,()=>console.log('B4 backend + frontend listening on '+PORT))).catch(e=>{console.error('Permission schema bootstrap failed:',e);process.exit(1)});
+ensurePermissionSchema().then(()=>ensurePushSchema()).then(()=>app.listen(PORT,()=>console.log('B4 backend + frontend listening on '+PORT))).catch(e=>{console.error('Permission schema bootstrap failed:',e);process.exit(1)});
