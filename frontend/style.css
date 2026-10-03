@@ -1086,3 +1086,10 @@ html.live-update #content{
 .ar .chat-jump-bottom{right:auto;left:20px}
 @media(max-width:600px){.chat-jump-bottom{right:14px;bottom:70px;width:40px;height:40px}.ar .chat-jump-bottom{right:auto;left:14px}}
 @media(prefers-reduced-motion:reduce){.chat-jump-bottom,.chat-jump-bottom::after{transition:none;animation:none}}
+
+.chat-new-divider{display:flex;align-items:center;gap:10px;margin:14px 10px;color:#ef4444;font-size:11px;font-weight:900;letter-spacing:.14em;text-transform:uppercase;user-select:none;animation:newDividerIn .28s ease both}
+.chat-new-divider::before,.chat-new-divider::after{content:'';height:1px;flex:1;background:linear-gradient(90deg,transparent,#ef4444aa)}
+.chat-new-divider::after{background:linear-gradient(90deg,#ef4444aa,transparent)}
+.chat-new-divider span{padding:3px 9px;border:1px solid #ef444455;border-radius:999px;background:color-mix(in srgb,var(--s) 92%,transparent);box-shadow:0 4px 14px #ef44441c}
+.dark .chat-new-divider{color:#ff5b67}.dark .chat-new-divider::before,.dark .chat-new-divider::after{background:linear-gradient(90deg,transparent,#ff5b6788)}.dark .chat-new-divider::after{background:linear-gradient(90deg,#ff5b6788,transparent)}
+@keyframes newDividerIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
