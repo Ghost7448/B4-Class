@@ -99,7 +99,7 @@ async function createNotification(userId,{type='system',title,body='',entityId=n
   const column=NOTIFICATION_SETTING_COLUMNS[type]||NOTIFICATION_SETTING_COLUMNS.system;
   if(Number(settings[column])!==1)return;
   const targetUrl=url||notificationUrl(type,entityId);
-  const [r]=await q('INSERT INTO notifications(user_id,type,title,body,target_url) VALUES(?,?,?,?,?)',[userId,type,String(title).slice(0,220),String(body||'').slice(0,4000),targetUrl]);
+  const [r]=await q('INSERT INTO notifications(user_id,type,entity_id,title,body,target_url) VALUES(?,?,?,?,?,?)',[userId,type,entityId||null,String(title).slice(0,220),String(body||'').slice(0,4000),targetUrl]);
   if(!VAPID_READY||Number(settings.push_enabled)!==1)return r.insertId;
   try{
     const [subs]=await q('SELECT id,endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=?',[userId]);
@@ -214,7 +214,7 @@ async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS push_subscriptions(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,endpoint TEXT NOT NULL,endpoint_hash CHAR(64) NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,expiration_time BIGINT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,INDEX idx_push_user(user_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS notifications(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NULL,title VARCHAR(220) NOT NULL,body TEXT,read_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-  for(const [name,definition] of Object.entries({type:"VARCHAR(50) NOT NULL DEFAULT 'system'",target_url:'VARCHAR(500) NULL'})){
+  for(const [name,definition] of Object.entries({type:"VARCHAR(50) NOT NULL DEFAULT 'system'",entity_id:'BIGINT UNSIGNED NULL',target_url:'VARCHAR(500) NULL'})){
     const [col]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notifications' AND COLUMN_NAME=? LIMIT 1",[name]);
     if(!col.length)await q("ALTER TABLE notifications ADD COLUMN "+name+" "+definition);
   }
@@ -425,7 +425,7 @@ async function getBootstrap(req) {
   messages.reverse();
   if(req.session.userId) {
     [notifications]=await q(`
-      SELECT id,type,title,body,target_url,read_at,created_at,CAST(NULL AS UNSIGNED) entity_id FROM notifications
+      SELECT id,type,entity_id,title,body,target_url,read_at,created_at FROM notifications
       WHERE user_id=? OR user_id IS NULL ORDER BY created_at DESC LIMIT 30
     `,[req.session.userId]);
   }
