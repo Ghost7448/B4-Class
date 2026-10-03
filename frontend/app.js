@@ -826,7 +826,7 @@ async function loadSiteManagement(){
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
 function siteLockModal(){
-  modal('<div class="site-lock-modal"><div class="modalhead"><div><span class="eyebrow">MANAGE SITE</span><h2>Lock Site</h2></div><button class="close" onclick="b4Close()">×</button></div><p class="muted">Write the message visitors will see while the site is locked. The site will remain fully open for your Super Admin account.</p><form class="form" onsubmit="saveSiteLock(event)"><label>Lock message<textarea id="siteLockMessage" rows="6" maxlength="2000" required placeholder="The site is temporarily unavailable. Please try again later."></textarea></label><button class="btn site-lock-btn" type="submit">🔒 Lock & Save</button></form></div>');
+  modal('<div class="site-lock-modal"><div class="modalhead"><div><span class="eyebrow">MANAGE SITE</span><h2>Lock Site</h2></div><button class="close" onclick="b4Close()">×</button></div><p class="muted">Write the message visitors will see while the site is locked. The site will remain fully open for your Super Admin account.</p><form class="form" onsubmit="saveSiteLock(event)"><label>Lock message<textarea id="siteLockMessage" rows="6" maxlength="2000" required placeholder="The site is temporarily unavailable. Please try again later."></textarea></label><button class="btn site-lock-btn" type="submit">🔒 Save</button></form></div>');
 }
 async function saveSiteLock(e){
   e.preventDefault();
