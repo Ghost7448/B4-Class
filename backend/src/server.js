@@ -986,18 +986,56 @@ app.post('/api/admin/resources', requirePermission('MANAGE_RESOURCES'), async(re
     res.json({ok:true,id:r.insertId});
   }catch(e){
     console.error('Resource creation failed:',e);
-    res.status(500).json({error:'Could not publish resource'});
+    res.status(500).json({error:e?.code?('Could not publish resource: '+e.code):'Could not publish resource'});
+  }
+});
+
+// Unified resource publisher: supports a normal link/note, a PDF, or both in one request.
+// The PDF is optional, so publishing without choosing a file no longer hits the PDF-only endpoint.
+app.post('/api/admin/resources/publish', requirePermission('MANAGE_RESOURCES'), pdfUpload.single('file'), async(req,res)=>{
+  try{
+    const title=String(req.body?.title||'').trim();
+    const description=String(req.body?.description||'').trim();
+    const url=String(req.body?.url||'').trim();
+    const subjectId=req.body?.subjectId?Number(req.body.subjectId):null;
+    if(!title)return res.status(400).json({error:'Resource title is required'});
+    if(subjectId!==null&&!Number.isSafeInteger(subjectId))return res.status(400).json({error:'Invalid subject'});
+    if(url&&!/^https?:\/\//i.test(url))return res.status(400).json({error:'Link must start with http:// or https://'});
+    const hasFile=!!req.file;
+    const resourceType=hasFile?'FILE':(url?'LINK':'NOTE');
+    const [r]=await q(
+      'INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,\'B4\',?,?)',
+      [title,description,url||null,resourceType,subjectId,req.session.userId]
+    );
+    let fileUrl=null;
+    if(hasFile){
+      const [f]=await q(
+        'INSERT INTO resource_files(resource_id,filename,mime_type,data) VALUES(?,?,?,?)',
+        [r.insertId,req.file.originalname,'application/pdf',req.file.buffer]
+      );
+      fileUrl='/api/resources/files/'+f.insertId;
+    }
+    await audit(req,'RESOURCE_CREATED','resource',r.insertId,{type:resourceType,has_file:hasFile});
+    res.json({ok:true,id:r.insertId,fileUrl});
+  }catch(e){
+    console.error('Resource publish failed:',e);
+    res.status(500).json({error:e?.sqlMessage||e?.message||'Could not publish resource'});
   }
 });
 
 app.post('/api/admin/resources/pdf', requirePermission('MANAGE_RESOURCES'), pdfUpload.single('file'), async(req,res)=>{
   if(!req.file) return res.status(400).json({error:'PDF file is required'});
-  const title=String(req.body?.title||req.file.originalname).trim();
-  const description=String(req.body?.description||'').trim();
-  const subjectId=req.body?.subjectId?Number(req.body.subjectId):null;
-  const [r]=await q('INSERT INTO resources(title,description,resource_type,subject_id,class_name,created_by) VALUES(?,?,\'FILE\',?,\'B4\',?)',[title,description,subjectId||null,req.session.userId]);
-  await q('INSERT INTO resource_files(resource_id,filename,mime_type,data) VALUES(?,?,?,?)',[r.insertId,req.file.originalname,'application/pdf',req.file.buffer]);
-  await audit(req,'PDF_UPLOADED','resource',r.insertId,{filename:req.file.originalname});res.json({ok:true,id:r.insertId,fileUrl:'/api/resources/files/'+r.insertId});
+  try{
+    const title=String(req.body?.title||req.file.originalname).trim();
+    const description=String(req.body?.description||'').trim();
+    const subjectId=req.body?.subjectId?Number(req.body.subjectId):null;
+    const [r]=await q('INSERT INTO resources(title,description,resource_type,subject_id,class_name,created_by) VALUES(?,?,\'FILE\',?,\'B4\',?)',[title,description,subjectId||null,req.session.userId]);
+    await q('INSERT INTO resource_files(resource_id,filename,mime_type,data) VALUES(?,?,?,?)',[r.insertId,req.file.originalname,'application/pdf',req.file.buffer]);
+    await audit(req,'PDF_UPLOADED','resource',r.insertId,{filename:req.file.originalname});res.json({ok:true,id:r.insertId,fileUrl:'/api/resources/files/'+r.insertId});
+  }catch(e){
+    console.error('PDF upload failed:',e);
+    res.status(500).json({error:e?.sqlMessage||e?.message||'Could not upload PDF'});
+  }
 });
 
 app.get('/api/resources/files/:id', requireAuth, async(req,res)=>{
