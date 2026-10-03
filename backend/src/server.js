@@ -224,6 +224,7 @@ const PERMISSION_DEFS = [
   ['MANAGE_DEVELOPERS','Manage developers'],
   ['MANAGE_TEACHER_CHAT','Teacher chat'],
   ['MANAGE_ANALYTICS','View attendance analytics'],
+  ['MANAGE_SITE','Manage Site'],
   ['ADMINISTRATOR','Administrator']
 ];
 
@@ -316,6 +317,8 @@ await q('CREATE TABLE IF NOT EXISTS resource_files( id BIGINT UNSIGNED AUTO_INCR
   if (!activationKeyValueCol.length) await q("ALTER TABLE activation_keys ADD COLUMN key_value VARCHAR(80) NULL AFTER key_preview");
   const [developerLinkCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='b4_developers' AND COLUMN_NAME='link_url' LIMIT 1");
   if (!developerLinkCol.length) await q("ALTER TABLE b4_developers ADD COLUMN link_url VARCHAR(500) NULL AFTER name");
+  await q("CREATE TABLE IF NOT EXISTS site_settings(id TINYINT UNSIGNED PRIMARY KEY,is_locked TINYINT(1) NOT NULL DEFAULT 0,lock_message TEXT NULL,updated_by BIGINT UNSIGNED NULL,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(updated_by) REFERENCES users(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("INSERT IGNORE INTO site_settings(id,is_locked,lock_message) VALUES(1,0,'')");
   await q('CREATE TABLE IF NOT EXISTS user_permissions( user_id BIGINT UNSIGNED NOT NULL, permission_id INT UNSIGNED NOT NULL, granted_by BIGINT UNSIGNED NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,permission_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(permission_id) REFERENCES permissions(id) ON DELETE CASCADE, FOREIGN KEY(granted_by) REFERENCES users(id) ON DELETE SET NULL ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   for (const [code,label] of PERMISSION_DEFS) await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',[code,label]);
 
@@ -367,6 +370,29 @@ async function userById(id) {
   if(!r[0]) return null;
   return {...r[0],permissions:await getPermissionCodes(id)};
 }
+
+
+const SITE_LOCK_EXEMPT = new Set(['/api/auth/login','/api/auth/logout','/api/auth/activate','/api/auth/google/login','/api/auth/google/callback','/api/site/status','/api/health']);
+const siteAsset = p => p==='/sw.js' || p==='/manifest.webmanifest' || p.startsWith('/assets/') || p.startsWith('/frontend/') || /\.(?:js|css|map|svg|png|jpg|jpeg|webp|ico|woff2?|ttf)$/i.test(p);
+function lockedSiteHtml(message='This site is temporarily unavailable.') {
+  const safe=String(message||'This site is temporarily unavailable.').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  return '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#7c3aed"><title>B4 • Site Locked</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;box-sizing:border-box;background:radial-gradient(circle at 50% 0,#7c3aed22,transparent 45%),#090b10;color:#f5f5f5;font-family:Inter,Cairo,Arial,sans-serif}.lock{width:min(620px,100%);padding:34px;border:1px solid #ffffff14;border-radius:28px;background:#11141be8;box-shadow:0 25px 80px #0008;text-align:center}.icon{width:76px;height:76px;margin:0 auto 20px;display:grid;place-items:center;border-radius:24px;background:#dc26261a;color:#f87171;border:1px solid #dc262633;font-size:38px}.eyebrow{color:#a855f7;font-size:11px;font-weight:900;letter-spacing:.16em}.lock h1{margin:8px 0 12px;font-size:34px}.lock p{margin:0;color:#a1a1aa;line-height:1.8;white-space:pre-wrap}.footer{margin-top:22px;color:#71717a;font-size:11px}</style></head><body><main class="lock"><div class="icon">🔒</div><div class="eyebrow">B4 • TELECOMMUNICATION</div><h1>Site Locked</h1><p>'+safe+'</p><div class="footer">The site will be available again when the administrator opens it.</div></main></body></html>';
+}
+const siteLockGuard=async(req,res,next)=>{
+  const p=String(req.path||req.url||'').split('?')[0];
+  if(SITE_LOCK_EXEMPT.has(p)||siteAsset(p))return next();
+  try{
+    const [rows]=await q('SELECT is_locked,lock_message FROM site_settings WHERE id=1 LIMIT 1');
+    if(!rows[0]||Number(rows[0].is_locked)!==1)return next();
+    if(req.session?.userId){
+      const [u]=await q('SELECT is_super_admin,status FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+      if(u[0]&&u[0].status==='ACTIVE'&&Number(u[0].is_super_admin)===1)return next();
+    }
+    if(p.startsWith('/api/'))return res.status(503).json({error:'Site is currently locked',siteLocked:true,message:rows[0].lock_message||''});
+    return res.status(503).send(lockedSiteHtml(rows[0].lock_message));
+  }catch(e){console.error('Site lock check failed:',e.message);return next();}
+};
+app.use(siteLockGuard);
 
 // Push a single lightweight "data changed" event after successful write requests.
 // The browser then syncs the current bootstrap silently instead of reloading the page.
@@ -663,6 +689,19 @@ app.patch('/api/auth/profile', requireAuth, async (req, res) => {
   res.json({ ok: true, user: await userById(req.session.userId) });
 });
 
+app.get('/api/admin/site', requirePermission('MANAGE_SITE'), async (req,res)=>{
+  const [rows]=await q('SELECT is_locked,lock_message,updated_by,updated_at FROM site_settings WHERE id=1 LIMIT 1');
+  res.json({site:rows[0]||{is_locked:0,lock_message:''}});
+});
+app.patch('/api/admin/site', requirePermission('MANAGE_SITE'), async (req,res)=>{
+  const locked=!!req.body?.locked;
+  const message=String(req.body?.message||'').trim();
+  if(locked&&!message)return res.status(400).json({error:'Please enter the message visitors should see while the site is locked'});
+  await q('UPDATE site_settings SET is_locked=?,lock_message=?,updated_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=1',[locked?1:0,message,req.session.userId]);
+  await audit(req,locked?'SITE_LOCKED':'SITE_OPENED','site',1,{locked,message:locked?message:null});
+  pushGlobalEvent('site-status',{locked});
+  res.json({ok:true,site:{is_locked:locked?1:0,lock_message:message}});
+});
 app.get('/api/admin/permissions', requireAnyPermission(['MANAGE_PERMISSIONS','MANAGE_ROLES','MANAGE_ADMINS']), async (req,res)=>{
   const [permissions]=await q('SELECT id,code,label FROM permissions ORDER BY code');
   res.json({permissions});
