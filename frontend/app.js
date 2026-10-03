@@ -223,7 +223,7 @@ function liveDataSignature(){
     teachers:S.teachers.map(x=>[x.id,x.display_name,x.avatar_url]),
     subjects:S.subjects.map(x=>[x.id,x.name,x.progress,x.teacher_name]),
     schedule:S.schedule,
-    assignments:S.assignments.map(x=>[x.id,x.title,x.status,x.description,x.due_at,x.attachment_id,x.submission_id,x.submission_file_id,x.submission_name]),
+    assignments:S.assignments.map(x=>[x.id,x.title,x.status,x.description,x.due_at,x.attachment_id,x.submission_id,x.submission_file_id,x.submission_name,x.score]),
     resources:S.resources.map(x=>[x.id,x.title,x.description,x.url,x.file_url,x.filename]),
     exams:S.exams.map(x=>[x.id,x.title,x.status,x.starts_at,x.ends_at,x.duration_minutes]),
     announcements:S.announcements.map(x=>[x.id,x.title,x.body,x.category]),
@@ -231,22 +231,53 @@ function liveDataSignature(){
     developers:S.developers.map(x=>[x.id,x.name,x.title,x.title2,x.avatar_url])
   })
 }
-async function liveDataLoop(){
+let liveSyncBusy=false;
+async function syncLiveData(){
+  if(liveSyncBusy||!S.me)return;
+  liveSyncBusy=true;
+  try{
+    const before=liveDataSignature();
+    await loadData();
+    const changed=before!==liveDataSignature();
+    if(!changed)return;
+    if($('#back')?.classList.contains('show'))return;
+    const active=document.activeElement;
+    if(active&&['INPUT','TEXTAREA','SELECT'].includes(active.tagName))return;
+    const scrollY=window.scrollY;
+    document.documentElement.classList.add('live-update');
+    if(S.view!=='chat'&&S.view!=='teacherChat')render();
+    else if(S.view==='chat')applyChatMessages(S.messages);
+    else if(S.view==='teacherChat')applyTeacherMessages(S.teacherMessages);
+    requestAnimationFrame(()=>{window.scrollTo({top:scrollY,left:0,behavior:'instant'});document.documentElement.classList.remove('live-update')});
+  }catch{}
+  finally{liveSyncBusy=false}
+}
+function ensureGlobalRealtime(){
+  if(!S.me)return;
+  if(window.globalRealtimeStream&&window.globalRealtimeStream.readyState!==2)return;
+  try{
+    window.globalRealtimeStream=new EventSource(API+'/api/live/stream',{withCredentials:true});
+    window.globalRealtimeStream.addEventListener('open',()=>{
+      window.globalRealtimeOnline=true;
+      clearInterval(window.liveFallbackTimer);
+    });
+    window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
+    window.globalRealtimeStream.addEventListener('ready',()=>{window.globalRealtimeOnline=true});
+    window.globalRealtimeStream.onerror=()=>{
+      window.globalRealtimeOnline=false;
+      clearInterval(window.liveFallbackTimer);
+      window.liveFallbackTimer=setInterval(()=>{if(!window.globalRealtimeOnline)syncLiveData()},15000);
+    };
+  }catch{
+    window.globalRealtimeOnline=false;
+    clearInterval(window.liveFallbackTimer);
+    window.liveFallbackTimer=setInterval(syncLiveData,15000);
+  }
+}
+function liveDataLoop(){
   clearInterval(window.liveDataTimer);
-  let last=liveDataSignature();
-  window.liveDataTimer=setInterval(async()=>{
-    try{
-      await loadData();
-      const next=liveDataSignature();
-      if(next===last)return;
-      last=next;
-      if($('#back')?.classList.contains('show'))return;
-      const active=document.activeElement;
-      if(active&&['INPUT','TEXTAREA','SELECT'].includes(active.tagName))return;
-      if(S.view==='chat'||S.view==='teacherChat')return;
-      render();
-    }catch{}
-  },3000);
+  clearInterval(window.liveFallbackTimer);
+  ensureGlobalRealtime();
 }
 
 function filePicked(input){const name=input?.files?.[0]?.name||'No file selected';const out=input?.parentElement?.querySelector('.file-name');if(out)out.textContent=name}
@@ -351,6 +382,7 @@ async function loadMe(){
       S.vapidPublicKey='';
     }
     ensureRealtime();
+    ensureGlobalRealtime();
   }catch{
     S.me=null;S.linked=[];
     S.notificationSettings={class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0};
@@ -548,7 +580,7 @@ async function forgotPassword(){try{const d=await api('/api/auth/forgot-password
 function passwordModal(){modal('<div class="modalhead"><h2>Change password</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="changePassword(event)"><label>Current password<input id="oldPw" type="password" required></label><label>New password<input id="newPw" type="password" minlength="8" required></label><button class="btn primary">Save</button></form>')}
 async function changePassword(e){e.preventDefault();try{await api('/api/auth/password',{method:'POST',body:JSON.stringify({currentPassword:$('#oldPw').value,newPassword:$('#newPw').value})});close();toast('Password changed ✓')}catch(x){toast(x.message)}}
 async function saveProfile(e){e.preventDefault();try{await api('/api/auth/profile',{method:'PATCH',body:JSON.stringify({displayName:$('#displayName').value.trim()})});const f=$('#profileAvatar')?.files?.[0];if(f){const fd=new FormData();fd.append('file',f);const r=await fetch(API+'/api/auth/avatar',{method:'POST',credentials:'include',body:fd});if(!r.ok)throw Error('Image upload failed')}await loadMe();toast('Saved ✓')}catch(x){toast(x.message)}}
-async function logout(){await api('/api/auth/logout',{method:'POST'}).catch(()=>{});if(window.realtimeStream){window.realtimeStream.close();window.realtimeStream=null}S.me=null;clearInterval(window.profileSyncTimer);S.view='students';await loadData();render();toast('Logged out')}
+async function logout(){await api('/api/auth/logout',{method:'POST'}).catch(()=>{});if(window.realtimeStream){window.realtimeStream.close();window.realtimeStream=null}if(window.teacherRealtimeStream){window.teacherRealtimeStream.close();window.teacherRealtimeStream=null}if(window.globalRealtimeStream){window.globalRealtimeStream.close();window.globalRealtimeStream=null}clearInterval(window.liveFallbackTimer);S.me=null;clearInterval(window.profileSyncTimer);S.view='students';await loadData();render();toast('Logged out')}
 function googleLink(){location.href=API+'/api/auth/google/start'}async function unlinkGoogle(){try{await api('/api/auth/linked/GOOGLE',{method:'DELETE'});await loadMe()}catch(e){toast(e.message)}}
 function aiModal(){modal('<div class="modalhead"><h2>✦ '+t('ai')+'</h2><button class="close" onclick="b4Close()">×</button></div><div id="aiOut" class="card">Ask a study question.</div><form class="form" onsubmit="askAI(event)"><textarea id="aiInput" rows="4" placeholder="Ask about Telecommunication..."></textarea><button class="btn primary">Send</button></form>')}
 async function askAI(e){
