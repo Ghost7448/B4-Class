@@ -352,13 +352,31 @@ function restoreChatPosition(boxId){
   }
   box.scrollTop=box.scrollHeight;
 }
+function updateChatNewDivider(boxId){
+  const box=document.getElementById(boxId);
+  if(!box)return;
+  box.querySelectorAll('.chat-new-divider').forEach(x=>x.remove());
+  const saved=Number(localStorage.getItem(chatSeenKey(boxId))||0);
+  if(!saved)return;
+  const nodes=[...box.querySelectorAll('[data-message-id]')];
+  const target=nodes.find(x=>Number(x.dataset.messageId)>saved);
+  if(target){
+    const divider=document.createElement('div');
+    divider.className='chat-new-divider';
+    divider.innerHTML='<span>NEW</span>';
+    target.before(divider);
+  }
+}
 function setupChatPosition(boxId){
   const box=document.getElementById(boxId);
   if(!box)return;
   restoreChatPosition(boxId);
-  const remember=()=>rememberChatPosition(boxId);
+  const remember=()=>{
+    rememberChatPosition(boxId);
+    updateChatNewDivider(boxId);
+  };
   box.addEventListener('scroll',remember,{passive:true});
-  remember();
+  updateChatNewDivider(boxId);
 }
 function setupChatJumpButton(boxId,buttonId){
   const box=document.getElementById(boxId),button=document.getElementById(buttonId);
@@ -678,6 +696,7 @@ function applyChatMessages(messages){
     const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;
     patchChatList(box,S.messages,messageHTML);
     if(wasNearBottom)box.scrollTop=box.scrollHeight;
+    updateChatNewDivider('messages');
   }
 }
 function ensureRealtime(){if(!S.me)return;if(window.realtimeStream&&window.realtimeStream.readyState!==2)return;try{window.realtimeStream=new EventSource(API+'/api/chat/stream',{withCredentials:true});window.realtimeStream.addEventListener('open',()=>{window.realtimeOnline=true});window.realtimeStream.addEventListener('chat',e=>{try{const d=JSON.parse(e.data);if(d.type==='created'&&!S.messages.some(m=>Number(m.id)===Number(d.message.id)))applyChatMessages([...S.messages,d.message]);else if(d.type==='updated')applyChatMessages(S.messages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));else if(d.type==='deleted')applyChatMessages(S.messages.filter(m=>Number(m.id)!==Number(d.id)))}catch{}});window.realtimeStream.addEventListener('profile',e=>{try{applyProfileEvent(JSON.parse(e.data))}catch{}});window.realtimeStream.onerror=()=>{window.realtimeOnline=false}}catch{window.realtimeOnline=false}}
@@ -699,6 +718,7 @@ function applyTeacherMessages(messages){
     const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;
     patchChatList(box,S.teacherMessages,teacherMessageHTML);
     if(wasNearBottom)box.scrollTop=box.scrollHeight;
+    updateChatNewDivider('teacherMessages');
   }
 }
 function ensureTeacherRealtime(){if(!S.me)return;if(window.teacherRealtimeStream&&window.teacherRealtimeStream.readyState!==2)return;try{window.teacherRealtimeStream=new EventSource(API+'/api/teacher-chat/stream',{withCredentials:true});window.teacherRealtimeStream.addEventListener('open',()=>{window.teacherRealtimeOnline=true});window.teacherRealtimeStream.addEventListener('teacher-chat',e=>{try{const d=JSON.parse(e.data);if(d.type==='created'&&!S.teacherMessages.some(m=>Number(m.id)===Number(d.message.id)))applyTeacherMessages([...S.teacherMessages,d.message]);else if(d.type==='updated')applyTeacherMessages(S.teacherMessages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));else if(d.type==='deleted')applyTeacherMessages(S.teacherMessages.filter(m=>Number(m.id)!==Number(d.id)))}catch{}});window.teacherRealtimeStream.addEventListener('profile',e=>{try{applyProfileEvent(JSON.parse(e.data))}catch{}});window.teacherRealtimeStream.onerror=()=>{window.teacherRealtimeOnline=false}}catch{window.teacherRealtimeOnline=false}}
