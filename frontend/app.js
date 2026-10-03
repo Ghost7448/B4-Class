@@ -352,14 +352,14 @@ function openNotifications(){
     );
     document.querySelectorAll('.notification-item').forEach(el=>el.addEventListener('click',async()=>{
       const id=Number(el.dataset.notificationId);
-      try{await api('/api/notifications/'+id+'/read',{method:'PATCH'});const n=S.notifications.find(x=>Number(x.id)===id);if(n)n.read_at=new Date().toISOString();el.classList.remove('unread')}catch{}
+      try{await api('/api/notifications/'+id+'/read',{method:'PATCH'});const n=S.notifications.find(x=>Number(x.id)===id);if(n)n.read_at=new Date().toISOString();el.classList.remove('unread');updateNotificationBell()}catch{}
       const url=el.dataset.notificationUrl||'/';
       close();
       if(url.startsWith('/')){const view=url.slice(1).split('/')[0]||'dashboard';const allowed=['assignments','exams','announcements','resources','chat','teacherChat'];if(allowed.includes(view)){go(view);return}}
       if(/^https?:\\/\\//i.test(url))window.open(url,'_blank','noopener');
     }));
     $('#markAllNotifications')?.addEventListener('click',async()=>{
-      try{await api('/api/notifications/read-all',{method:'POST'});S.notifications.forEach(n=>n.read_at=new Date().toISOString());close();openNotifications()}catch(e){toast(e.message)}
+      try{await api('/api/notifications/read-all',{method:'POST'});S.notifications.forEach(n=>n.read_at=new Date().toISOString());updateNotificationBell();close();openNotifications()}catch(e){toast(e.message)}
     });
   }catch(e){toast(e.message)}
 }
