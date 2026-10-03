@@ -115,8 +115,12 @@ async function sendPush(userId,title,body,url='/'){
   }catch(e){console.error('Push notification failed:',e?.message||e)}
 }
 async function notifyUser(userId,title,body,url='/'){
-  await q("INSERT INTO notifications(user_id,title,body) VALUES(?,?,?)",[userId,title,body]);
-  await sendPush(userId,title,body,url);
+  await q("INSERT INTO notifications(user_id,title,body,url) VALUES(?,?,?,?)",[userId,title,body,url||'/']);
+  await sendPush(userId,title,body,url||'/');
+}
+async function notifyActiveUsers(title,body,url='/'){
+  const [users]=await q("SELECT id FROM users WHERE status='ACTIVE'");
+  await Promise.all(users.map(u=>notifyUser(u.id,title,body,url)));
 }
 async function notifyStudents(title,body,url='/'){
   const [users]=await q("SELECT id FROM users WHERE role='STUDENT' AND status='ACTIVE'");
@@ -424,14 +428,33 @@ async function getBootstrap(req) {
   messages.reverse();
   if(req.session.userId) {
     [notifications]=await q(`
-      SELECT id,title,body,read_at,created_at FROM notifications
-      WHERE user_id=? OR user_id IS NULL ORDER BY created_at DESC LIMIT 30
+      SELECT id,title,body,url,read_at,created_at FROM notifications
+      WHERE user_id=? OR user_id IS NULL ORDER BY created_at DESC LIMIT 50
     `,[req.session.userId]);
   }
   if(!req.session.userId) return {students,teachers,subjects,schedule,assignments:[],announcements:[],resources:[],exams:[],attendance:[],messages:[],notifications:[]};
   return {server_now_ms:Date.now(),students,teachers,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications,notification_settings};
 }
 
+app.patch('/api/notifications/:id/read',requireAuth,async(req,res)=>{
+  const id=Number(req.params.id);
+  if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid notification'});
+  await q("UPDATE notifications SET read_at=COALESCE(read_at,NOW()) WHERE id=? AND user_id=?",[id,req.session.userId]);
+  res.json({ok:true});
+});
+app.post('/api/notifications/read-all',requireAuth,async(req,res)=>{
+  await q("UPDATE notifications SET read_at=COALESCE(read_at,NOW()) WHERE user_id=?",[req.session.userId]);
+  res.json({ok:true});
+});
+app.post('/api/notifications/test',requireAuth,async(req,res)=>{
+  try{
+    await notifyUser(req.session.userId,'B4 Notifications Test','Push notifications are working correctly.','/');
+    res.json({ok:true});
+  }catch(e){
+    console.error('Notification test failed:',e);
+    res.status(500).json({error:e?.message||'Notification test failed'});
+  }
+});
 app.get('/api/notifications/vapid-public-key',requireAuth,async(req,res)=>{
   const [rows]=await q("SELECT public_key FROM b4_push_config WHERE id=1 LIMIT 1");
   res.json({publicKey:rows[0]?.public_key||null});
@@ -878,6 +901,7 @@ app.post('/api/admin/announcements', requirePermission('MANAGE_ANNOUNCEMENTS'), 
   const [r]=await q(`INSERT INTO announcements(title,body,category,class_name,created_by) VALUES(?,?,?,'B4',?)`,
     [title.trim(),body.trim(),category.trim(),req.session.userId]);
   await audit(req,'ANNOUNCEMENT_CREATED','announcement',r.insertId,{title:title.trim()});
+  await notifyActiveUsers('New Announcement',title.trim(),'/announcements');
   res.json({ok:true,id:r.insertId});
 });
 
@@ -1082,6 +1106,7 @@ app.post('/api/admin/resources', requirePermission('MANAGE_RESOURCES'), async(re
     if(url&& !/^https?:\/\//i.test(url))return res.status(400).json({error:'Link must start with http:// or https://'});
     const [r]=await q('INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,?,\'B4\',?)',[title,description,url||null,resourceType,subjectId,req.session.userId]);
     await audit(req,'RESOURCE_CREATED','resource',r.insertId,{type:resourceType});
+    await notifyStudents('New Resource',title,'/resources');
     res.json({ok:true,id:r.insertId});
   }catch(e){
     console.error('Resource creation failed:',e);
@@ -1115,6 +1140,7 @@ app.post('/api/admin/resources/publish', requirePermission('MANAGE_RESOURCES'), 
       fileUrl='/api/resources/files/'+f.insertId;
     }
     await audit(req,'RESOURCE_CREATED','resource',r.insertId,{type:resourceType,has_file:hasFile});
+    await notifyStudents('New Resource',title,'/resources');
     res.json({ok:true,id:r.insertId,fileUrl});
   }catch(e){
     console.error('Resource publish failed:',e);
