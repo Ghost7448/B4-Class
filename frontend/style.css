@@ -1113,3 +1113,80 @@ to{opacity:1;transform:translateY(0)}}
   .site-control-actions{display:grid;grid-template-columns:1fr}
 }
 \n/* Attendance responsive cleanup */\n@media(max-width:700px){.attendance-analysis-head{align-items:flex-start}.analysis-row{grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:12px}.analysis-progress{grid-column:1/-1;grid-row:2}.analysis-percent{grid-column:2;grid-row:1;font-size:15px}.analysis-person small{gap:5px}.analysis-person small span{font-size:8px;padding:3px 6px}.analysis-bar{height:9px}}\n@media(max-width:420px){.analysis-row{padding:11px;border-radius:14px}.analysis-person b{font-size:12px}.analysis-percent{font-size:14px}.attendance-analysis-head h3{font-size:16px}}\n@media(prefers-reduced-motion:reduce){.analysis-row{transition:none}.analysis-bar span,.analysis-bar span::after{animation:none;transition:none}}\n
+
+/* ===== MANAGE SITE MODAL DESKTOP POLISH ===== */
+#back .modal:has(.site-lock-modal){
+  width:min(760px,calc(100vw - 48px));
+  max-width:760px;
+  padding:30px 32px;
+  border-radius:26px;
+}
+.site-lock-modal{
+  width:100%;
+  max-width:none;
+}
+.site-lock-modal .modalhead{
+  gap:20px;
+  padding-bottom:18px;
+  border-bottom:1px solid var(--line);
+}
+.site-lock-modal .modalhead h2{
+  margin:6px 0 0;
+  font-size:28px;
+  line-height:1.2;
+}
+.site-lock-modal>.muted{
+  margin:18px 0 20px;
+  max-width:680px;
+  line-height:1.7;
+  font-size:13px;
+}
+.site-lock-modal .form{
+  gap:14px;
+}
+.site-lock-modal .form label{
+  gap:8px;
+}
+.site-lock-modal .form label{
+  color:var(--t);
+  font-size:12px;
+}
+.site-lock-modal .form textarea{
+  min-height:145px;
+  max-height:320px;
+  resize:vertical;
+  line-height:1.65;
+  font-size:14px;
+  padding:14px 15px;
+  border-radius:15px;
+}
+.site-lock-modal .site-lock-btn{
+  width:100%;
+  min-height:50px;
+  justify-content:center;
+  border-radius:14px;
+  font-size:14px;
+  font-weight:900;
+  margin-top:2px;
+}
+@media(max-width:700px){
+  #back .modal:has(.site-lock-modal){
+    width:calc(100vw - 24px);
+    max-width:none;
+    padding:20px;
+    border-radius:22px;
+  }
+  .site-lock-modal .modalhead h2{font-size:23px}
+  .site-lock-modal>.muted{font-size:12px;margin:15px 0 18px}
+  .site-lock-modal .form textarea{min-height:135px}
+}
+@media(max-width:420px){
+  #back .modal:has(.site-lock-modal){
+    width:calc(100vw - 16px);
+    padding:16px;
+    border-radius:19px;
+  }
+  .site-lock-modal .modalhead{padding-bottom:14px}
+  .site-lock-modal .modalhead h2{font-size:21px}
+  .site-lock-modal .form textarea{min-height:125px;font-size:13px}
+}
