@@ -156,6 +156,12 @@ async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS chat_typing(user_id BIGINT UNSIGNED PRIMARY KEY,typing TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   // MySQL does not support ADD COLUMN IF NOT EXISTS on all supported 8.x builds.
   // Check INFORMATION_SCHEMA first so bootstrap is safe and idempotent.
+  // Keep the resources enum compatible with older Railway databases that were created before NOTE resources existed.
+  const [resourceTypeCol] = await q("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='resources' AND COLUMN_NAME='resource_type' LIMIT 1");
+  if (resourceTypeCol[0] && !String(resourceTypeCol[0].COLUMN_TYPE || '').includes("'NOTE'")) {
+    await q("ALTER TABLE resources MODIFY COLUMN resource_type ENUM('LINK','FILE','VIDEO','NOTE') NOT NULL DEFAULT 'LINK'");
+  }
+
   const [studentAvatarCol] = await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='students' AND COLUMN_NAME='avatar_url' LIMIT 1");
   if (!studentAvatarCol.length) await q("ALTER TABLE students ADD COLUMN avatar_url VARCHAR(500) NULL");
 
