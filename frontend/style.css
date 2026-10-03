@@ -1101,11 +1101,11 @@ to{opacity:1;transform:translateY(0)}}
 .site-lock-message small{display:block;color:var(--m);font-weight:800;margin-bottom:7px}
 .site-lock-message p{margin:0;white-space:pre-wrap;line-height:1.7}
 .site-control-actions{display:flex;gap:10px;margin-top:24px}
-.site-lock-btn{background:#16a34a;color:#fff}
-.site-lock-btn:hover{background:#15803d;box-shadow:0 12px 25px #16a34a25}
+.site-lock-btn{background:#dc2626;color:#fff}
+.site-lock-btn:hover{background:#b91c1c;box-shadow:0 12px 25px #dc262625}
 .site-lock-btn.disabled,.site-open-btn.disabled{opacity:.42;cursor:not-allowed;transform:none!important;box-shadow:none!important}
-.site-open-btn{color:#dc2626;background:#dc262614;border:1px solid #dc26262e}
-.site-open-btn:hover{background:#dc262620;color:#b91c1c}
+.site-open-btn{color:#16a34a;background:#16a34a14;border:1px solid #16a34a2e}
+.site-open-btn:hover{background:#16a34a20;color:#15803d}
 .site-lock-modal{width:min(620px,100%)}
 .site-lock-modal .form textarea{min-height:150px;resize:vertical}
 @media(max-width:600px){
