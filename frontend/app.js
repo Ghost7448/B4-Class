@@ -285,18 +285,21 @@ function devV(){return title(t('developers'),'The Wep Devoleper')+'<div class="g
 function animateDashboardStats(){
   document.querySelectorAll('[data-stat-count]').forEach(function(el){
     var target=parseInt(el.getAttribute('data-stat-count'),10)||0;
-    var value=0;
     el.textContent='0';
     if(target<=0)return;
-    var step=Math.max(1,Math.ceil(target/18));
-    var timer=setInterval(function(){
-      value=Math.min(target,value+step);
-      el.textContent=value;
-      if(value>=target)clearInterval(timer);
-    },25);
+    var start=performance.now();
+    var duration=750;
+    function tick(now){
+      var progress=Math.min(1,(now-start)/duration);
+      var eased=1-Math.pow(1-progress,3);
+      el.textContent=String(Math.floor(target*eased));
+      if(progress<1)requestAnimationFrame(tick);
+      else el.textContent=String(target);
+    }
+    requestAnimationFrame(tick);
   });
 }
-function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='attendance'?attendanceV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')setTimeout(animateDashboardStats,20);$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='attendance'&&can('MANAGE_ATTENDANCE'))attendanceLoad();if(v==='chat')chatLoop();if(v==='teacherChat')teacherChatLoop();if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
+function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='attendance'?attendanceV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='attendance'&&can('MANAGE_ATTENDANCE'))attendanceLoad();if(v==='chat')chatLoop();if(v==='teacherChat')teacherChatLoop();if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
 function teacherChatV(){
   return title(t('teacherChat'),'')+'<div class="card chat"><div class="messages" id="teacherMessages">'+S.teacherMessages.map(teacherMessageHTML).join('')+'</div><div id="teacherTyping" class="typing-indicator"></div><form class="chatform" onsubmit="sendTeacherChat(event)"><input id="teacherInput" oninput="teacherTyping(!!this.value.trim())" placeholder="Write a message..."><button class="btn primary">➤</button></form></div>'
 }
