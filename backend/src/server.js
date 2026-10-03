@@ -965,10 +965,23 @@ app.get('/api/auth/google/callback',async(req,res)=>{
 app.delete('/api/auth/linked/GOOGLE',requireAuth,async(req,res)=>{const [r]=await q("DELETE FROM linked_accounts WHERE user_id=? AND provider='GOOGLE'",[req.session.userId]);if(r.affectedRows)await audit(req,'GOOGLE_UNLINKED','user',req.session.userId);res.json({ok:true});});
 
 app.post('/api/admin/resources', requirePermission('MANAGE_RESOURCES'), async(req,res)=>{
-  const {title,description='',url='',subjectId=null,resourceType='LINK'}=req.body||{};
-  if(!title?.trim()) return res.status(400).json({error:'Resource title is required'});
-  const [r]=await q('INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,\'B4\',?,?)',[title.trim(),description.trim(),url.trim()||null,resourceType,subjectId||null,req.session.userId]);
-  await audit(req,'RESOURCE_CREATED','resource',r.insertId,{type:resourceType});res.json({ok:true,id:r.insertId});
+  try{
+    const body=req.body||{};
+    const title=String(body.title||'').trim();
+    const description=String(body.description||'').trim();
+    const url=String(body.url||'').trim();
+    const subjectId=body.subjectId?Number(body.subjectId):null;
+    const resourceType=['LINK','FILE','VIDEO','NOTE'].includes(body.resourceType)?body.resourceType:(url?'LINK':'NOTE');
+    if(!title)return res.status(400).json({error:'Resource title is required'});
+    if(subjectId!==null&&!Number.isSafeInteger(subjectId))return res.status(400).json({error:'Invalid subject'});
+    if(url&& !/^https?:\/\//i.test(url))return res.status(400).json({error:'Link must start with http:// or https://'});
+    const [r]=await q('INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,\'B4\',?,?)',[title,description,url||null,resourceType,subjectId,req.session.userId]);
+    await audit(req,'RESOURCE_CREATED','resource',r.insertId,{type:resourceType});
+    res.json({ok:true,id:r.insertId});
+  }catch(e){
+    console.error('Resource creation failed:',e);
+    res.status(500).json({error:'Could not publish resource'});
+  }
 });
 
 app.post('/api/admin/resources/pdf', requirePermission('MANAGE_RESOURCES'), pdfUpload.single('file'), async(req,res)=>{
