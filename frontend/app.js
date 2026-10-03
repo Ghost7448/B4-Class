@@ -319,6 +319,46 @@ function jumpChatBottom(id){
   const box=document.getElementById(id);
   if(!box)return;
   box.scrollTo({top:box.scrollHeight,behavior:'smooth'});
+  requestAnimationFrame(()=>rememberChatPosition(id));
+}
+function chatSeenKey(id){return 'b4ChatSeen:'+id}
+function rememberChatPosition(boxId){
+  const box=document.getElementById(boxId);
+  if(!box)return;
+  const msgs=[...box.querySelectorAll('[data-message-id]')];
+  if(!msgs.length)return;
+  const boxRect=box.getBoundingClientRect();
+  let last=null;
+  for(const msg of msgs){
+    const r=msg.getBoundingClientRect();
+    if(r.top<boxRect.bottom-6)last=msg;
+  }
+  if(last){
+    localStorage.setItem(chatSeenKey(boxId),String(last.dataset.messageId));
+  }
+}
+function restoreChatPosition(boxId){
+  const box=document.getElementById(boxId);
+  if(!box)return;
+  const saved=localStorage.getItem(chatSeenKey(boxId));
+  if(saved){
+    const target=box.querySelector('[data-message-id="'+CSS.escape(saved)+'"]');
+    if(target){
+      const boxRect=box.getBoundingClientRect(),r=target.getBoundingClientRect();
+      const delta=r.top-boxRect.top-Math.min(70,box.clientHeight*.18);
+      box.scrollTop=Math.max(0,box.scrollTop+delta);
+      return;
+    }
+  }
+  box.scrollTop=box.scrollHeight;
+}
+function setupChatPosition(boxId){
+  const box=document.getElementById(boxId);
+  if(!box)return;
+  restoreChatPosition(boxId);
+  const remember=()=>rememberChatPosition(boxId);
+  box.addEventListener('scroll',remember,{passive:true});
+  remember();
 }
 function setupChatJumpButton(boxId,buttonId){
   const box=document.getElementById(boxId),button=document.getElementById(buttonId);
@@ -377,7 +417,7 @@ function animateDashboardStats(){
     requestAnimationFrame(tick);
   });
 }
-function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='attendance'?attendanceV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='attendance'&&can('MANAGE_ATTENDANCE'))attendanceLoad();if(v==='chat'){chatLoop();setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
+function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='attendance'?attendanceV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='attendance'&&can('MANAGE_ATTENDANCE'))attendanceLoad();if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
 function teacherChatV(){
   return title(t('teacherChat'),'')+'<div class="card chat"><div class="messages" id="teacherMessages">'+S.teacherMessages.map(teacherMessageHTML).join('')+'</div><div id="teacherTyping" class="typing-indicator"></div><button type="button" id="teacherChatJumpBottom" class="chat-jump-bottom" onclick="jumpChatBottom(\'teacherMessages\')" aria-label="Scroll to latest messages" title="Scroll to latest messages">↓</button><form class="chatform" onsubmit="sendTeacherChat(event)"><input id="teacherInput" oninput="teacherTyping(!!this.value.trim())" placeholder="Write a message..."><button class="btn primary">➤</button></form></div>'
 }
