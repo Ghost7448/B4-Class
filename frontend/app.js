@@ -323,17 +323,25 @@ async function syncProfiles(){
 }
 function profileSyncLoop(){clearInterval(window.profileSyncTimer);if(!S.me)return;syncProfiles();window.profileSyncTimer=setInterval(syncProfiles,1500)}
 async function loadMe(){try{const d=await api('/api/auth/me');S.me=d.user;S.linked=(await api('/api/auth/linked')).linked||[];ensureRealtime()}catch{S.me=null;S.linked=[]}await loadData();render();profileSyncLoop();startAssignmentCountdown();liveDataLoop();if(S.me)setTimeout(()=>setupPushNotifications(false),500)}
-async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[],notificationSettings:d.notification_settings||S.notificationSettings||{pushEnabled:true}});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}S.error=''}catch(e){S.error=e.message}}
+async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[],notificationSettings:d.notification_settings||S.notificationSettings||{pushEnabled:true}});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}S.error='';updateNotificationBell()}catch(e){S.error=e.message}}
 async function login(e){e.preventDefault();try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({login:$('#loginName').value.trim(),password:$('#loginPassword').value})});close();await loadMe();toast('Login successful ✓')}catch(x){toast(x.message)}}
 function loginModal(){modal('<div class="modalhead"><h2>'+t('login')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="login(event)"><label>Display name<input id="loginName" required autocomplete="username"></label><label>Password<input id="loginPassword" type="password" required autocomplete="current-password"></label><button class="btn primary">'+t('login')+' →</button></form><div class="login-divider"><span>or</span></div><button class="google-btn" onclick="googleLogin()">Continue with Google</button><button class="btn ghost" onclick="forgotPassword()">Forgot my password</button><button class="btn ghost" onclick="activationModal()">'+t('activate')+'</button>')}
 function activationModal(){modal('<div class="modalhead"><h2>'+t('activate')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="activate(event)"><label>One-time key<input id="actKey" required></label><label>Display name<input id="actName" required></label><label>Password<input id="actPw" type="password" minlength="8" required></label><button class="btn primary">Create account</button></form>')}
 async function activate(e){e.preventDefault();try{await api('/api/auth/activate',{method:'POST',body:JSON.stringify({key:$('#actKey').value.trim(),displayName:$('#actName').value.trim(),password:$('#actPw').value})});close();toast('Account created ✓');loginModal()}catch(x){toast(x.message)}}
 function googleLogin(){location.href=API+'/api/auth/google/login'}
-async async function openNotifications(){
+async async function updateNotificationBell(){
+  const unread=(S.notifications||[]).filter(n=>!n.read_at).length;
+  const bell=$('#bell');
+  if(!bell)return;
+  const dot=bell.querySelector('i');
+  if(dot)dot.style.display=unread?'block':'none';
+  bell.title=unread?('Notifications ('+unread+' unread)'):'Notifications';
+}
+function openNotifications(){
   try{
     const d=await api('/api/bootstrap');
     const list=d.notifications||[];
-    S.notifications=list;
+    S.notifications=list;updateNotificationBell();
     const unread=list.filter(n=>!n.read_at).length;
     modal(
       '<div class="modalhead"><h2>Notifications'+(unread?' <span class="badge">'+unread+'</span>':'')+'</h2><button class="close" onclick="b4Close()">×</button></div>'+
