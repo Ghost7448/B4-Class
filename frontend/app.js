@@ -1183,7 +1183,8 @@ function examAnswersV(){
 }
 async function submissions(id){try{const d=await api('/api/admin/exams/'+id+'/submissions');S.examReview={examId:id,submissions:d.submissions||[]};S.view='exam-review';render();}catch(e){toast(e.message)}}
 async function openExamSubmission(examId,attemptId){try{const d=await api('/api/admin/exams/'+examId+'/submissions/'+attemptId);S.examReview={examId,detail:d};S.view='exam-review';render();}catch(e){toast(e.message)}}
-function examGradeModal(examId,attemptId,q){
+function examGradeModal(examId,attemptId,qid){
+  const q=(S.examReview?.detail?.questions||[]).find(x=>Number(x.id)===Number(qid)); if(!q)return toast('Question not found');
   modal('<div class="exam-grade-modal"><div class="modalhead"><div><span class="eyebrow">MANUAL GRADING</span><h2>Grade Answer</h2></div><button class="close" onclick="b4Close()">×</button></div><p class="muted">Choose whether the student answer is correct. If it is incorrect, enter the correct answer so the student can see it.</p><div class="grade-answer-preview"><small>Student answer</small><div>'+esc(q.answer_text||'No answer')+'</div></div><div class="grade-actions"><button class="btn grade-correct" onclick="gradeExamAnswer('+examId+','+attemptId+','+q.id+',true)">✓ Correct</button><button class="btn grade-wrong" onclick="examWrongAnswerModal('+examId+','+attemptId+','+q.id+')">✕ Incorrect</button></div></div>');
 }
 function examWrongAnswerModal(examId,attemptId,qid){
