@@ -1442,6 +1442,14 @@ app.post('/api/admin/badges',requirePermission('MANAGE_BADGES'),async(req,res)=>
   const name=String(req.body?.name||'').trim(),description=String(req.body?.description||'').trim();if(!name)return res.status(400).json({error:'Badge name is required'});
   const [r]=await q('INSERT INTO b4_badges(name,description) VALUES(?,?)',[name,description||null]); await audit(req,'BADGE_CREATED','badge',r.insertId);res.json({ok:true,id:r.insertId});
 });
+app.patch('/api/admin/badges/:id',requirePermission('MANAGE_BADGES'),async(req,res)=>{
+  const id=Number(req.params.id),name=String(req.body?.name||'').trim(),description=String(req.body?.description||'').trim();
+  if(!Number.isSafeInteger(id)||!name)return res.status(400).json({error:'Badge name is required'});
+  const [r]=await q('UPDATE b4_badges SET name=?,description=? WHERE id=?',[name,description||null,id]);
+  if(!r.affectedRows)return res.status(404).json({error:'Badge not found'});
+  await audit(req,'BADGE_UPDATED','badge',id,{name});
+  res.json({ok:true});
+});
 app.post('/api/admin/badges/:id/icon',requirePermission('MANAGE_BADGES'),imageUpload.single('file'),async(req,res)=>{
   if(!req.file)return res.status(400).json({error:'Image required'}); const id=Number(req.params.id);
   await q('UPDATE b4_badges SET icon_mime=?,icon_data=? WHERE id=?',[req.file.mimetype,req.file.buffer,id]);res.json({ok:true});
