@@ -1350,8 +1350,8 @@ app.get('/api/exams/:id/answers',requireAuth,async(req,res)=>{
   const [attemptRows]=await q('SELECT a.id,a.status,a.score,a.submitted_at,e.title FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);
   if(!attemptRows[0])return res.status(404).json({error:'No exam submission yet'});
   if(attemptRows[0].status!=='SUBMITTED')return res.status(400).json({error:'Exam has not been submitted yet'});
-  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.points,
-    ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer AS correct_answer
+  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer AS auto_correct_answer,q.points,
+    ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer
     FROM exam_questions q LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptRows[0].id,id]);
   const total=questions.reduce((n,x)=>n+((x.question_type==='MCQ'||x.question_type==='TRUE_FALSE'||x.is_correct!==null)?Number(x.points||0):0),0);
