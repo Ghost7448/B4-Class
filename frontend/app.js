@@ -985,7 +985,7 @@ async function deleteKey(id){
 }
 async function createKey(){try{const d=await api('/api/admin/people');const opts=[...d.students.map(x=>'<option value="STUDENT:'+x.id+'">'+esc(x.display_name)+'</option>'),...d.teachers.map(x=>'<option value="TEACHER:'+x.id+'">'+esc(x.display_name)+'</option>')].join('');modal('<div class="modalhead"><h2>Generate activation key</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="makeKey(event)"><select id="keyPerson">'+opts+'</select><button class="btn primary">Generate</button></form>')}catch(e){toast(e.message)}}
 async function makeKey(e){e.preventDefault();const [personType,personId]=$('#keyPerson').value.split(':');try{const d=await api('/api/admin/activation-keys',{method:'POST',body:JSON.stringify({personType,personId:Number(personId)})});close();await navigator.clipboard?.writeText(d.key);modal('<div class="modalhead"><h2>Activation key</h2><button class="close" onclick="b4Close()">×</button></div><div class="notice mono">'+esc(d.key)+'</div>')}catch(x){toast(x.message)}}
-async function loadBadges(){const r=$('#adminRoot');try{const d=await api('/api/admin/badges');S.badges=d.badges||[];r.innerHTML='<button class="btn primary" onclick="badgeCreate()">＋ Add badge</button><div class="grid c3">'+d.badges.map(b=>'<article class="card"><img class="avatar" src="/api/badges/'+b.id+'/icon"><h3>'+esc(b.name)+'</h3><p>'+esc(b.description||'')+'</p><div class="actions-row"><button class="btn ghost" onclick="badgeEdit('+b.id+')">Edit</button><button class="btn primary" onclick="badgeAssign('+b.id+')">Assign</button></div></article>').join('')+'</div>'}catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}}
+async function loadBadges(){const r=$('#adminRoot');try{const d=await api('/api/admin/badges');S.badges=d.badges||[];r.innerHTML='<button class="btn primary" onclick="badgeCreate()">＋ Add badge</button><div class="grid c3">'+d.badges.map(b=>'<article class="card"><img class="avatar" src="/api/badges/'+b.id+'/icon"><h3>'+esc(b.name)+'</h3><p>'+esc(b.description||'')+'</p><div class="actions-row"><button class="btn ghost" onclick="badgeEdit('+b.id+')">Edit</button><button class="btn primary" onclick="badgeAssign('+b.id+')">Assign</button><button class="btn ghost" onclick="badgeRemove('+b.id+')">Remove From</button><button class="btn danger" onclick="badgeDelete('+b.id+')">Delete</button></div></article>').join('')+'</div>'}catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}}
 function badgeEdit(id){
   const b=(S.badges||[]).find(x=>Number(x.id)===Number(id))||{};
   modal('<div class="modalhead"><h2>Edit badge</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveBadge(event,'+Number(id)+')"><label>Badge name<input id="editBadgeName" value="'+esc(b.name||'')+'" required></label><label>Description<input id="editBadgeDesc" value="'+esc(b.description||'')+'" placeholder="Description"></label><label>Icon <span class="muted">(optional)</span><input id="editBadgeIcon" type="file" accept="image/*"></label><button class="btn primary">Save badge</button></form>');
@@ -1002,6 +1002,28 @@ async function saveBadge(e,id){
 function badgeCreate(){modal('<div class="modalhead"><h2>New badge</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="makeBadge(event)"><input id="badgeName" placeholder="Badge name" required><input id="badgeDesc" placeholder="Description"><input id="badgeIcon" type="file" accept="image/*"><button class="btn primary">Create</button></form>')}
 async function makeBadge(e){e.preventDefault();try{const d=await api('/api/admin/badges',{method:'POST',body:JSON.stringify({name:$('#badgeName').value,description:$('#badgeDesc').value})});const f=$('#badgeIcon').files[0];if(f){const fd=new FormData();fd.append('file',f);await fetch(API+'/api/admin/badges/'+d.id+'/icon',{method:'POST',credentials:'include',body:fd})}close();loadBadges()}catch(x){toast(x.message)}}
 async function badgeAssign(bid){const d=await api('/api/admin/badges');const opts=d.people.map(p=>'<option value="'+p.id+'">'+esc(p.display_name)+' • '+p.role+'</option>').join('');modal('<div class="modalhead"><h2>Assign badge</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="doBadgeAssign(event,'+bid+')"><select id="badgeUser">'+opts+'</select><button class="btn primary">Assign</button></form>')}
+async function badgeRemove(bid){
+  const d=await api('/api/admin/badges');
+  const assigned=(d.people||[]).filter(p=>Number(p.badge_id)===Number(bid));
+  if(!assigned.length){toast('No one has this badge');return}
+  const rows=assigned.map(p=>'<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px"><div><b>'+esc(p.display_name)+'</b><div class="muted">'+esc(p.role||'')+'</div></div><button class="btn danger" onclick="removeBadgeFromUser('+p.id+','+bid+')">Remove From</button></div>').join('');
+  modal('<div class="modalhead"><h2>Remove From</h2><button class="close" onclick="b4Close()">×</button></div><div class="form">'+rows+'</div>');
+}
+async function removeBadgeFromUser(uid,bid){
+  try{
+    await api('/api/admin/badges/assign',{method:'DELETE',body:JSON.stringify({userId:Number(uid),badgeId:Number(bid)})});
+    toast('Badge removed ✓');
+    badgeRemove(bid);
+  }catch(e){toast(e.message)}
+}
+async function badgeDelete(bid){
+  if(!confirm('Delete this badge? It will also be removed from everyone who has it.'))return;
+  try{
+    await api('/api/admin/badges/'+bid,{method:'DELETE'});
+    toast('Badge deleted ✓');
+    loadBadges();
+  }catch(e){toast(e.message)}
+}
 async function doBadgeAssign(e,bid){e.preventDefault();try{await api('/api/admin/badges/assign',{method:'POST',body:JSON.stringify({userId:Number($('#badgeUser').value),badgeId:bid})});close();toast('Badge assigned ✓')}catch(x){toast(x.message)}}
 async function loadAdmins(){const r=$('#adminRoot');const d=await api('/api/admin/users');r.innerHTML='<div class="grid c2">'+d.users.filter(u=>Number(u.is_super_admin)!==1).map(u=>'<div class="card"><b>'+esc(u.display_name)+'</b><p class="muted">'+esc(u.role)+'</p><button class="btn primary" onclick="adminPermissions('+u.id+')">Manage admin access</button></div>').join('')+'</div><button class="btn ghost" onclick="adminPermissions()">Grant to a person</button>'}
 async function adminPermissions(id){const d=await api('/api/admin/users');const opts=d.users.filter(u=>Number(u.is_super_admin)!==1).map(u=>'<option value="'+u.id+'">'+esc(u.display_name)+' • '+u.role+'</option>').join('');modal('<div class="modalhead"><h2>Admin access</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="grantAdmin(event)"><select id="adminUser">'+opts+'</select><div class="permission-grid">'+PERMS.map(p=>'<label class="permission-tile"><input type="checkbox" name="ap" value="'+p[0]+'"><span>'+p[1]+'</span></label>').join('')+'</div><button class="btn primary">Save admin permissions</button></form>')}
