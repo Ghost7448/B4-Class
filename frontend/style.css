@@ -1281,3 +1281,33 @@ to{opacity:1;transform:translateY(0)}}
 @media(max-width:700px){.exam-run-hero{align-items:stretch;flex-direction:column;padding:19px}.exam-run-hero h2{font-size:23px}.exam-run-question{padding:17px;border-radius:18px}.exam-run-question h3{font-size:16px}.exam-submit-row{align-items:stretch;flex-direction:column}.exam-submit-row .btn{width:100%}.manual-grade-panel{align-items:stretch;flex-direction:column}.manual-grade-panel .btn{width:100%}.answer-review-grid{grid-template-columns:1fr}.exam-answers-summary{grid-template-columns:1fr}.grade-actions{grid-template-columns:1fr}}
 
 .exam-question-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.exam-type-badge{font-size:9px!important;letter-spacing:.04em}.exam-answer-review .head>div:first-child{min-width:0}.exam-answer-review .head h3{margin-top:8px}
+
+/* ===== PROFILE BADGES ===== */
+.person-name-line,.chat-name-line{display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-width:0}
+.person-name-line>b,.chat-name-line>b{min-width:0}
+.profile-badges{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap}
+.profile-badge{
+  display:inline-flex;align-items:center;gap:5px;max-width:180px;
+  padding:4px 8px;border-radius:999px;
+  border:1px solid #7c3aed35;
+  background:linear-gradient(135deg,#7c3aed16,#a855f710);
+  color:var(--p);font-size:9px;font-weight:900;
+  line-height:1;white-space:nowrap;vertical-align:middle;
+  box-shadow:0 3px 12px #7c3aed0d;
+}
+.profile-badge img,.badge-fallback{
+  width:17px;height:17px;flex:0 0 17px;border-radius:50%;
+  object-fit:cover;display:grid;place-items:center;
+}
+.badge-fallback{background:#7c3aed18;color:var(--p);font-size:10px}
+.profile-badge>span:last-child{overflow:hidden;text-overflow:ellipsis}
+.profile-badge.compact{padding:3px 6px;font-size:8px;gap:4px}
+.profile-badge.compact img,.profile-badge.compact .badge-fallback{width:15px;height:15px;flex-basis:15px}
+.chat-name-line{gap:6px}
+.chat-name-line .profile-badges{gap:4px}
+.people-card .profile-badges{margin-left:2px}
+@media(max-width:600px){
+  .profile-badge{max-width:145px;font-size:8px;padding:3px 7px}
+  .profile-badge img,.profile-badge .badge-fallback{width:15px;height:15px;flex-basis:15px}
+  .profile-badge.compact{max-width:125px}
+}
