@@ -1094,7 +1094,14 @@ function renderExamQuestions(){const root=$('#examQuestions');if(root)root.inner
 function addExamQuestion(){collectExamQuestions();examDraft.push({questionText:'',questionType:'MCQ',options:['','','',''],correctAnswer:'',points:1});renderExamQuestions()}
 function removeExamQuestion(i){collectExamQuestions();if(examDraft.length<=1)return toast('An exam needs at least one question');examDraft.splice(i,1);renderExamQuestions()}
 function setExamCorrect(i,j){collectExamQuestions();examDraft[i].correctAnswer=String(examDraft[i].options[j]||'').trim();renderExamQuestions()}
-function examTypeChanged(i,type){collectExamQuestions();examDraft[i].questionType=type;examDraft[i].correctAnswer=type==='TRUE_FALSE'?'TRUE':'';if(type==='MCQ'&&examDraft[i].options.length<4)examDraft[i].options=['','','',''];renderExamQuestions()}
+function examTypeChanged(i,type){
+  collectExamQuestions();
+  examDraft[i].questionType=type;
+  examDraft[i].correctAnswer=type==='TRUE_FALSE'?'TRUE':'';
+  if(type==='MCQ')examDraft[i].options=['','','',''];
+  else examDraft[i].options=[];
+  renderExamQuestions();
+}
 function collectExamQuestions(){
   document.querySelectorAll('[data-qindex]').forEach(card=>{
     const i=Number(card.dataset.qindex);if(!examDraft[i])return;
@@ -1103,7 +1110,11 @@ function collectExamQuestions(){
     const type=card.querySelector('[data-qtype]')?.value||examDraft[i].questionType;examDraft[i].questionType=type;
     if(type==='MCQ'){
       examDraft[i].options=[...card.querySelectorAll('[data-qopt="'+i+'"]')].map(x=>x.value.trim()).filter(Boolean);
-    }else if(type==='SHORT') examDraft[i].correctAnswer=card.querySelector('[data-qshort]')?.value?.trim()||'';
+    }else if(type==='TRUE_FALSE'){
+      examDraft[i].correctAnswer=card.querySelector('[name="correct-'+i+'"]:checked')?.value||examDraft[i].correctAnswer||'TRUE';
+    }else{
+      examDraft[i].correctAnswer='';
+    }
   });
 }
 async function examEdit(id){
@@ -1153,16 +1164,27 @@ function examRunV(){
 }
 function startExamTimer(deadline,id){
   clearInterval(window.examTimer);
-  const box=$('#examTimer'),end=deadline?new Date(deadline).getTime():null;
+  const box=$('#examTimer');
+  const raw=deadline?new Date(deadline).getTime():NaN;
+  const duration=Number(S.examRun?.exam?.duration_minutes||0);
+  const started=Number(S.examRun?.attempt?.started_at?new Date(S.examRun.attempt.started_at).getTime():NaN);
+  const end=Number.isFinite(raw)?raw:(duration>0&&Number.isFinite(started)?started+duration*60000:null);
   const tick=()=>{
     if(!box)return clearInterval(window.examTimer);
     if(!end){box.textContent='No time limit';return}
     const left=Math.max(0,end-Date.now()),sec=Math.floor(left/1000),m=Math.floor(sec/60),s=sec%60;
     box.textContent='Time remaining • '+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
-    box.classList.toggle('warn',left<60000);box.classList.toggle('danger',left<15000);
-    if(left<=0){clearInterval(window.examTimer);toast('Time is over — submitting exam');const form=$('#examRunForm');if(form)submitExam({preventDefault:()=>{}},id,true);}
+    box.classList.toggle('warn',left<=60000&&left>15000);
+    box.classList.toggle('danger',left<=15000);
+    if(left<=0){
+      clearInterval(window.examTimer);
+      toast('Time is over — submitting exam');
+      const form=$('#examRunForm');
+      if(form)submitExam({preventDefault:()=>{}},id,true);
+    }
   };
-  tick();window.examTimer=setInterval(tick,1000);
+  tick();
+  window.examTimer=setInterval(tick,1000);
 }
 async function submitExam(e,id,auto=false){
   e.preventDefault?.();clearInterval(window.examTimer);
