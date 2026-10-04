@@ -1206,11 +1206,15 @@ function examResultV(){
 }
 function examAnswersV(){
   const r=S.examAnswers||{},qs=r.questions||[];
+  const typeLabel=t=>({MCQ:'MCQ',TRUE_FALSE:'TRUE/FALSE',SHORT:'SHORT',LONG:'LONG'}[String(t||'').toUpperCase()]||String(t||'').toUpperCase());
   return title('View Answers','Review what you submitted and what was marked correct or incorrect.','<button class="btn ghost" onclick="go(\'exams\')">← Back</button>')+
   '<div class="exam-answers-summary"><div><b>'+Number(r.percent||0)+'%</b><span>Current score</span></div><div><b>'+Number(r.score||r.attempt?.score||0)+' / '+Number(r.total||0)+'</b><span>Graded points</span></div></div><div class="exam-answer-review-list">'+qs.map((q,i)=>{
-    const manual=q.question_type==='SHORT'||q.question_type==='LONG',pending=manual&&(q.is_correct===null||q.is_correct===undefined),state=pending?'pending':(q.is_correct?'correct':'incorrect'),status=pending?'Pending teacher review':(q.is_correct?'✓ Correct':'✕ Incorrect');
-    const answerToShow=manual?(q.teacher_correct_answer||'Not graded yet'):(q.auto_correct_answer||'Not available');
-    return '<article class="exam-answer-review '+state+'"><div class="head"><div><span class="question-number">Question '+(i+1)+'</span><h3>'+esc(q.question_text)+'</h3></div><span class="answer-status">'+status+'</span></div><div class="answer-review-grid"><div class="answer-review-box"><small>Your answer</small><p>'+esc(q.answer_text||'No answer')+'</p></div><div class="answer-review-box"><small>'+((!manual)?'Correct answer':'Teacher answer')+'</small><p>'+esc(answerToShow)+'</p></div></div></article>';
+    const manual=q.question_type==='SHORT'||q.question_type==='LONG';
+    const graded=q.is_correct!==null&&q.is_correct!==undefined;
+    const state=graded?(Number(q.is_correct)===1?'correct':'incorrect'):'pending';
+    const status=graded?(Number(q.is_correct)===1?'✓ Correct':'✕ Incorrect'):'Pending teacher review';
+    const answerToShow=manual?(q.teacher_correct_answer|| (graded?(Number(q.is_correct)===1?'Marked correct by teacher':'Marked incorrect by teacher'):'Not graded yet')):(q.auto_correct_answer||q.correct_answer||'Not available');
+    return '<article class="exam-answer-review '+state+'"><div class="head"><div><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+typeLabel(q.question_type)+'</span><h3>'+esc(q.question_text)+'</h3></div><span class="answer-status">'+status+'</span></div><div class="answer-review-grid"><div class="answer-review-box"><small>Your answer</small><p>'+esc(q.answer_text||'No answer')+'</p></div><div class="answer-review-box"><small>'+((!manual)?'Correct answer':'Teacher answer')+'</small><p>'+esc(answerToShow)+'</p></div></div></article>';
   }).join('')+'</div>';
 }
 async function submissions(id){try{const d=await api('/api/admin/exams/'+id+'/submissions');S.examReview={examId:id,submissions:d.submissions||[]};S.view='exam-review';render();}catch(e){toast(e.message)}}
