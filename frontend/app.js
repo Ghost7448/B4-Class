@@ -1133,21 +1133,23 @@ async function startExam(id){
   }
 }
 function examRunV(){
-  const r=S.examRun||{},questions=r.questions||[];
+  const r=S.examRun||{};
+  const questions=r.questions||[];
   const cards=questions.map((q,i)=>{
-    const type=q.question_type||'MCQ',opts=q.options_json||[];
+    const type=q.question_type||'MCQ';
+    const opts=q.options_json||[];
     let body='';
     if(type==='MCQ'){
-      body='<div class="exam-choice-list">'+opts.map((o,j)=>'<label class="exam-choice"><input type="radio" name="q'+q.id+'" value="'+esc(o)+'"><span class="choice-letter">'+String.fromCharCode(65+j)+'</span><span>'+esc(o)+'</span></label>').join('')+'</div>';
+      body=`<div class="exam-choice-list">${opts.map((o,j)=>`<label class="exam-choice"><input type="radio" name="q${q.id}" value="${esc(o)}"><span class="choice-letter">${String.fromCharCode(65+j)}</span><span>${esc(o)}</span></label>`).join('')}</div>`;
     }else if(type==='TRUE_FALSE'){
-      body='<div class="exam-choice-list tf-list"><label class="exam-choice true"><input type="radio" name="q'+q.id+'" value="TRUE"><span class="choice-icon">✓</span><span>True</span></label><label class="exam-choice false"><input type="radio" name="q'+q.id+'" value="FALSE"><span class="choice-icon">✕</span><span>False</span></label></div>';
+      body=`<div class="exam-choice-list tf-list"><label class="exam-choice true"><input type="radio" name="q${q.id}" value="TRUE"><span class="choice-icon">✓</span><span>True</span></label><label class="exam-choice false"><input type="radio" name="q${q.id}" value="FALSE"><span class="choice-icon">✕</span><span>False</span></label></div>`;
     }else{
-      body='<label class="exam-answer-box"><span>Your answer</span><textarea name="q'+q.id+'" rows="'+(type==='LONG'?9:4)+'" placeholder="'+(type==='LONG'?'Write your detailed answer here…':'Write your short answer here…')+'"></textarea></label>';
+      body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="${type==='LONG'?9:4}" placeholder="${type==='LONG'?'Write your detailed answer here…':'Write your short answer here…'}"></textarea></label>`;
     }
-    return '<article class="exam-run-question"><div class="exam-question-top"><span class="question-number">Question '+(i+1)+'</span><span class="badge">'+esc(type==='TRUE_FALSE'?'TRUE / FALSE':type)+'</span></div><h3>'+esc(q.question_text)+'</h3>'+body+'</article>';
+    return `<article class="exam-run-question"><div class="exam-question-top"><span class="question-number">Question ${i+1}</span><span class="badge">${esc(type==='TRUE_FALSE'?'TRUE / FALSE':type)}</span></div><h3>${esc(q.question_text)}</h3>${body}</article>`;
   }).join('');
-  return title('Take Exam',esc(r.exam?.title||'Exam'),'<button class="btn ghost" onclick="go(\'exams\')">← Back</button>')+
-    '<div class="exam-page-shell"><div class="exam-run-hero"><div><span class="eyebrow">EXAM CENTER</span><h2>'+esc(r.exam?.title||'Exam')+'</h2><p>'+esc(r.exam?.description||'Answer each question carefully. MCQ and True/False are auto-graded. Short and Long answers are reviewed by the teacher.</p></div><div id="examTimer" class="exam-timer">Loading…</div></div><form class="exam-page-form" id="examRunForm" onsubmit="submitExam(event,'+Number(r.id)+')">'+cards+'<div class="exam-submit-row"><p class="muted">Your answers are saved when you submit the exam. Short and Long answers will be reviewed by the teacher.</p><button id="examSubmitBtn" class="btn primary">Submit Exam</button></div></form></div>';
+  return title('Take Exam',esc(r.exam?.title||'Exam'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
+    `<div class="exam-page-shell"><div class="exam-run-hero"><div><span class="eyebrow">EXAM CENTER</span><h2>${esc(r.exam?.title||'Exam')}</h2><p>${esc(r.exam?.description||'Answer each question carefully. MCQ and True/False are auto-graded. Short and Long answers are reviewed by the teacher.')}</p></div><div id="examTimer" class="exam-timer">Loading…</div></div><form class="exam-page-form" id="examRunForm" onsubmit="submitExam(event,${Number(r.id)})">${cards}<div class="exam-submit-row"><p class="muted">Your answers are saved when you submit the exam. Short and Long answers will be reviewed by the teacher.</p><button id="examSubmitBtn" class="btn primary">Submit Exam</button></div></form></div>`;
 }
 function startExamTimer(deadline,id){
   clearInterval(window.examTimer);
