@@ -245,8 +245,41 @@ async function syncLiveData(){
   liveSyncBusy=true;
   try{
     const before=liveDataSignature();
+    const beforeMe=JSON.stringify({
+      id:S.me?.id,
+      role:S.me?.role,
+      is_super_admin:Number(S.me?.is_super_admin||0),
+      status:S.me?.status,
+      permissions:[...(S.me?.permissions||[])].slice().sort()
+    });
+    let meChanged=false;
+    try{
+      const meRes=await api('/api/auth/me',{cache:'no-store'});
+      const nextMe=meRes.user;
+      const afterMe=JSON.stringify({
+        id:nextMe?.id,
+        role:nextMe?.role,
+        is_super_admin:Number(nextMe?.is_super_admin||0),
+        status:nextMe?.status,
+        permissions:[...(nextMe?.permissions||[])].slice().sort()
+      });
+      meChanged=beforeMe!==afterMe;
+      S.me=nextMe;
+    }catch(e){
+      if(/Session expired|Not logged in|Login required/i.test(String(e?.message||''))){
+        S.me=null;
+        try{window.globalRealtimeStream?.close()}catch{}
+        window.globalRealtimeStream=null;
+        render();
+        return;
+      }
+    }
     await loadData();
     const changed=before!==liveDataSignature();
+    if(!changed&&!meChanged)return;
+    if($('#back')?.classList.contains('show'))return;
+    if(S.view==='chat'||S.view==='teacherChat')return;
+    if(S.view==='exam-run'||S.view==='exam-result'||S.view==='exam-answers'||S.view==='exam-review')return;
     if(!changed)return;
     if($('#back')?.classList.contains('show'))return;
     if(S.view==='chat'||S.view==='teacherChat')return;
