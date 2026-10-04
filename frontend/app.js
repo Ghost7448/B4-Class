@@ -242,6 +242,7 @@ async function syncLiveData(){
     if(!changed)return;
     if($('#back')?.classList.contains('show'))return;
     if(S.view==='chat'||S.view==='teacherChat')return;
+    if(S.view==='exam-run'||S.view==='exam-result'||S.view==='exam-answers'||S.view==='exam-review')return;
     if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName||''))return;
     if(S.view==='assignments'){
       patchLiveCards('#content > .grid.c2',S.assignments,assignmentCard);
