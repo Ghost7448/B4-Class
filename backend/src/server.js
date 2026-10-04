@@ -473,7 +473,7 @@ async function getBootstrap(req) {
     FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id
     LEFT JOIN exam_attempts ea ON ea.exam_id=e.id AND ea.user_id=?
     WHERE e.class_name='B4' ORDER BY e.starts_at IS NULL,e.starts_at
-  `);
+  `,[req.session.userId]);
   const nowMs = Date.now();
   for (const assignment of assignments) {
     assignment.assignment_start_ms = Number(assignment.timer_started_ms) || cairoEpoch(assignment.timer_started_at || assignment.created_at);
