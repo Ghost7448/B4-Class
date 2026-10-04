@@ -1005,8 +1005,8 @@ app.get('/api/admin/exams/:id/submissions/:attemptId',requirePermission('MANAGE_
   const [attemptRows]=await q(`SELECT a.id,a.exam_id,a.user_id,a.status,a.score,a.started_at,a.submitted_at,u.display_name,u.official_name,e.title,e.subject_id
     FROM exam_attempts a JOIN users u ON u.id=a.user_id JOIN exams e ON e.id=a.exam_id WHERE a.id=? AND a.exam_id=? LIMIT 1`,[attemptId,examId]);
   if(!attemptRows[0]) return res.status(404).json({error:'Submission not found'});
-  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.points,
-    ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer AS correct_answer FROM exam_questions q
+  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer AS auto_correct_answer,q.points,
+    ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer FROM exam_questions q
     LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptId,examId]);
   const total=questions.reduce((n,x)=>n+((x.question_type==='MCQ'||x.question_type==='TRUE_FALSE'||x.is_correct!==null)?Number(x.points||0):0),0);
