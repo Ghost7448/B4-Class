@@ -1457,6 +1457,16 @@ app.post('/api/admin/badges/:id/icon',requirePermission('MANAGE_BADGES'),imageUp
 app.get('/api/badges/:id/icon',async(req,res)=>{const [r]=await q('SELECT icon_mime,icon_data FROM b4_badges WHERE id=? LIMIT 1',[Number(req.params.id)]);if(!r[0]||!r[0].icon_data)return res.status(404).end();res.setHeader('Content-Type',r[0].icon_mime);res.setHeader('Cache-Control','public,max-age=300');res.send(r[0].icon_data);});
 app.post('/api/admin/badges/assign',requirePermission('MANAGE_BADGES'),async(req,res)=>{const uid=Number(req.body?.userId),bid=Number(req.body?.badgeId);await q('INSERT IGNORE INTO b4_user_badges(user_id,badge_id,assigned_by) VALUES(?,?,?)',[uid,bid,req.session.userId]);await audit(req,'BADGE_ASSIGNED','user',uid,{badgeId:bid});res.json({ok:true});});
 app.delete('/api/admin/badges/assign',requirePermission('MANAGE_BADGES'),async(req,res)=>{await q('DELETE FROM b4_user_badges WHERE user_id=? AND badge_id=?',[Number(req.body?.userId),Number(req.body?.badgeId)]);res.json({ok:true});});
+app.delete('/api/admin/badges/:id',requirePermission('MANAGE_BADGES'),async(req,res)=>{
+  const id=Number(req.params.id);
+  if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid badge'});
+  const [badge]=await q('SELECT id,name FROM b4_badges WHERE id=? LIMIT 1',[id]);
+  if(!badge[0])return res.status(404).json({error:'Badge not found'});
+  await q('DELETE FROM b4_user_badges WHERE badge_id=?',[id]);
+  await q('DELETE FROM b4_badges WHERE id=?',[id]);
+  await audit(req,'BADGE_DELETED','badge',id,{name:badge[0].name});
+  res.json({ok:true});
+});
 
 app.get('/api/admin/developers',requirePermission('MANAGE_DEVELOPERS'),async(req,res)=>{const [developers]=await q('SELECT id,name,title,title2,link_url,created_at,IF(image_data IS NULL,NULL,CONCAT("/api/developers/",id,"/avatar")) avatar_url FROM b4_developers ORDER BY id DESC');res.json({developers});});
 app.post('/api/admin/developers',requirePermission('MANAGE_DEVELOPERS'),async(req,res)=>{const title=String(req.body?.title||'').trim(),title2=String(req.body?.title2||'').trim(),name=String(req.body?.name||'').trim(),linkUrl=String(req.body?.linkUrl||'').trim();if(!name)return res.status(400).json({error:'Developer name required'});const [r]=await q('INSERT INTO b4_developers(name,title,title2,link_url) VALUES(?,?,?,?)',[name,title||null,title2||null,linkUrl||null]);await audit(req,'DEVELOPER_CREATED','developer',r.insertId);res.json({ok:true,id:r.insertId});});
