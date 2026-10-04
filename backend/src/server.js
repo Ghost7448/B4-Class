@@ -375,7 +375,10 @@ async function userById(id) {
     [id]
   );
   if(!r[0]) return null;
-  return {...r[0],permissions:await getPermissionCodes(id)};
+  const [badges]=await q(`SELECT b.id,b.name,b.description,IF(b.icon_data IS NULL,NULL,CONCAT('/api/badges/',b.id,'/icon')) icon_url
+    FROM b4_user_badges ub JOIN b4_badges b ON b.id=ub.badge_id
+    WHERE ub.user_id=? ORDER BY ub.created_at ASC`,[id]);
+  return {...r[0],badges,permissions:await getPermissionCodes(id)};
 }
 
 
@@ -511,6 +514,19 @@ async function getBootstrap(req) {
     WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100
   `);
   messages.reverse();
+  const [allUserBadges]=await q(`SELECT ub.user_id,b.id,b.name,b.description,IF(b.icon_data IS NULL,NULL,CONCAT('/api/badges/',b.id,'/icon')) icon_url
+    FROM b4_user_badges ub JOIN b4_badges b ON b.id=ub.badge_id
+    ORDER BY ub.created_at ASC`);
+  const badgeMap=new Map();
+  for(const b of allUserBadges){
+    const uid=Number(b.user_id);
+    if(!badgeMap.has(uid))badgeMap.set(uid,[]);
+    badgeMap.get(uid).push({id:b.id,name:b.name,description:b.description,icon_url:b.icon_url});
+  }
+  for(const person of [...students,...teachers,...messages]){
+    const uid=Number(person.user_id);
+    if(uid)person.badges=badgeMap.get(uid)||[];
+  }
   if(req.session.userId) {
     [notifications]=await q(`
       SELECT id,type,entity_id,title,body,target_url,read_at,created_at FROM notifications
