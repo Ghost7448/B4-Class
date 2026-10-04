@@ -468,8 +468,10 @@ async function getBootstrap(req) {
     WHERE r.class_name='B4' ORDER BY r.created_at DESC LIMIT 100
   `);
   const [exams] = await q(`
-    SELECT e.id,e.title,e.description,e.subject_id,e.created_by,DATE_FORMAT(e.created_at,'%Y-%m-%d %H:%i:%s') created_at,e.timer_started_ms,e.ends_at_ms,s.name subject_name,DATE_FORMAT(e.starts_at,'%Y-%m-%d %H:%i:%s') starts_at,DATE_FORMAT(e.ends_at,'%Y-%m-%d %H:%i:%s') ends_at,e.duration_minutes
+    SELECT e.id,e.title,e.description,e.subject_id,e.created_by,DATE_FORMAT(e.created_at,'%Y-%m-%d %H:%i:%s') created_at,e.timer_started_ms,e.ends_at_ms,s.name subject_name,DATE_FORMAT(e.starts_at,'%Y-%m-%d %H:%i:%s') starts_at,DATE_FORMAT(e.ends_at,'%Y-%m-%d %H:%i:%s') ends_at,e.duration_minutes,
+           ea.status attempt_status,ea.score attempt_score,ea.submitted_at attempt_submitted_at
     FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id
+    LEFT JOIN exam_attempts ea ON ea.exam_id=e.id AND ea.user_id=?
     WHERE e.class_name='B4' ORDER BY e.starts_at IS NULL,e.starts_at
   `);
   const nowMs = Date.now();
@@ -1000,19 +1002,21 @@ app.get('/api/admin/exams/:id/submissions/:attemptId',requirePermission('MANAGE_
     ans.answer_text,ans.is_correct,ans.points_awarded FROM exam_questions q
     LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptId,examId]);
-  const total=questions.filter(x=>x.question_type==='MCQ'||x.question_type==='TRUE_FALSE').reduce((n,x)=>n+Number(x.points||0),0);
+  const total=questions.reduce((n,x)=>n+((x.question_type==='MCQ'||x.question_type==='TRUE_FALSE'||x.is_correct!==null)?Number(x.points||0):0),0);
   res.json({attempt:attemptRows[0],total,percent:total?Math.round(Number(attemptRows[0].score||0)/total*100):0,
     questions:questions.map(x=>({...x,options_json:typeof x.options_json==='string'?(JSON.parse(x.options_json||'[]')):(x.options_json||[])}))});
 });
 
-app.get('/api/exams/:id/result',requireAuth,async(req,res)=>{const id=Number(req.params.id),[r]=await q('SELECT a.id,a.status,a.score,a.started_at,a.submitted_at,e.title,e.ends_at,e.duration_minutes FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);if(!r[0])return res.status(404).json({error:'No exam submission yet'});const [tot]=await q("SELECT COALESCE(SUM(CASE WHEN question_type IN ('MCQ','TRUE_FALSE') THEN points ELSE 0 END),0) total FROM exam_questions WHERE exam_id=?",[id]);const total=Number(tot[0]?.total||0),score=Number(r[0].score||0);res.json({attempt:r[0],percent:total?Math.round(score/total*100):0,total});});
+app.patch('/api/admin/exams/:examId/submissions/:attemptId/questions/:questionId',requirePermission('MANAGE_EXAMS'),async(req,res)=>{const examId=Number(req.params.examId),attemptId=Number(req.params.attemptId),questionId=Number(req.params.questionId);if(![examId,attemptId,questionId].every(Number.isSafeInteger))return res.status(400).json({error:'Invalid grading request'});if(req.user?.role!=='TEACHER'&&Number(req.user?.is_super_admin)!==1)return res.status(403).json({error:'Only Teachers can grade submissions'});try{await assertTeacherOwner(req,'exams',examId)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const correct=!!req.body?.correct,correctAnswer=String(req.body?.correctAnswer||'').trim();const [rows]=await q('SELECT q.id,q.question_type,q.points,ea.id answer_id FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=? WHERE q.id=? AND q.exam_id=? LIMIT 1',[attemptId,questionId,examId]);const qn=rows[0];if(!qn)return res.status(404).json({error:'Question answer not found'});if(!['SHORT','LONG'].includes(qn.question_type))return res.status(400).json({error:'Only Short and Long answers can be manually graded'});if(!qn.answer_id)return res.status(404).json({error:'Student did not submit an answer'});if(!correct&&!correctAnswer)return res.status(400).json({error:'Please enter the correct answer'});await q('UPDATE exam_answers SET is_correct=?,points_awarded=?,correct_answer=? WHERE id=?',[correct,correct?Number(qn.points):0,correctAnswer||null,qn.answer_id]);const [scoreRows]=await q("SELECT COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE','SHORT','LONG') AND ea.is_correct IS NOT NULL THEN ea.points_awarded ELSE 0 END),0) score,COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE') OR ea.is_correct IS NOT NULL THEN q.points ELSE 0 END),0) total FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=? WHERE q.exam_id=?",[attemptId,examId]);const score=Number(scoreRows[0]?.score||0),total=Number(scoreRows[0]?.total||0),percent=total?Math.round(score/total*100):0;await q('UPDATE exam_attempts SET score=? WHERE id=?',[score,attemptId]);await audit(req,'EXAM_ANSWER_GRADED','exam',examId,{attemptId,questionId,correct,score,total,percent});res.json({ok:true,correct,correctAnswer:correctAnswer||null,score,total,percent});});
+
+app.get('/api/exams/:id/result',requireAuth,async(req,res)=>{const id=Number(req.params.id),[r]=await q('SELECT a.id,a.status,a.score,a.started_at,a.submitted_at,e.title,e.ends_at,e.duration_minutes FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);if(!r[0])return res.status(404).json({error:'No exam submission yet'});const [tot]=await q("SELECT COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE') OR a.is_correct IS NOT NULL THEN q.points ELSE 0 END),0) total FROM exam_questions q LEFT JOIN exam_answers a ON a.question_id=q.id AND a.attempt_id=? WHERE q.exam_id=?",[r[0].id,id]);const total=Number(tot[0]?.total||0),score=Number(r[0].score||0);res.json({attempt:r[0],percent:total?Math.round(score/total*100):0,total});});
 
 app.get('/api/admin/exams/:id/submissions',requirePermission('MANAGE_EXAMS'),async(req,res)=>{
   const id=Number(req.params.id);
   if(!Number.isSafeInteger(id)) return res.status(400).json({error:'Invalid exam id'});
   try{await assertTeacherOwner(req,'exams',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}
   const [rows]=await q(`SELECT a.id,a.user_id,a.status,a.score,a.started_at,a.submitted_at,u.display_name,u.official_name,
-    COALESCE((SELECT SUM(CASE WHEN question_type IN ('MCQ','TRUE_FALSE') THEN points ELSE 0 END) FROM exam_questions WHERE exam_id=a.exam_id),0) total
+    COALESCE((SELECT SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE') OR ea.is_correct IS NOT NULL THEN q.points ELSE 0 END) FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=a.id WHERE q.exam_id=a.exam_id),0) total
     FROM exam_attempts a JOIN users u ON u.id=a.user_id WHERE a.exam_id=? ORDER BY a.submitted_at DESC,a.started_at DESC`,[id]);
   res.json({submissions:rows.map(x=>({...x,percent:Number(x.total)?Math.round(Number(x.score||0)/Number(x.total)*100):0}))});
 });
@@ -1338,7 +1342,7 @@ app.get('/api/exams/:id/answers',requireAuth,async(req,res)=>{
   if(!attemptRows[0])return res.status(404).json({error:'No exam submission yet'});
   if(attemptRows[0].status!=='SUBMITTED')return res.status(400).json({error:'Exam has not been submitted yet'});
   const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.points,
-    ans.answer_text,ans.is_correct,ans.points_awarded
+    ans.answer_text,ans.is_correct,ans.points_awarded,ans.correct_answer
     FROM exam_questions q LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptRows[0].id,id]);
   const total=questions.filter(x=>x.question_type==='MCQ'||x.question_type==='TRUE_FALSE').reduce((n,x)=>n+Number(x.points||0),0);
