@@ -196,7 +196,7 @@ function examTime(e){
   const now=siteNowMs();
   const fmt=ms=>{const total=Math.max(0,Math.floor(ms/1000)),d=Math.floor(total/86400),h=Math.floor(total%86400/3600),m=Math.floor(total%3600/60),s=total%60;return d>0?d+'d '+h+'h '+m+'m':h>0?h+'h '+m+'m '+String(s).padStart(2,'0')+'s':m>0?m+'m '+String(s).padStart(2,'0')+'s':s+'s'};
   if(Number.isFinite(end)){const left=end-now;if(left<=0)return {label:'Exam closed',tone:'red',pct:0};if(!Number.isFinite(start)||start>=end)return {label:'Time left '+fmt(left),tone:'green',pct:100};const total=end-start;const pct=Math.min(100,Math.max(0,(left/total)*100));const tone=left<=10*60000?'red':left<=30*60000?'yellow':'green';return {label:'Time left '+fmt(left),tone,pct}}
-  return {label:'Open',tone:'green',pct:100};
+  return {label:'No deadline',tone:'green',pct:100};
 }
 function updateExamCountdowns(){document.querySelectorAll('[data-exam-id]').forEach(el=>{const e=S.exams.find(x=>Number(x.id)===Number(el.dataset.examId));if(!e)return;const tm=examTime(e);el.textContent=tm.label;el.className='countdown '+tm.tone;const bar=document.querySelector('[data-exam-bar="'+e.id+'"]');if(bar){bar.className=tm.tone;bar.style.width=tm.pct+'%'}const open=el.closest('.card')?.querySelector('[data-exam-open]');if(open){const closed=tm.label==='Exam closed';open.disabled=closed;open.classList.toggle('disabled',closed);open.title=tm.label}}
 )}
