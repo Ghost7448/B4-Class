@@ -90,12 +90,15 @@ function notificationUrl(type,id){
   return '/';
 }
 async function ensureNotificationSettings(userId){
-  const defaults={class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0};
+  const defaults={chat_messages:1,class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0};
   if(!userId)return defaults;
   try{
-    await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,chat_messages TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    const [chatSettingCol]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notification_settings' AND COLUMN_NAME='chat_messages' LIMIT 1");
+    if(!chatSettingCol.length) await q("ALTER TABLE notification_settings ADD COLUMN chat_messages TINYINT(1) NOT NULL DEFAULT 1 AFTER teacher_chat_reply");
     await q('INSERT INTO notification_settings(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=user_id',[userId]);
-    const [rows]=await q('SELECT class_chat_reply,teacher_chat_reply,exam_notifications,announcement_notifications,assignment_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
+    await q('UPDATE notification_settings SET chat_messages=GREATEST(COALESCE(class_chat_reply,1),COALESCE(teacher_chat_reply,1)) WHERE user_id=? AND chat_messages=1',[userId]);
+    const [rows]=await q('SELECT chat_messages,class_chat_reply,teacher_chat_reply,exam_notifications,announcement_notifications,assignment_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
     return rows[0]||defaults;
   }catch(e){
     console.error('Notification settings bootstrap failed:',e.message);
@@ -548,9 +551,9 @@ app.get('/api/notifications/settings',requireAuth,async(req,res)=>{
 app.patch('/api/notifications/settings',requireAuth,async(req,res)=>{
   try{
     const current=await ensureNotificationSettings(req.session.userId);
-    const allowed=['class_chat_reply','teacher_chat_reply','exam_notifications','announcement_notifications','assignment_notifications','system_notifications','push_enabled'];
+    const allowed=['chat_messages','exam_notifications','announcement_notifications','assignment_notifications','system_notifications','push_enabled'];
     const next={}; for(const key of allowed)next[key]=req.body?.[key]===undefined?Number(current[key])?1:0:(req.body[key]?1:0);
-    await q('UPDATE notification_settings SET class_chat_reply=?,teacher_chat_reply=?,exam_notifications=?,announcement_notifications=?,assignment_notifications=?,system_notifications=?,push_enabled=? WHERE user_id=?',[next.class_chat_reply,next.teacher_chat_reply,next.exam_notifications,next.announcement_notifications,next.assignment_notifications,next.system_notifications,next.push_enabled,req.session.userId]);
+    await q('UPDATE notification_settings SET chat_messages=?,class_chat_reply=?,teacher_chat_reply=?,exam_notifications=?,announcement_notifications=?,assignment_notifications=?,system_notifications=?,push_enabled=? WHERE user_id=?',[next.chat_messages,next.chat_messages,next.chat_messages,next.exam_notifications,next.announcement_notifications,next.assignment_notifications,next.system_notifications,next.push_enabled,req.session.userId]);
     res.json({settings:await ensureNotificationSettings(req.session.userId),vapidPublicKey:VAPID_READY?process.env.VAPID_PUBLIC_KEY:null});
   }catch(e){res.status(500).json({error:'Could not save notification settings'})}
 });
