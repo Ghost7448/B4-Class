@@ -1328,3 +1328,26 @@ to{opacity:1;transform:translateY(0)}}
 .review-student-main>div{display:grid;gap:5px;min-width:0}
 .review-student-main small{color:var(--m)}
 .review-unlock{width:100%;justify-content:center}
+
+/* Exam editor: bottom Add Question control */
+.exam-add-question-bottom{
+  display:flex;
+  justify-content:center;
+  padding:14px 0 4px;
+}
+.exam-add-question-btn{
+  min-width:190px;
+  justify-content:center;
+  border-style:dashed;
+  border-color:#7c3aed55;
+  transition:transform .2s ease,border-color .2s ease,background .2s ease;
+}
+.exam-add-question-btn:hover{
+  transform:translateY(-2px);
+  border-color:#7c3aed99;
+  background:#7c3aed0d;
+}
+@media(max-width:600px){
+  .exam-add-question-bottom{padding:12px 0 2px}
+  .exam-add-question-btn{width:100%;min-height:46px}
+}
