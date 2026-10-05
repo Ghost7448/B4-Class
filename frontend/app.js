@@ -252,6 +252,9 @@ function lockActiveExam(reason='LEFT_EXAM'){
   const id=Number(S.examRun?.id||0);
   if(!id||window.examExitAllowed||S.view!=='exam-run')return;
   window.examExitAllowed=true;
+  if(S.examRun)S.examRun.locked=true;
+  const local=S.exams.find(x=>Number(x.id)===id);
+  if(local)local.attempt_status='LOCKED';
   try{
     const blob=new Blob([JSON.stringify({reason})],{type:'application/json'});
     if(navigator.sendBeacon)navigator.sendBeacon('/api/exams/'+id+'/lock',blob);
@@ -262,7 +265,15 @@ function installExamExitGuard(){
   if(examExitGuardInstalled)return;
   examExitGuardInstalled=true;
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='hidden'&&S.view==='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
+    if(document.visibilityState==='hidden'&&S.view==='exam-run'&&!window.examExitAllowed){
+      lockActiveExam('LEFT_EXAM');
+      return;
+    }
+    if(document.visibilityState==='visible'&&S.view==='exam-run'&&S.examRun?.locked){
+      S.view='exam-locked';
+      render();
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
   });
   window.addEventListener('pagehide',()=>{
     if(S.view==='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
