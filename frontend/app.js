@@ -1371,7 +1371,7 @@ function examReviewV(){
     }).join('')+'</div>';
   }
   return title('Exam submissions','Choose a student to review their full answers.',`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
-  '<div class="grid review-submissions">'+(r.submissions||[]).map(x=>'<button class="card review-student" onclick="openExamSubmission('+r.examId+','+x.id+')"><div><b>'+esc(x.display_name)+'</b><small>'+esc(x.status||'')+'</small></div><span class="badge">'+Number(x.percent||0)+'%</span></button>').join('')||'<div class="card empty">No submissions yet.</div>'+'</div>';
+  '<div class="grid review-submissions">'+(r.submissions||[]).map(x=>'<article class="card review-student"><button class="review-student-main" onclick="openExamSubmission('+r.examId+','+x.id+')"><div><b>'+esc(x.display_name)+'</b><small>'+esc(x.status||'')+'</small></div><span class="badge">'+Number(x.percent||0)+'%</span></button>'+(x.status==='LOCKED'?'<button class="btn primary review-unlock" onclick="unlockExamSubmission('+r.examId+','+x.id+')">🔓 Unlock</button>':'')+'</article>').join('')||'<div class="card empty">No submissions yet.</div>'+'</div>';
 }
 async function delAPI(path,msg){if(!await confirmAction('Are you sure?'))return;try{await api(path,{method:'DELETE'});await loadData();render();toast(msg+' ✓')}catch(e){toast(e.message)}}
 function searchBind(){const i=$('#search');if(i)i.oninput=()=>{const q=i.value.toLowerCase().trim();if(!q)return;const all=[...S.students,...S.teachers,...S.subjects,...S.assignments,...S.resources];const x=all.find(a=>String(a.display_name||a.name||a.title||'').toLowerCase().includes(q));if(x)toast('Found: '+(x.display_name||x.name||x.title))}}
