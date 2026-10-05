@@ -73,8 +73,10 @@ if(VAPID_READY){
 }
 
 const NOTIFICATION_SETTING_COLUMNS={
-  class_chat_message:'class_chat_reply',
-  teacher_chat_message:'teacher_chat_reply',
+  class_chat_message:'chat_messages',
+  class_chat_reply:'chat_messages',
+  teacher_chat_message:'chat_messages',
+  teacher_chat_reply:'chat_messages',
   exam:'exam_notifications',
   announcement:'announcement_notifications',
   assignment:'assignment_notifications',
@@ -93,7 +95,7 @@ async function ensureNotificationSettings(userId){
   const defaults={chat_messages:1,class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0};
   if(!userId)return defaults;
   try{
-    await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,chat_messages TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,chat_messages TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     const [chatSettingCol]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notification_settings' AND COLUMN_NAME='chat_messages' LIMIT 1");
     if(!chatSettingCol.length) await q("ALTER TABLE notification_settings ADD COLUMN chat_messages TINYINT(1) NOT NULL DEFAULT 1 AFTER teacher_chat_reply");
     await q('INSERT INTO notification_settings(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=user_id',[userId]);
