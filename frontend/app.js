@@ -352,7 +352,8 @@ function examsV(){
   return title(t('exams'),'Exams, submissions and results.',can('MANAGE_EXAMS')?'<button class="btn primary" onclick="examEdit()">＋ '+t('add')+'</button>':'')+
   '<div class="grid c2 exam-cards">'+S.exams.map(e=>{
     const tm=examTime(e),submitted=e.attempt_status==='SUBMITTED',started=e.attempt_status==='STARTED';
-    const action=submitted?'<button class="btn primary" onclick="loadStudentExamAnswers('+e.id+')">View Answers</button>':started?'<button class="btn primary" onclick="startExam('+e.id+')">Continue Exam</button>':'<button class="btn primary" data-exam-open '+(tm.label==='Exam closed'?'disabled':'')+' onclick="startExam('+e.id+')">Open</button>';
+    const locked=e.attempt_status==='LOCKED';
+    const action=submitted?'<button class="btn primary" onclick="loadStudentExamAnswers('+e.id+')">View Answers</button>':locked?'<button class="btn danger" disabled>🔒 Exam Locked</button>':started?'<button class="btn primary" onclick="startExam('+e.id+')">Continue Exam</button>':'<button class="btn primary" data-exam-open '+(tm.label==='Exam closed'?'disabled':'')+' onclick="startExam('+e.id+')">Open</button>';
     return '<article class="card exam-card" data-live-id="'+esc(e.id)+'"><div class="head"><span class="badge">'+esc(e.status)+'</span><span class="muted">'+esc(e.subject_name||'')+'</span></div><h3>'+esc(e.title)+'</h3><p class="muted">'+esc(e.description||'')+'</p><div class="meter"><span>Exam time</span><b class="countdown '+tm.tone+'">'+tm.label+'</b></div><div class="assignment-bar exam-time-bar"><span class="'+tm.tone+'" style="width:'+tm.pct+'%"></span></div><div class="actions-row">'+action+(can('MANAGE_EXAMS')?'<button class="btn ghost" onclick="examEdit('+e.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/exams/'+e.id+'\',\'Exam deleted\')">Delete</button>':'')+(canSubmit?'<button class="btn ghost" onclick="submissions('+e.id+')">Submissions</button>':'')+'</div></article>';
   }).join('')||'<div class="card empty">No exams.</div>'+'</div>';
 }
@@ -1217,6 +1218,7 @@ async function startExam(id){
     S.view='exam-run';render();window.scrollTo({top:0,behavior:'smooth'});startExamTimer(d.attempt?.deadline,id);
   }catch(e){
     if(/already submitted/i.test(e.message)){loadStudentExamAnswers(id);return}
+    if(/Exam Locked/i.test(e.message)){toast('🔒 Exam Locked — your attempt was locked because you left the exam. A Teacher can unlock it from Submissions.');return}
     toast(e.message);
   }
 }
@@ -1307,11 +1309,21 @@ async function gradeExamAnswer(examId,attemptId,qid,correct,correctAnswer=''){
   try{await api('/api/admin/exams/'+examId+'/submissions/'+attemptId+'/questions/'+qid,{method:'PATCH',body:JSON.stringify({correct,correctAnswer})});b4Close();const d=await api('/api/admin/exams/'+examId+'/submissions/'+attemptId);S.examReview={examId,detail:d};render();toast(correct?'Answer marked correct ✓':'Answer marked incorrect ✓')}catch(e){toast(e.message)}
 }
 async function submitWrongGrade(e,examId,attemptId,qid){e.preventDefault();const answer=$('#gradeCorrectAnswer')?.value.trim()||'';if(!answer)return toast('Write the correct answer');await gradeExamAnswer(examId,attemptId,qid,false,answer)}
+async function unlockExamSubmission(examId,attemptId){
+  if(!await confirmAction('Unlock this exam for the student? The student will receive a fresh attempt timer.'))return;
+  try{
+    await api('/api/admin/exams/'+examId+'/submissions/'+attemptId+'/unlock',{method:'PATCH',body:JSON.stringify({})});
+    toast('Exam unlocked ✓');
+    const d=await api('/api/admin/exams/'+examId+'/submissions/'+attemptId);
+    S.examReview={examId,detail:d};
+    render();
+  }catch(e){toast(e.message)}
+}
 function examReviewV(){
   const r=S.examReview||{};
   if(r.detail){
     const d=r.detail,examId=Number(r.examId||0),attemptId=Number(d.attempt?.id||0);
-    return title('Submission review','Answers submitted by '+esc(d.attempt?.display_name||'Student'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
+    return title('Submission review','Answers submitted by '+esc(d.attempt?.display_name||'Student'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`+(d.attempt?.status==='LOCKED'?'<button class="btn primary" onclick="unlockExamSubmission('+examId+','+attemptId+')">🔓 Unlock</button>':''))+
     '<div class="grid c3 review-summary"><div class="card"><small>Student</small><b>'+esc(d.attempt?.display_name||'—')+'</b></div><div class="card"><small>Score</small><b>'+Number(d.attempt?.score||0)+' / '+Number(d.total||0)+'</b></div><div class="card"><small>Percentage</small><b>'+Number(d.percent||0)+'%</b></div></div>'+
     '<div class="grid review-questions">'+(d.questions||[]).map((q,i)=>{
       const manual=q.question_type==='SHORT'||q.question_type==='LONG';
@@ -1361,6 +1373,15 @@ function setupMobileDockAutoHide(){
 }
 function cancelReply(){window.replyTo=null;const i=$('#chatInput');if(i){i.value='';i.placeholder='Write a message...'}close()}
 window.addEventListener('beforeunload',()=>clearInterval(window.examTimer));
+window.addEventListener('pagehide',()=>{
+  try{
+    const r=S.examRun;
+    if(r?.id&&r?.attempt?.id&&r?.attempt?.status==='STARTED'){
+      const body=new Blob([JSON.stringify({attemptId:Number(r.attempt.id)})],{type:'application/json'});
+      navigator.sendBeacon(API+'/api/exams/'+Number(r.id)+'/lock',body);
+    }
+  }catch{}
+});
 document.addEventListener('DOMContentLoaded',async()=>{
 const params=new URLSearchParams(location.search);const requestedView=params.get('view');const requestedId=Number(params.get('id')||0);if(['dashboard','students','teachers','subjects','schedule','assignments','resources','exams','announcements','chat','teacherChat','attendance','admin','teacherCenter','settings','developers'].includes(requestedView))S.view=requestedView;
 setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=installB4;$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe();if(requestedView&&requestedId&&requestedView==='assignments')setTimeout(()=>openAssignment(requestedId),120);if(requestedView&&requestedId&&requestedView==='exams')setTimeout(()=>startExam(requestedId),120);startAssignmentCountdown()});
