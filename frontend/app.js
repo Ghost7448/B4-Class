@@ -239,6 +239,30 @@ function liveDataSignature(){
     developers:S.developers.map(x=>[x.id,x.name,x.title,x.title2,x.avatar_url])
   })
 }
+let examExitGuardInstalled=false;
+window.examExitAllowed=false;
+function lockActiveExam(reason='LEFT_EXAM'){
+  const id=Number(S.examRun?.id||0);
+  if(!id||window.examExitAllowed||S.view!=='exam-run')return;
+  window.examExitAllowed=true;
+  try{
+    const blob=new Blob([JSON.stringify({reason})],{type:'application/json'});
+    if(navigator.sendBeacon)navigator.sendBeacon('/api/exams/'+id+'/lock',blob);
+    else fetch('/api/exams/'+id+'/lock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason}),credentials:'include',keepalive:true});
+  }catch{}
+}
+function installExamExitGuard(){
+  if(examExitGuardInstalled)return;
+  examExitGuardInstalled=true;
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden'&&S.view==='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
+  });
+  window.addEventListener('pagehide',()=>{
+    if(S.view==='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
+  });
+}
+installExamExitGuard();
+
 let liveSyncBusy=false;
 async function syncLiveData(){
   if(liveSyncBusy||!S.me)return;
@@ -351,7 +375,7 @@ function examsV(){
   const canSubmit=can('MANAGE_EXAMS')&&(S.me?.role==='TEACHER'||Number(S.me?.is_super_admin)===1);
   return title(t('exams'),'Exams, submissions and results.',can('MANAGE_EXAMS')?'<button class="btn primary" onclick="examEdit()">＋ '+t('add')+'</button>':'')+
   '<div class="grid c2 exam-cards">'+S.exams.map(e=>{
-    const tm=examTime(e),submitted=e.attempt_status==='SUBMITTED',started=e.attempt_status==='STARTED';
+    const tm=examTime(e),submitted=e.attempt_status==='SUBMITTED',started=e.attempt_status==='STARTED',locked=e.attempt_status==='LOCKED';
     const locked=e.attempt_status==='LOCKED';
     const action=submitted?'<button class="btn primary" onclick="loadStudentExamAnswers('+e.id+')">View Answers</button>':locked?'<button class="btn danger" disabled>🔒 Exam Locked</button>':started?'<button class="btn primary" onclick="startExam('+e.id+')">Continue Exam</button>':'<button class="btn primary" data-exam-open '+(tm.label==='Exam closed'?'disabled':'')+' onclick="startExam('+e.id+')">Open</button>';
     return '<article class="card exam-card" data-live-id="'+esc(e.id)+'"><div class="head"><span class="badge">'+esc(e.status)+'</span><span class="muted">'+esc(e.subject_name||'')+'</span></div><h3>'+esc(e.title)+'</h3><p class="muted">'+esc(e.description||'')+'</p><div class="meter"><span>Exam time</span><b class="countdown '+tm.tone+'">'+tm.label+'</b></div><div class="assignment-bar exam-time-bar"><span class="'+tm.tone+'" style="width:'+tm.pct+'%"></span></div><div class="actions-row">'+action+(can('MANAGE_EXAMS')?'<button class="btn ghost" onclick="examEdit('+e.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/exams/'+e.id+'\',\'Exam deleted\')">Delete</button>':'')+(canSubmit?'<button class="btn ghost" onclick="submissions('+e.id+')">Submissions</button>':'')+'</div></article>';
@@ -482,7 +506,7 @@ function animateDashboardStats(){
     requestAnimationFrame(tick);
   });
 }
-function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='attendance'?attendanceV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='attendance'&&can('MANAGE_ATTENDANCE'))attendanceLoad();if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
+function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='attendance'?attendanceV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='attendance'&&can('MANAGE_ATTENDANCE'))attendanceLoad();if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
 function teacherChatV(){
   return title(t('teacherChat'),'')+'<div class="card chat"><div class="messages" id="teacherMessages">'+S.teacherMessages.map(teacherMessageHTML).join('')+'</div><div id="teacherTyping" class="typing-indicator"></div><button type="button" id="teacherChatJumpBottom" class="chat-jump-bottom" onclick="jumpChatBottom(\'teacherMessages\')" aria-label="Scroll to latest messages" title="Scroll to latest messages">↓</button><form class="chatform" onsubmit="sendTeacherChat(event)"><input id="teacherInput" oninput="teacherTyping(!!this.value.trim())" placeholder="Write a message..."><button class="btn primary">➤</button></form></div>'
 }
@@ -1272,7 +1296,15 @@ async function submitExam(e,id,auto=false){
   try{
     const d=await api('/api/exams/'+id+'/submit',{method:'POST',body:JSON.stringify({answers})});
     S.examResult={...d,examId:id,auto};S.examRun=null;S.view='exam-result';render();window.scrollTo({top:0,behavior:'smooth'});
-  }catch(x){toast(x.message)}
+  }catch(x){
+    if(x.data?.examLocked||/exam is locked/i.test(x.message)){S.examRun={id,locked:true,lockMessage:x.message};S.view='exam-locked';render();window.scrollTo({top:0,behavior:'smooth'});return}
+    toast(x.message)
+  }
+}
+function examLockedV(){
+  const r=S.examRun||{};
+  return title('Exam Locked','Your exam was locked because you left the exam screen.',`<button class="btn ghost" onclick="go('exams')">← Back to Exams</button>`)+
+  '<div class="exam-locked-page"><div class="exam-locked-card"><div class="exam-lock-icon">🔒</div><span class="eyebrow">EXAM LOCKED</span><h2>Exam Locked</h2><p class="muted">'+esc(r.lockMessage||'Leaving the exam screen was detected. Please contact your Teacher to unlock this attempt.')+'</p><div class="exam-locked-note">Your answers were not deleted. A Teacher can unlock this attempt from Submissions.</div><button class="btn primary" onclick="go(\'exams\')">Back to Exams</button></div></div>';
 }
 async function loadStudentExamAnswers(id){
   try{const d=await api('/api/exams/'+id+'/answers');S.examAnswers={...d,examId:id};S.view='exam-answers';render();window.scrollTo({top:0,behavior:'smooth'});}catch(e){toast(e.message)}
@@ -1298,6 +1330,10 @@ function examAnswersV(){
 }
 async function submissions(id){try{const d=await api('/api/admin/exams/'+id+'/submissions');S.examReview={examId:id,submissions:d.submissions||[]};S.view='exam-review';render();}catch(e){toast(e.message)}}
 async function openExamSubmission(examId,attemptId){try{const d=await api('/api/admin/exams/'+examId+'/submissions/'+attemptId);S.examReview={examId,detail:d};S.view='exam-review';render();}catch(e){toast(e.message)}}
+function unlockExamAttempt(examId,attemptId){
+  if(!confirm('Unlock this exam attempt for the student?'))return;
+  api('/api/admin/exams/'+examId+'/submissions/'+attemptId+'/unlock',{method:'POST'}).then(()=>{toast('Exam unlocked');openExamSubmission(examId,attemptId)}).catch(e=>toast(e.message));
+}
 function examGradeModal(examId,attemptId,qid){
   const q=(S.examReview?.detail?.questions||[]).find(x=>Number(x.id)===Number(qid)); if(!q)return toast('Question not found');
   modal('<div class="exam-grade-modal"><div class="modalhead"><div><span class="eyebrow">MANUAL GRADING</span><h2>Grade Answer</h2></div><button class="close" onclick="b4Close()">×</button></div><p class="muted">Choose whether the student answer is correct. If it is incorrect, enter the correct answer so the student can see it.</p><div class="grade-answer-preview"><small>Student answer</small><div>'+esc(q.answer_text||'No answer')+'</div></div><div class="grade-actions"><button class="btn grade-correct" onclick="gradeExamAnswer('+examId+','+attemptId+','+q.id+',true)">✓ Correct</button><button class="btn grade-wrong" onclick="examWrongAnswerModal('+examId+','+attemptId+','+q.id+')">✕ Incorrect</button></div></div>');
