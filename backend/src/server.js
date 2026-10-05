@@ -1337,6 +1337,7 @@ app.post('/api/exams/:id/start', requireAuth, async(req,res)=>{
   const endMs=cairoEpoch(exam.ends_at);
   if(endMs!==null&&now.getTime()>=endMs) return res.status(403).json({error:'Exam deadline has passed'});
   const [existing]=await q('SELECT * FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
+  if(existing[0]?.status==='LOCKED')return res.status(423).json({error:'Exam Locked',examLocked:true});
   if(existing[0]){
     if(existing[0].status==='LOCKED')return res.status(423).json({error:'Exam is locked. A Teacher must unlock this attempt before you can continue.',examLocked:true});
     if(existing[0].status!=='STARTED')return res.status(403).json({error:'You have already submitted this exam'});
