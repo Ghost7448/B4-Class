@@ -155,7 +155,14 @@ function confirmAction(message,options={}){
 }
 const can=p=>{if(!S.me)return false;if(Number(S.me.is_super_admin)===1)return true;return (S.me.permissions||[]).includes(p)};
 const nav=[['dashboard','⌂'],['students','♙'],['teachers','♟'],['subjects','▣'],['schedule','◫'],['assignments','✓'],['resources','▤'],['exams','⌁'],['announcements','◈'],['chat','◌'],['attendance','◉']];
-function go(v){if(!S.me&&!['students','teachers','subjects','schedule','developers'].includes(v)){loginModal();return}S.view=v;render();window.scrollTo({top:0,behavior:'smooth'});$('#side')?.classList.remove('open')}
+function go(v){
+  if(!S.me&&!['students','teachers','subjects','schedule','developers'].includes(v)){loginModal();return}
+  if(S.view==='exam-run'&&v!=='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
+  S.view=v;
+  render();
+  window.scrollTo({top:0,behavior:'smooth'});
+  $('#side')?.classList.remove('open');
+}
 function buildNav(){if(!S.me)return nav.filter(x=>['students','teachers','subjects','schedule'].includes(x[0])).concat([['developers','⌘']]).map(x=>'<button data-v="'+x[0]+'" class="'+(S.view===x[0]?'active':'')+'">'+x[1]+' <span>'+t(x[0])+'</span></button>').join('');
 let a=nav.map(x=>'<button data-v="'+x[0]+'" class="'+(S.view===x[0]?'active':'')+'">'+x[1]+' <span>'+t(x[0])+'</span></button>').join('');
 if(S.me.role==='TEACHER'||can('MANAGE_ASSIGNMENTS'))a+='<button data-v="teacherCenter" class="'+(S.view==='teacherCenter'?'active':'')+'">◈ <span>'+t('teacherCenter')+'</span></button>';
@@ -1348,7 +1355,7 @@ async function submitWrongGrade(e,examId,attemptId,qid){e.preventDefault();const
 async function unlockExamSubmission(examId,attemptId){
   if(!await confirmAction('Unlock this exam for the student? The student will receive a fresh attempt timer.'))return;
   try{
-    await api('/api/admin/exams/'+examId+'/submissions/'+attemptId+'/unlock',{method:'PATCH',body:JSON.stringify({})});
+    await api('/api/admin/exams/'+examId+'/submissions/'+attemptId+'/unlock',{method:'POST',body:JSON.stringify({})});
     toast('Exam unlocked ✓');
     const d=await api('/api/admin/exams/'+examId+'/submissions/'+attemptId);
     S.examReview={examId,detail:d};
