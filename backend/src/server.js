@@ -1364,8 +1364,9 @@ app.post('/api/exams/:id/lock', requireAuth, async(req,res)=>{
   const attempt=rows[0];
   if(!attempt)return res.status(404).json({error:'Exam attempt not found'});
   if(attempt.status!=='STARTED')return res.json({ok:true,status:attempt.status});
-  await q("UPDATE exam_attempts SET status='LOCKED' WHERE id=? AND status='STARTED'",[attempt.id]);
+  const [locked]=await q("UPDATE exam_attempts SET status='LOCKED' WHERE id=? AND status='STARTED'",[attempt.id]);
   await audit(req,'EXAM_LOCKED','exam',id,{attemptId:attempt.id,reason:String(req.body?.reason||'LEFT_EXAM')});
+  if(Number(locked?.affectedRows||0))pushGlobalEvent('data-changed',{path:'/api/exams/'+id+'/lock',method:'POST',examId:id,attemptId:attempt.id});
   res.json({ok:true,status:'LOCKED'});
 });
 
