@@ -341,7 +341,7 @@ async function syncLiveData(){
       return;
     }
     if(S.view==='announcements'){
-      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(a.created_at||'')+'</small></div><h3>'+esc(a.title)+'</h3><p>'+esc(a.body||'')+'</p>'+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
+      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3><p>'+esc(a.body||'')+'</p>'+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
       return;
     }
     const scrollY=window.scrollY;
@@ -407,7 +407,13 @@ function examsV(){
     return '<article class="card exam-card" data-live-id="'+esc(e.id)+'"><div class="head"><span class="badge">'+esc(e.status)+'</span><span class="muted">'+esc(e.subject_name||'')+'</span></div><h3>'+esc(e.title)+'</h3><p class="muted">'+esc(e.description||'')+'</p><div class="meter"><span>Exam time</span><b class="countdown '+tm.tone+'">'+tm.label+'</b></div><div class="assignment-bar exam-time-bar"><span class="'+tm.tone+'" style="width:'+tm.pct+'%"></span></div><div class="actions-row">'+action+(can('MANAGE_EXAMS')?'<button class="btn ghost" onclick="examEdit('+e.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/exams/'+e.id+'\',\'Exam deleted\')">Delete</button>':'')+(canSubmit?'<button class="btn ghost" onclick="submissions('+e.id+')">Submissions</button>':'')+'</div></article>';
   }).join('')||'<div class="card empty">No exams.</div>'+'</div>';
 }
-function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(a.created_at||'')+'</small></div><h3>'+esc(a.title)+'</h3><p>'+esc(a.body||'')+'</p>'+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
+function announcementTime(value){
+  const d=new Date(value);
+  if(!Number.isFinite(d.getTime()))return String(value||'');
+  const locale=S.lang==='ar'?'ar-EG':'en-EG';
+  return d.toLocaleString(locale,{timeZone:'Africa/Cairo',day:'numeric',month:'long',year:'numeric',hour:'numeric',minute:'2-digit',hour12:S.lang!=='ar'});
+}
+function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3><p>'+esc(a.body||'')+'</p>'+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
 function chatTime(value){
   const d=new Date(value);
   if(!Number.isFinite(d.getTime()))return String(value||'');
