@@ -1295,7 +1295,7 @@ function examRunV(){
     }
     return `<article class="exam-run-question"><div class="exam-question-top"><span class="question-number">Question ${i+1}</span><span class="badge">${esc(type==='TRUE_FALSE'?'TRUE / FALSE':type)}</span></div><h3>${esc(q.question_text)}</h3>${body}</article>`;
   }).join('');
-  return title('Take Exam',esc(r.exam?.title||'Exam'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
+  return title('Take Exam',esc(r.exam?.title||'Exam'),'')+
     `<div class="exam-page-shell"><div class="exam-run-hero"><div><span class="eyebrow">EXAM CENTER</span><h2>${esc(r.exam?.title||'Exam')}</h2><p>${esc(r.exam?.description||'Answer each question carefully. MCQ and True/False are auto-graded. Short and Long answers are reviewed by the teacher.')}</p></div><div id="examTimer" class="exam-timer">Loading…</div></div><form class="exam-page-form" id="examRunForm" onsubmit="submitExam(event,${Number(r.id)})">${cards}<div class="exam-submit-row"><p class="muted">Your answers are saved when you submit the exam. Short and Long answers will be reviewed by the teacher.</p><button id="examSubmitBtn" class="btn primary">Submit Exam</button></div></form></div>`;
 }
 function startExamTimer(deadline,id){
