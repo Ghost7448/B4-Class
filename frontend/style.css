@@ -1311,3 +1311,13 @@ to{opacity:1;transform:translateY(0)}}
   .profile-badge img,.profile-badge .badge-fallback{width:15px;height:15px;flex-basis:15px}
   .profile-badge.compact{max-width:125px}
 }
+
+/* ===== EXAM LOCKED ===== */
+.exam-locked-page{display:grid;place-items:center;padding:30px 0}
+.exam-locked-card{width:min(620px,100%);padding:34px;text-align:center;border:1px solid #dc262640;border-radius:26px;background:var(--s);box-shadow:var(--shadow)}
+.exam-lock-icon{width:78px;height:78px;margin:0 auto 18px;display:grid;place-items:center;border-radius:24px;background:#dc262614;border:1px solid #dc262638;font-size:38px}
+.exam-locked-card h2{margin:8px 0 10px;font-size:30px}
+.exam-locked-card p{line-height:1.75;margin:0 auto;max-width:520px}
+.exam-locked-note{margin:20px 0;padding:14px 16px;border-radius:15px;background:#d9770610;border:1px solid #d9770630;color:#d97706;font-size:12px;line-height:1.65}
+.exam-locked-card .btn{min-width:180px}
+@media(max-width:600px){.exam-locked-card{padding:26px 18px;border-radius:21px}.exam-lock-icon{width:64px;height:64px;border-radius:20px;font-size:30px}.exam-locked-card h2{font-size:25px}}
