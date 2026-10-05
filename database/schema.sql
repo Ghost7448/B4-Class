@@ -259,6 +259,7 @@ CREATE TABLE IF NOT EXISTS notification_settings(
  user_id BIGINT UNSIGNED PRIMARY KEY,
  class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,
  teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,
+ chat_messages TINYINT(1) NOT NULL DEFAULT 1,
  exam_notifications TINYINT(1) NOT NULL DEFAULT 1,
  announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,
  assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,
