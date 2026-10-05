@@ -1321,3 +1321,10 @@ to{opacity:1;transform:translateY(0)}}
 .exam-locked-note{margin:20px 0;padding:14px 16px;border-radius:15px;background:#d9770610;border:1px solid #d9770630;color:#d97706;font-size:12px;line-height:1.65}
 .exam-locked-card .btn{min-width:180px}
 @media(max-width:600px){.exam-locked-card{padding:26px 18px;border-radius:21px}.exam-lock-icon{width:64px;height:64px;border-radius:20px;font-size:30px}.exam-locked-card h2{font-size:25px}}
+
+
+.review-student{display:grid;gap:10px}
+.review-student-main{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;background:none;border:0;color:inherit;text-align:left;cursor:pointer;padding:0}
+.review-student-main>div{display:grid;gap:5px;min-width:0}
+.review-student-main small{color:var(--m)}
+.review-unlock{width:100%;justify-content:center}
