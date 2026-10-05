@@ -1235,6 +1235,7 @@ async function saveExam(e,id){
   try{await api(id?'/api/admin/exams/'+id:'/api/admin/exams',{method:id?'PATCH':'POST',body:JSON.stringify(b)});close();await loadData();render();toast('Exam saved ✓')}catch(x){toast(x.message)}
 }
 async function startExam(id){
+  window.examExitAllowed=false;
   try{
     const d=await api('/api/exams/'+id+'/start',{method:'POST'});
     S.examRun={id,exam:d.exam,attempt:d.attempt,questions:d.questions||[]};
@@ -1289,14 +1290,14 @@ function startExamTimer(deadline,id){
   window.examTimer=setInterval(tick,1000);
 }
 async function submitExam(e,id,auto=false){
-  e.preventDefault?.();clearInterval(window.examTimer);
+  e.preventDefault?.();window.examExitAllowed=true;clearInterval(window.examTimer);
   const form=$('#examRunForm'),answers={};
   if(form)form.querySelectorAll('[name^="q"]').forEach(x=>{if((x.type==='radio'&&x.checked)||x.tagName==='TEXTAREA')answers[x.name.slice(1)]=x.value.trim()});
   try{
     const d=await api('/api/exams/'+id+'/submit',{method:'POST',body:JSON.stringify({answers})});
     S.examResult={...d,examId:id,auto};S.examRun=null;S.view='exam-result';render();window.scrollTo({top:0,behavior:'smooth'});
   }catch(x){
-    if(x.data?.examLocked||/exam is locked/i.test(x.message)){S.examRun={id,locked:true,lockMessage:x.message};S.view='exam-locked';render();window.scrollTo({top:0,behavior:'smooth'});return}
+    if(/exam is locked/i.test(x.message)){S.examRun={id,locked:true,lockMessage:x.message};S.view='exam-locked';render();window.scrollTo({top:0,behavior:'smooth'});return}
     toast(x.message)
   }
 }
@@ -1408,15 +1409,6 @@ function setupMobileDockAutoHide(){
 }
 function cancelReply(){window.replyTo=null;const i=$('#chatInput');if(i){i.value='';i.placeholder='Write a message...'}close()}
 window.addEventListener('beforeunload',()=>clearInterval(window.examTimer));
-window.addEventListener('pagehide',()=>{
-  try{
-    const r=S.examRun;
-    if(r?.id&&r?.attempt?.id&&r?.attempt?.status==='STARTED'){
-      const body=new Blob([JSON.stringify({attemptId:Number(r.attempt.id)})],{type:'application/json'});
-      navigator.sendBeacon(API+'/api/exams/'+Number(r.id)+'/lock',body);
-    }
-  }catch{}
-});
 document.addEventListener('DOMContentLoaded',async()=>{
 const params=new URLSearchParams(location.search);const requestedView=params.get('view');const requestedId=Number(params.get('id')||0);if(['dashboard','students','teachers','subjects','schedule','assignments','resources','exams','announcements','chat','teacherChat','attendance','admin','teacherCenter','settings','developers'].includes(requestedView))S.view=requestedView;
 setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=installB4;$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe();if(requestedView&&requestedId&&requestedView==='assignments')setTimeout(()=>openAssignment(requestedId),120);if(requestedView&&requestedId&&requestedView==='exams')setTimeout(()=>startExam(requestedId),120);startAssignmentCountdown()});
