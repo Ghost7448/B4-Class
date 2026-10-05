@@ -99,7 +99,7 @@ async function ensureNotificationSettings(userId){
     const [chatSettingCol]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notification_settings' AND COLUMN_NAME='chat_messages' LIMIT 1");
     if(!chatSettingCol.length) await q("ALTER TABLE notification_settings ADD COLUMN chat_messages TINYINT(1) NOT NULL DEFAULT 1 AFTER teacher_chat_reply");
     await q('INSERT INTO notification_settings(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=user_id',[userId]);
-    await q('UPDATE notification_settings SET chat_messages=GREATEST(COALESCE(class_chat_reply,1),COALESCE(teacher_chat_reply,1)) WHERE user_id=? AND chat_messages=1',[userId]);
+    await q('UPDATE notification_settings SET chat_messages=IF(COALESCE(class_chat_reply,1)=0 AND COALESCE(teacher_chat_reply,1)=0,0,1) WHERE user_id=?',[userId]);
     const [rows]=await q('SELECT chat_messages,class_chat_reply,teacher_chat_reply,exam_notifications,announcement_notifications,assignment_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
     return rows[0]||defaults;
   }catch(e){
