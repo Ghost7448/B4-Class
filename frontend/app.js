@@ -350,6 +350,15 @@ function ensureGlobalRealtime(){
       clearInterval(window.liveFallbackTimer);
     });
     window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
+    window.globalRealtimeStream.addEventListener('site-status',(event)=>{
+      try{
+        const data=JSON.parse(event.data||'{}');
+        if(data.locked && Number(S.me?.is_super_admin)!==1){
+          document.documentElement.classList.add('site-lock-transition');
+          setTimeout(()=>window.location.reload(),180);
+        }
+      }catch{}
+    });
     window.globalRealtimeStream.addEventListener('ready',()=>{window.globalRealtimeOnline=true});
     window.globalRealtimeStream.onerror=()=>{
       window.globalRealtimeOnline=false;
