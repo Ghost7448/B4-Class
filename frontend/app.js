@@ -1218,7 +1218,13 @@ function examQuestionHTML(q,i){
     '<div class="manual-grade-note"><b>Teacher graded</b><span>This question will not be auto-graded.</span></div>';
   return '<article class="card exam-question question-editor" data-qindex="'+i+'"><div class="head"><div><span class="question-number">Question '+(i+1)+'</span><h3>'+esc(q.questionText||'')+'</h3></div><button type="button" class="btn danger" onclick="removeExamQuestion('+i+')">Remove</button></div><label>Question<textarea data-qtext="'+i+'" rows="3" placeholder="Write the question...">'+esc(q.questionText||'')+'</textarea></label><div class="grid c2"><label>Type<select data-qtype="'+i+'" onchange="examTypeChanged('+i+',this.value)"><option value="MCQ" '+(type==='MCQ'?'selected':'')+'>Multiple choice</option><option value="TRUE_FALSE" '+(type==='TRUE_FALSE'?'selected':'')+'>True / False</option><option value="SHORT" '+(type==='SHORT'?'selected':'')+'>Short answer</option><option value="LONG" '+(type==='LONG'?'selected':'')+'>Long answer</option></select></label><label>Points<input type="number" min="0.5" step="0.5" data-qpoints="'+i+'" value="'+Number(q.points||1)+'"></label></div>'+optionFields+'</article>';
 }
-function renderExamQuestions(){const root=$('#examQuestions');if(root)root.innerHTML=examDraft.map(examQuestionHTML).join('')||'<div class="empty">No questions yet. Add one.</div>'}
+function renderExamQuestions(){
+  const root=$('#examQuestions');
+  if(!root)return;
+  const questions=examDraft.map(examQuestionHTML).join('');
+  root.innerHTML=questions||'<div class="empty">No questions yet. Add one.</div>';
+  root.insertAdjacentHTML('beforeend','<div class="exam-add-question-bottom"><button type="button" class="btn ghost exam-add-question-btn" onclick="addExamQuestion()">＋ Add question</button></div>');
+}
 function addExamQuestion(){collectExamQuestions();examDraft.push({questionText:'',questionType:'MCQ',options:['','','',''],correctAnswer:'',points:1});renderExamQuestions()}
 function removeExamQuestion(i){collectExamQuestions();if(examDraft.length<=1)return toast('An exam needs at least one question');examDraft.splice(i,1);renderExamQuestions()}
 function setExamCorrect(i,j){collectExamQuestions();examDraft[i].correctAnswer=String(examDraft[i].options[j]||'').trim();renderExamQuestions()}
@@ -1249,7 +1255,7 @@ async function examEdit(id){
   let x=S.exams.find(a=>Number(a.id)===Number(id))||{}, questions=[];
   if(id){try{const d=await api('/api/exams/'+id+'/edit');x=d.exam;questions=(d.questions||[]).map(examDraftFromQuestion)}catch(e){return toast(e.message)}}
   examDraft=questions.length?questions:[{questionText:'',questionType:'MCQ',options:['','','',''],correctAnswer:'',points:1}];
-  modal('<div class="modalhead"><h2>'+(id?'Edit exam':'Create exam')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveExam(event,'+(id||'null')+')"><label>Title<input id="et" value="'+esc(x.title||'')+'" required></label><label>Subject<select id="es">'+S.subjects.map(s=>'<option value="'+s.id+'" '+(Number(s.id)===Number(x.subject_id)?'selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></label><label>Description<textarea id="ed" rows="3">'+esc(x.description||'')+'</textarea></label><label>Deadline<input id="een" type="datetime-local" value="'+examInputDate(x.ends_at)+'"></label><label>Time limit (minutes)<input id="dur" type="number" min="1" value="'+esc(x.duration_minutes||'')+'" placeholder="Optional"></label><div class="head"><h3>Questions</h3><button type="button" class="btn ghost" onclick="addExamQuestion()">＋ Add question</button></div><div id="examQuestions"></div><button class="btn primary">Save exam</button></form>');
+  modal('<div class="modalhead"><h2>'+(id?'Edit exam':'Create exam')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveExam(event,'+(id||'null')+')"><label>Title<input id="et" value="'+esc(x.title||'')+'" required></label><label>Subject<select id="es">'+S.subjects.map(s=>'<option value="'+s.id+'" '+(Number(s.id)===Number(x.subject_id)?'selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></label><label>Description<textarea id="ed" rows="3">'+esc(x.description||'')+'</textarea></label><label>Deadline<input id="een" type="datetime-local" value="'+examInputDate(x.ends_at)+'"></label><label>Time limit (minutes)<input id="dur" type="number" min="1" value="'+esc(x.duration_minutes||'')+'" placeholder="Optional"></label><div class="head"><h3>Questions</h3><span class="muted">Add questions from the bottom</span></div><div id="examQuestions"></div><button class="btn primary">Save exam</button></form>');
   renderExamQuestions();
 }
 async function saveExam(e,id){
