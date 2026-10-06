@@ -631,25 +631,8 @@ async function syncPushSubscription(showErrors=true){
   }catch(e){if(showErrors)toast(e.message);return false}
 }
 async function togglePushNotifications(enabled){
-  try{
-    if(enabled){
-      if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){
-        toast('Device notifications are not supported by this browser');
-        return;
-      }
-      let permission=Notification.permission;
-      if(permission==='default')permission=await Notification.requestPermission();
-      if(permission!=='granted'){
-        toast(permission==='denied'?'Notifications are blocked. Allow notifications for B4 in browser/site settings.':'Notification permission was not granted');
-        return;
-      }
-      const ok=await syncPushSubscription(true);
-      if(!ok)return;
-      const d=await api('/api/notifications/settings',{method:'PATCH',body:JSON.stringify({...S.notificationSettings,push_enabled:1})});
-      S.notificationSettings={...(S.notificationSettings||{}),...(d.settings||{}),push_enabled:1};
-      render();
-      toast('Device notifications enabled ✓');
-    }else{
+  if(!enabled){
+    try{
       const registration=await navigator.serviceWorker.ready;
       const sub=await registration.pushManager.getSubscription();
       await api('/api/notifications/push/unsubscribe',{method:'POST',body:JSON.stringify({endpoint:sub?.endpoint||''})});
@@ -657,9 +640,46 @@ async function togglePushNotifications(enabled){
       S.notificationSettings={...(S.notificationSettings||{}),push_enabled:0};
       render();
       toast('Device notifications disabled');
+    }catch(e){toast(e.message||'Could not disable device notifications')}
+    return;
+  }
+
+  // This function is called directly by the Device Notifications button.
+  // Ask for browser permission immediately from the user's click.
+  try{
+    if(!('Notification' in window)){
+      toast('This browser does not support notifications');
+      return;
     }
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)){
+      toast('Device notifications are not supported by this browser');
+      return;
+    }
+
+    let permission=Notification.permission;
+    if(permission==='default'){
+      permission=await Notification.requestPermission();
+    }
+
+    if(permission!=='granted'){
+      toast(permission==='denied'
+        ?'Notifications are blocked. Allow notifications for B4 in browser/site settings.'
+        :'Notification permission was not granted');
+      return;
+    }
+
+    const ok=await syncPushSubscription(true);
+    if(!ok)return;
+
+    const d=await api('/api/notifications/settings',{
+      method:'PATCH',
+      body:JSON.stringify({...S.notificationSettings,push_enabled:1})
+    });
+    S.notificationSettings={...(S.notificationSettings||{}),...(d.settings||{}),push_enabled:1};
+    render();
+    toast('Device notifications enabled ✓');
   }catch(e){
-    toast(e.message||'Could not change device notifications');
+    toast(e.message||'Could not enable device notifications');
   }
 }
 async function toggleNotificationSetting(key,enabled){
