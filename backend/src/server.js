@@ -84,7 +84,6 @@ const NOTIFICATION_SETTING_COLUMNS={
   assignment:'assignment_notifications',
   assignment_submission:'assignment_notifications',
   resource:'resource_notifications',
-  attendance:'attendance_notifications',
   system:'system_notifications'
 };
 function notificationUrl(type,id){
@@ -99,18 +98,18 @@ function notificationUrl(type,id){
   return '/';
 }
 async function ensureNotificationSettings(userId){
-  const defaults={chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,attendance_notifications:1,system_notifications:1,push_enabled:0};
+  const defaults={chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,system_notifications:1,push_enabled:0};
   if(!userId)return defaults;
   try{
-    await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_messages TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,exam_results TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,resource_notifications TINYINT(1) NOT NULL DEFAULT 1,attendance_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_messages TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,exam_results TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,resource_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     const [chatSettingCol]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notification_settings' AND COLUMN_NAME='chat_messages' LIMIT 1");
     if(!chatSettingCol.length) await q("ALTER TABLE notification_settings ADD COLUMN chat_messages TINYINT(1) NOT NULL DEFAULT 1 AFTER teacher_chat_reply");
     await q('INSERT INTO notification_settings(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=user_id',[userId]);
-    for(const [name,def] of Object.entries({class_chat_messages:1,teacher_chat_messages:1,exam_results:1,resource_notifications:1,attendance_notifications:1})){
+    for(const [name,def] of Object.entries({class_chat_messages:1,teacher_chat_messages:1,exam_results:1,resource_notifications:1})){
       const [col]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notification_settings' AND COLUMN_NAME=? LIMIT 1",[name]);
       if(!col.length) await q("ALTER TABLE notification_settings ADD COLUMN "+name+" TINYINT(1) NOT NULL DEFAULT "+def);
     }
-    const [rows]=await q('SELECT chat_messages,class_chat_messages,class_chat_reply,teacher_chat_messages,teacher_chat_reply,exam_notifications,exam_results,announcement_notifications,assignment_notifications,resource_notifications,attendance_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
+    const [rows]=await q('SELECT chat_messages,class_chat_messages,class_chat_reply,teacher_chat_messages,teacher_chat_reply,exam_notifications,exam_results,announcement_notifications,assignment_notifications,resource_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
     return rows[0]||defaults;
   }catch(e){
     console.error('Notification settings bootstrap failed:',e.message);
@@ -147,7 +146,7 @@ async function createNotification(userId,{type='system',title,body='',entityId=n
     teacher_chat_message:'teacher_chat_messages',teacher_chat_reply:'teacher_chat_reply',
     exam:'exam_notifications',exam_submission:'exam_notifications',exam_result:'exam_results',
     announcement:'announcement_notifications',assignment:'assignment_notifications',assignment_submission:'assignment_notifications',
-    resource:'resource_notifications',attendance:'attendance_notifications',system:'system_notifications'
+    resource:'resource_notifications',system:'system_notifications'
   }[type]||'system_notifications';
   if(Number(settings[settingColumn])!==1)return null;
   const targetUrl=url||notificationUrl(type,entityId);
@@ -289,7 +288,7 @@ const PERMISSION_DEFS = [
 async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS profile_images(entity_type VARCHAR(20) NOT NULL,entity_id BIGINT UNSIGNED NOT NULL,mime_type VARCHAR(120) NOT NULL,data MEDIUMBLOB NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(entity_type,entity_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS chat_typing(user_id BIGINT UNSIGNED PRIMARY KEY,typing TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-  await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_messages TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,exam_results TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,resource_notifications TINYINT(1) NOT NULL DEFAULT 1,attendance_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_messages TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,exam_results TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,resource_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS push_subscriptions(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,endpoint TEXT NOT NULL,endpoint_hash CHAR(64) NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,expiration_time BIGINT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,INDEX idx_push_user(user_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS notifications(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NULL,title VARCHAR(220) NOT NULL,body TEXT,read_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   const [examAttemptStatusCol]=await q("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='exam_attempts' AND COLUMN_NAME='status' LIMIT 1");
@@ -335,7 +334,6 @@ async function ensurePermissionSchema() {
   try {
     await q("ALTER TABLE users MODIFY role ENUM('STUDENT','TEACHER') NOT NULL DEFAULT 'STUDENT'");
   } catch(e) { /* Existing installations can keep the legacy enum until their next schema migration. */ }
-  await q("CREATE TABLE IF NOT EXISTS b4_attendance(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,attendance_date DATE NOT NULL,status ENUM('PRESENT','ABSENT') NOT NULL DEFAULT 'PRESENT',marked_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,UNIQUE KEY uq_attendance(user_id,attendance_date),INDEX idx_attendance_date(attendance_date)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_badges(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,description VARCHAR(500) NULL,icon_mime VARCHAR(120) NULL,icon_data MEDIUMBLOB NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_user_badges(user_id BIGINT UNSIGNED NOT NULL,badge_id BIGINT UNSIGNED NOT NULL,assigned_by BIGINT UNSIGNED NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(user_id,badge_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_developers(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,title VARCHAR(120) NULL,link_url VARCHAR(500) NULL,image_mime VARCHAR(120) NULL,image_data MEDIUMBLOB NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -391,7 +389,7 @@ await q('CREATE TABLE IF NOT EXISTS resource_files( id BIGINT UNSIGNED AUTO_INCR
   await q('CREATE TABLE IF NOT EXISTS user_permissions( user_id BIGINT UNSIGNED NOT NULL, permission_id INT UNSIGNED NOT NULL, granted_by BIGINT UNSIGNED NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id,permission_id), FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE, FOREIGN KEY(permission_id) REFERENCES permissions(id) ON DELETE CASCADE, FOREIGN KEY(granted_by) REFERENCES users(id) ON DELETE SET NULL ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   for (const [code,label] of PERMISSION_DEFS) await q('INSERT IGNORE INTO permissions(code,label) VALUES(?,?)',[code,label]);
 
-  const teacherPerms=['VIEW_CLASS','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ANNOUNCEMENTS','MANAGE_SUBJECTS','MANAGE_ATTENDANCE','MANAGE_ANALYTICS','MANAGE_TEACHER_CHAT','USE_AI'];
+  const teacherPerms=['VIEW_CLASS','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ANNOUNCEMENTS','MANAGE_SUBJECTS','MANAGE_TEACHER_CHAT','USE_AI'];
   for(const code of teacherPerms) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'TEACHER',id FROM permissions WHERE code=?",[code]);
 
   for(const code of ['VIEW_CLASS','USE_AI']) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'STUDENT',id FROM permissions WHERE code=?",[code]);
@@ -561,7 +559,6 @@ async function getBootstrap(req) {
   }
   let attendance=[],messages=[],notifications=[];
   if(req.session.userId) {
-    [attendance]=await q(`SELECT attendance_date AS date,status FROM b4_attendance WHERE user_id=? ORDER BY attendance_date DESC LIMIT 60`,[req.session.userId]);
     const [submissions]=await q(`SELECT s.assignment_id,s.id submission_id,s.submitted_at,s.status,s.score,sf.id submission_file_id,sf.filename submission_name FROM assignment_submissions s LEFT JOIN assignment_submission_files sf ON sf.submission_id=s.id WHERE s.user_id=?`,[req.session.userId]);
     const byAssignment=new Map(submissions.map(x=>[Number(x.assignment_id),x]));
     for(const a of assignments){const sub=byAssignment.get(Number(a.id));if(sub)Object.assign(a,sub);}
@@ -595,8 +592,8 @@ async function getBootstrap(req) {
       WHERE user_id=? OR user_id IS NULL ORDER BY created_at DESC LIMIT 30
     `,[req.session.userId]);
   }
-  if(!req.session.userId) return {students,teachers,subjects,schedule,assignments:[],announcements:[],resources:[],exams:[],attendance:[],messages:[],notifications:[]};
-  return {server_now_ms:Date.now(),students,teachers,subjects,schedule,assignments,announcements,resources,exams,attendance,messages,notifications};
+  if(!req.session.userId) return {students,teachers,subjects,schedule,assignments:[],announcements:[],resources:[],exams:[],messages:[],notifications:[]};
+  return {server_now_ms:Date.now(),students,teachers,subjects,schedule,assignments,announcements,resources,exams,messages,notifications};
 }
 
 app.get('/api/notifications/settings',requireAuth,async(req,res)=>{
@@ -606,9 +603,9 @@ app.get('/api/notifications/settings',requireAuth,async(req,res)=>{
 app.patch('/api/notifications/settings',requireAuth,async(req,res)=>{
   try{
     const current=await ensureNotificationSettings(req.session.userId);
-    const allowed=['chat_messages','class_chat_messages','class_chat_reply','teacher_chat_messages','teacher_chat_reply','exam_notifications','exam_results','announcement_notifications','assignment_notifications','resource_notifications','attendance_notifications','system_notifications','push_enabled'];
+    const allowed=['chat_messages','class_chat_messages','class_chat_reply','teacher_chat_messages','teacher_chat_reply','exam_notifications','exam_results','announcement_notifications','assignment_notifications','resource_notifications','system_notifications','push_enabled'];
     const next={}; for(const key of allowed)next[key]=req.body?.[key]===undefined?Number(current[key])?1:0:(req.body[key]?1:0);
-    await q('UPDATE notification_settings SET chat_messages=?,class_chat_messages=?,class_chat_reply=?,teacher_chat_messages=?,teacher_chat_reply=?,exam_notifications=?,exam_results=?,announcement_notifications=?,assignment_notifications=?,resource_notifications=?,attendance_notifications=?,system_notifications=?,push_enabled=? WHERE user_id=?',[next.chat_messages,next.class_chat_messages,next.class_chat_reply,next.teacher_chat_messages,next.teacher_chat_reply,next.exam_notifications,next.exam_results,next.announcement_notifications,next.assignment_notifications,next.resource_notifications,next.attendance_notifications,next.system_notifications,next.push_enabled,req.session.userId]);
+    await q('UPDATE notification_settings SET chat_messages=?,class_chat_messages=?,class_chat_reply=?,teacher_chat_messages=?,teacher_chat_reply=?,exam_notifications=?,exam_results=?,announcement_notifications=?,assignment_notifications=?,resource_notifications=?=?,system_notifications=?,push_enabled=? WHERE user_id=?',[next.chat_messages,next.class_chat_messages,next.class_chat_reply,next.teacher_chat_messages,next.teacher_chat_reply,next.exam_notifications,next.exam_results,next.announcement_notifications,next.assignment_notifications,next.resource_notifications,next.attendance_notifications,next.system_notifications,next.push_enabled,req.session.userId]);
     res.json({settings:await ensureNotificationSettings(req.session.userId),vapidPublicKey:VAPID_READY?process.env.VAPID_PUBLIC_KEY:null});
   }catch(e){res.status(500).json({error:'Could not save notification settings'})}
 });
@@ -1527,29 +1524,6 @@ app.post('/api/admin/accounts/:id/reset-password',requirePermission('MANAGE_ACCO
 });
 app.post('/api/admin/accounts/:id/end-session',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
   const id=Number(req.params.id); const [r]=await q('UPDATE users SET session_version=session_version+1 WHERE id=?',[id]); if(!r.affectedRows)return res.status(404).json({error:'Account not found'}); await audit(req,'SESSION_ENDED','user',id); res.json({ok:true});
-});
-
-app.get('/api/admin/attendance',requirePermission('MANAGE_ATTENDANCE'),async(req,res)=>{
-  const date=String(req.query.date||new Date().toISOString().slice(0,10)); 
-  const [rows]=await q(`SELECT u.id,u.display_name,u.role,u.student_id,s.student_code,COALESCE(a.status,'PRESENT') status
-    FROM users u JOIN students s ON s.id=u.student_id LEFT JOIN b4_attendance a ON a.user_id=u.id AND a.attendance_date=?
-    WHERE u.role='STUDENT' AND u.status='ACTIVE' ORDER BY u.display_name`,[date]);
-  const [summary]=await q(`SELECT SUM(status='PRESENT') present_count,SUM(status='ABSENT') absent_count,COUNT(*) total_count FROM b4_attendance WHERE attendance_date=?`,[date]);
-  res.json({date,students:rows,summary:summary[0]||{}});
-});
-app.post('/api/admin/attendance',requirePermission('MANAGE_ATTENDANCE'),async(req,res)=>{
-  const date=String(req.body?.date||new Date().toISOString().slice(0,10)); const uid=Number(req.body?.userId); const status=req.body?.status==='ABSENT'?'ABSENT':'PRESENT';
-  if(!Number.isSafeInteger(uid))return res.status(400).json({error:'Invalid student'});
-  await q(`INSERT INTO b4_attendance(user_id,attendance_date,status,marked_by) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE status=VALUES(status),marked_by=VALUES(marked_by)`,[uid,date,status,req.session.userId]);
-  await audit(req,'ATTENDANCE_MARKED','user',uid,{date,status});
-  await createNotification(uid,{type:'attendance',title:'Attendance Updated',body:'Your attendance for '+date+' was marked '+status.toLowerCase()+'.',url:'/?view=attendance'});
-  res.json({ok:true});
-});
-app.get('/api/attendance/analysis',requireAuth,async(req,res)=>{
-  const [rows]=await q(`SELECT u.id,u.display_name,COUNT(a.id) marked_days,SUM(a.status='PRESENT') present_days,SUM(a.status='ABSENT') absent_days
-    FROM users u JOIN students s ON s.id=u.student_id LEFT JOIN b4_attendance a ON a.user_id=u.id
-    WHERE u.role='STUDENT' AND u.status='ACTIVE' GROUP BY u.id ORDER BY u.display_name`);
-  res.json({students:rows.map(x=>({...x,present_rate:x.marked_days?Math.round(Number(x.present_days||0)/Number(x.marked_days)*100):0}))});
 });
 
 app.get('/api/admin/badges',requirePermission('MANAGE_BADGES'),async(req,res)=>{
