@@ -1620,8 +1620,15 @@ app.delete('/api/admin/accounts/:id',requirePermission('MANAGE_ACCOUNTS'),async(
 });
 
 app.post('/api/admin/accounts/:id/reset-password',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
-  const id=Number(req.params.id); const [u]=await q('SELECT id FROM users WHERE id=? LIMIT 1',[id]); if(!u[0])return res.status(404).json({error:'Account not found'});
-  const temp='B4-'+crypto.randomBytes(6).toString('base64url'); await q('UPDATE users SET password_hash=?,session_version=session_version+1 WHERE id=?',[await bcrypt.hash(temp,12),id]); await audit(req,'PASSWORD_RESET','user',id); res.json({ok:true,tempPassword:temp});
+  const id=Number(req.params.id);
+  const newPassword=String(req.body?.newPassword||'');
+  if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid account'});
+  if(newPassword.length<8)return res.status(400).json({error:'Password must be at least 8 characters'});
+  const [u]=await q('SELECT id,display_name FROM users WHERE id=? LIMIT 1',[id]);
+  if(!u[0])return res.status(404).json({error:'Account not found'});
+  await q('UPDATE users SET password_hash=?,session_version=session_version+1 WHERE id=?',[await bcrypt.hash(newPassword,12),id]);
+  await audit(req,'PASSWORD_RESET','user',id,{display_name:u[0].display_name});
+  res.json({ok:true});
 });
 app.post('/api/admin/accounts/:id/end-session',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
   const id=Number(req.params.id); const [r]=await q('UPDATE users SET session_version=session_version+1 WHERE id=?',[id]); if(!r.affectedRows)return res.status(404).json({error:'Account not found'}); await audit(req,'SESSION_ENDED','user',id); res.json({ok:true});
