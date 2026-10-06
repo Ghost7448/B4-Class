@@ -1,24 +1,27 @@
 {
-  "name":"b4-class",
-  "version":"2.0.0",
-  "private":true,
-  "type":"module",
-  "scripts":{
-    "start":"node backend/src/server.js",
-    "dev":"node --watch backend/src/server.js",
-    "create-admin":"node backend/scripts/create-admin.js"
+  "name": "b4-class",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node backend/src/server.js",
+    "dev": "node --watch backend/src/server.js",
+    "create-admin": "node backend/scripts/create-admin.js"
   },
-  "engines":{"node":">=20"},
-  "dependencies":{
-    "@google/genai":"^2.24.0",
-    "bcryptjs":"^3.0.2",
-    "cors":"^2.8.5",
-    "dotenv":"^16.6.1",
-    "express":"^5.1.0",
-    "express-mysql-session":"^3.0.0",
-    "express-session":"^1.18.2",
-    "multer":"^2.0.2",
-    "mysql2":"^3.14.4",
-    "web-push":"^3.6.7"
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@google/genai": "^2.24.0",
+    "bcryptjs": "^3.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "express-mysql-session": "^3.0.0",
+    "express-session": "^1.18.2",
+    "multer": "^2.0.2",
+    "mysql2": "^3.14.4",
+    "web-push": "^3.6.7",
+    "nodemailer": "^7.0.6"
   }
 }
