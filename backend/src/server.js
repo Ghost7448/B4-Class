@@ -231,6 +231,16 @@ function pushGlobalEvent(event='data', payload={}) {
     catch { globalStreams.delete(client); }
   }
 }
+
+function pushUserEvent(userId,event='data',payload={}) {
+  const target=Number(userId);
+  if(!target)return;
+  const packet=`event: ${event}\ndata: ${JSON.stringify({ ...payload, at: Date.now() })}\n\n`;
+  for(const client of globalStreams){
+    if(Number(client.userId)!==target)continue;
+    try{client.res.write(packet);}catch{globalStreams.delete(client);}
+  }
+}
 setInterval(() => {
   for (const client of chatStreams) { try { client.res.write(': ping\n\n'); } catch { chatStreams.delete(client); } }
   for (const client of teacherChatStreams) { try { client.res.write(': ping\n\n'); } catch { teacherChatStreams.delete(client); } }
