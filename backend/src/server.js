@@ -118,8 +118,6 @@ async function ensureNotificationSettings(userId){
 async function createNotification(userId,{type='system',title,body='',entityId=null,url=null}={}){
   if(!userId||!title)return;
   const settings=await ensureNotificationSettings(userId);
-  const column=NOTIFICATION_SETTING_COLUMNS[type]||NOTIFICATION_SETTING_COLUMNS.system;
-  if(Number(settings[column])!==1)return;
   const targetUrl=url||notificationUrl(type,entityId);
   const [r]=await q('INSERT INTO notifications(user_id,type,entity_id,title,body,target_url) VALUES(?,?,?,?,?,?)',[userId,type,entityId||null,String(title).slice(0,220),String(body||'').slice(0,4000),targetUrl]);
   pushUserEvent(userId,'notification',{id:r.insertId,type,entityId:entityId||null,entity_id:entityId||null,title:String(title).slice(0,220),body:String(body||'').slice(0,4000),targetUrl,target_url:targetUrl,read_at:null,created_at:new Date().toISOString()});
