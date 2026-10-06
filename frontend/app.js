@@ -521,7 +521,6 @@ function settingsV(){
   const ns=S.notificationSettings||{};
   const pushOn=Number(ns.push_enabled)===1;
   const groups=[
-    ['chat_messages',ar?'الشات — الكل':'Chat — General','Messages in the class and teacher chats (legacy/general control)'],
     ['class_chat_messages',ar?'رسائل شات الفصل':'Class Chat Messages','A new message is sent in Class Chat'],
     ['class_chat_reply',ar?'الردود على شات الفصل':'Class Chat Replies','Someone replies to one of your Class Chat messages'],
     ['teacher_chat_messages',ar?'رسائل شات المدرسين':'Teacher Chat Messages','A new message is sent in Teacher Chat'],
@@ -598,7 +597,7 @@ async function loadMe(){
     ensureGlobalRealtime();
   }catch{
     S.me=null;S.linked=[];
-    S.notificationSettings={class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0};
+    S.notificationSettings={chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,attendance_notifications:1,system_notifications:1,push_enabled:0};
     S.vapidPublicKey='';
   }
   await loadData();render();updateNotificationBadge();profileSyncLoop();startAssignmentCountdown();liveDataLoop();
