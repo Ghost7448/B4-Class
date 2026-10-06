@@ -1554,6 +1554,17 @@ app.get('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{await q('DELETE 
 
 app.get('/api/admin/developers/public',async(req,res)=>{const [developers]=await q('SELECT id,name,title,title2,link_url,created_at,IF(image_data IS NULL,NULL,CONCAT("/api/developers/",id,"/avatar")) avatar_url FROM b4_developers ORDER BY id DESC');res.json({developers});});
 
+// One-time migration: device push notifications must be OFF until each user explicitly enables them.
+async function migratePushDefaultOff(){
+  await q("CREATE TABLE IF NOT EXISTS b4_notification_migrations(migration_key VARCHAR(100) PRIMARY KEY,applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  const [r]=await q("INSERT IGNORE INTO b4_notification_migrations(migration_key) VALUES('push_default_off_v1')");
+  if(Number(r.affectedRows)===1){
+    await q("UPDATE notification_settings SET push_enabled=0");
+    await q("DELETE FROM push_subscriptions");
+    console.log('Notification migration: push notifications reset to OFF for all users');
+  }
+}
+
 // Serve shared assets from the repository root before the SPA fallback.
 // The manifest references /assets/logo.svg, so this route must be public.
 const assetsPath = path.resolve(__dirname, '../../assets');
@@ -1570,4 +1581,4 @@ app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-ensurePermissionSchema().then(()=>app.listen(PORT,()=>console.log('B4 backend + frontend listening on '+PORT))).catch(e=>{console.error('Permission schema bootstrap failed:',e);process.exit(1)});
+ensurePermissionSchema().then(()=>migratePushDefaultOff()).then(()=>app.listen(PORT,()=>console.log('B4 backend + frontend listening on '+PORT))).catch(e=>{console.error('Startup schema/migration failed:',e);process.exit(1)});
