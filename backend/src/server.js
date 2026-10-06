@@ -70,11 +70,15 @@ const q = (sql, args = []) => pool.execute(sql, args);
 
 const VAPID_READY=!!(process.env.VAPID_PUBLIC_KEY&&process.env.VAPID_PRIVATE_KEY&&process.env.VAPID_SUBJECT);
 const SMTP_READY=!!(process.env.SMTP_HOST&&process.env.SMTP_PORT&&process.env.SMTP_USER&&process.env.SMTP_PASS&&process.env.SMTP_FROM);
+const SMTP_PASS_CLEAN=String(process.env.SMTP_PASS||'').replace(/\\s+/g,'');
 const mailer=SMTP_READY?nodemailer.createTransport({
-  host:process.env.SMTP_HOST,
+  host:String(process.env.SMTP_HOST),
   port:Number(process.env.SMTP_PORT||465),
   secure:Number(process.env.SMTP_PORT||465)===465,
-  auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS}
+  auth:{user:String(process.env.SMTP_USER),pass:SMTP_PASS_CLEAN},
+  connectionTimeout:10000,
+  greetingTimeout:10000,
+  socketTimeout:15000
 }):null;
 function maskResetEmail(email){
   const s=String(email||'').trim().toLowerCase();
