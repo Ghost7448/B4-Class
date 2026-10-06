@@ -91,8 +91,10 @@ function notificationUrl(type,id){
   const n=Number(id)||0;
   if(type==='class_chat_message'||type==='class_chat_reply')return '/?view=chat';
   if(type==='teacher_chat_message'||type==='teacher_chat_reply')return '/?view=teacherChat';
-  if(type==='exam'||type==='exam_submission')return n?'/?view=exams&id='+n:'/?view=exams';
+  if(type==='exam'||type==='exam_submission'||type==='exam_result')return n?'/?view=exams&id='+n:'/?view=exams';
   if(type==='announcement')return '/?view=announcements';
+  if(type==='resource')return n?'/?view=resources&id='+n:'/?view=resources';
+  if(type==='attendance')return '/?view=attendance';
   if(type==='assignment'||type==='assignment_submission')return n?'/?view=assignments&id='+n:'/?view=assignments';
   return '/';
 }
@@ -119,7 +121,6 @@ async function sendPushToUser(userId,{title='B4 Class — Test Notification',bod
   if(!userId)return {ok:false,code:'NO_USER',message:'No user selected'};
   if(!VAPID_READY)return {ok:false,code:'VAPID_NOT_CONFIGURED',message:'VAPID keys are not configured on the server'};
   const settings=await ensureNotificationSettings(userId);
-  if(Number(settings.push_enabled)!==1)return {ok:false,code:'PUSH_DISABLED',message:'Device notifications are disabled for this account'};
   const [subs]=await q('SELECT id,endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=?',[userId]);
   if(!subs.length)return {ok:false,code:'NO_SUBSCRIPTION',message:'No push subscription is registered for this device'};
   const payload=JSON.stringify({title,body,url,type});
@@ -141,6 +142,14 @@ async function sendPushToUser(userId,{title='B4 Class — Test Notification',bod
 async function createNotification(userId,{type='system',title,body='',entityId=null,url=null}={}){
   if(!userId||!title)return;
   const settings=await ensureNotificationSettings(userId);
+  const settingColumn={
+    class_chat_message:'class_chat_messages',class_chat_reply:'class_chat_reply',
+    teacher_chat_message:'teacher_chat_messages',teacher_chat_reply:'teacher_chat_reply',
+    exam:'exam_notifications',exam_submission:'exam_notifications',exam_result:'exam_results',
+    announcement:'announcement_notifications',assignment:'assignment_notifications',assignment_submission:'assignment_notifications',
+    resource:'resource_notifications',attendance:'attendance_notifications',system:'system_notifications'
+  }[type]||'system_notifications';
+  if(Number(settings[settingColumn])!==1)return null;
   const targetUrl=url||notificationUrl(type,entityId);
   const cleanTitle=String(title).slice(0,220);
   const cleanBody=String(body||'').slice(0,4000);
@@ -150,7 +159,7 @@ async function createNotification(userId,{type='system',title,body='',entityId=n
 
   // Push delivery is deliberately handled per user. A failed subscription must
   // never prevent the in-app notification from being created for that user.
-  if(VAPID_READY&&Number(settings.push_enabled)===1){
+  if(VAPID_READY){
     try{
       const result=await sendPushToUser(userId,{title:cleanTitle,body:cleanBody,url:targetUrl,type});
       if(!result.ok){
