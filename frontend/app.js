@@ -361,6 +361,19 @@ function ensureGlobalRealtime(){
       clearInterval(window.liveFallbackTimer);
     });
     window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
+    window.globalRealtimeStream.addEventListener('notification',(event)=>{
+      try{
+        const n=JSON.parse(event.data||'{}');
+        if(!n?.id)return;
+        if((S.notifications||[]).some(x=>Number(x.id)===Number(n.id)))return;
+        S.notifications=[n,...(S.notifications||[])].slice(0,30);
+        updateNotificationBadge();
+        const title=String(n.title||'New notification');
+        const body=String(n.body||'');
+        toast(body?title+' — '+body:title);
+        if($('#back')?.classList.contains('show')&&document.querySelector('.notification-modal'))openNotifications();
+      }catch{}
+    });
     window.globalRealtimeStream.addEventListener('site-status',(event)=>{
       try{
         const data=JSON.parse(event.data||'{}');
