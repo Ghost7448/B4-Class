@@ -647,8 +647,10 @@ async function requestDeviceNotificationPermission({fromUser=false}={}){
 async function maybeEnableDeviceNotifications(){
   try{
     if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))return;
-    // Never request browser permission automatically. Browsers require a user gesture.
-    if(Notification.permission!=='granted'||!S.me)return;
+    // Device notifications stay OFF until the user explicitly enables them.
+    // Having browser permission alone must never turn B4 notifications on.
+    if(!S.me||Number(S.notificationSettings?.push_enabled)!==1)return;
+    if(Notification.permission!=='granted')return;
     localStorage.setItem('b4NotificationPermission','granted');
     await syncPushSubscription(false);
   }catch{}
