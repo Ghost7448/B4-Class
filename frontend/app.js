@@ -538,7 +538,6 @@ function settingsV(){
     ['announcement_notifications','📢',ar?'الإعلانات':'Announcements'],
     ['assignment_notifications','✓',ar?'الواجبات وإرسال الواجبات':'Assignments and submissions'],
     ['resource_notifications','📚',ar?'المصادر الجديدة':'New resources'],
-    ['attendance_notifications','📅',ar?'تحديثات الحضور':'Attendance updates'],
     ['system_notifications','⚙',ar?'إشعارات النظام':'System notifications']
   ];
   const alertRows=alerts.map(([key,icon,label])=>{
