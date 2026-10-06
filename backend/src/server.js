@@ -766,7 +766,7 @@ app.post('/api/auth/password-reset/request', async (req,res)=>{
   try{
     if(!SMTP_READY)return res.status(503).json({error:'Password reset email is not configured'});
     const email=String(req.body?.email||'').trim().toLowerCase();
-    if(!/^\\S+@\\S+\\.\\S+$/.test(email))return res.status(400).json({error:'Please enter a valid Gmail address'});
+    if(!email.includes('@')||!email.includes('.')||email.length<6)return res.status(400).json({error:'Please enter a valid Gmail address'});
     const [recent]=await q("SELECT id FROM password_reset_tokens WHERE email=? AND created_at>DATE_SUB(NOW(),INTERVAL 60 SECOND) AND used_at IS NULL ORDER BY id DESC LIMIT 1",[email]);
     if(recent[0])return res.json({ok:true,message:'If this email is linked to a B4 Class account, a code has been sent.',maskedEmail:maskResetEmail(email)});
     const [rows]=await q("SELECT u.id,u.display_name,l.provider_email FROM linked_accounts l JOIN users u ON u.id=l.user_id WHERE l.provider='GOOGLE' AND LOWER(l.provider_email)=LOWER(?) AND u.status='ACTIVE' LIMIT 1",[email]);
@@ -787,7 +787,7 @@ app.post('/api/auth/password-reset/verify', async (req,res)=>{
   try{
     const email=String(req.body?.email||'').trim().toLowerCase();
     const otp=String(req.body?.otp||'').trim();
-    if(!/^\\S+@\\S+\\.\\S+$/.test(email)||!/^\\d{4}$/.test(otp))return res.status(400).json({error:'Enter the 4-digit verification code'});
+    if(!email.includes('@')||!email.includes('.')||email.length<6||otp.length!==4||!otp.split('').every(ch=>ch>='0'&&ch<='9'))return res.status(400).json({error:'Enter the 4-digit verification code'});
     const [rows]=await q("SELECT * FROM password_reset_tokens WHERE email=? AND used_at IS NULL ORDER BY id DESC LIMIT 1",[email]);
     const token=rows[0];
     if(!token)return res.status(400).json({error:'This verification code is invalid or expired'});
