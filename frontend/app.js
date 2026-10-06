@@ -613,7 +613,7 @@ async function loadMe(){
   await loadData();render();updateNotificationBadge();profileSyncLoop();startAssignmentCountdown();liveDataLoop();
   if(S.me) maybeEnableDeviceNotifications();
 }
-async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}updateNotificationBadge();S.error=''}catch(e){S.error=e.message}}
+async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}try{S.accounts=(await api('/api/admin/accounts')).accounts||[]}catch{}updateNotificationBadge();S.error=''}catch(e){S.error=e.message}}
 
 
 async function login(e){e.preventDefault();try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({login:$('#loginName').value.trim(),password:$('#loginPassword').value})});close();await loadMe();toast('Login successful ✓')}catch(x){toast(x.message)}}
@@ -1227,18 +1227,39 @@ async function saveRoleLink(e,id,role){
 async function savePermissions(id){try{const card=[...document.querySelectorAll('.permission-user')].find(x=>x.dataset.userId===String(id));const codes=card?[...card.querySelectorAll('[data-perm]:checked')].map(x=>x.dataset.perm):[];await api('/api/admin/users/'+id+'/permissions',{method:'PUT',body:JSON.stringify({permissionCodes:codes})});toast('Permissions saved ✓');loadPermissions()}catch(e){toast(e.message)}}
 async function loadAccounts(){
   const r=$('#adminRoot');
+  if(!r)return;
   try{
     const d=await api('/api/admin/accounts');
-    r.innerHTML=`<div class="tablewrap"><table class="table"><thead><tr><th>Name</th><th>Role</th><th>Activation</th><th>Google</th><th>Session</th><th>Actions</th></tr></thead><tbody>
-      ${(d.accounts||[]).map(a=>`<tr><td>${esc(a.display_name)}</td><td>${esc(a.role)}</td><td>${(a.activation_key_preview||a.identity_code)?'<span class="identity-code">'+esc(a.activation_key_preview||a.identity_code)+'</span>':'<span class="identity-code empty-code">—</span>'}</td><td>${a.google_linked?'<div><span class="badge">✓ Google Linked</span>'+(a.google_email?'<small class="muted account-google-email">'+esc(a.google_email)+'</small>':'')+'</div>':'<span class="muted">Not linked</span>'}</td><td>${esc(a.status)}</td><td><button class="btn ghost" onclick="resetAccount(${a.id})">Reset password</button><button class="btn ghost" onclick="endSession(${a.id})">End session</button><button class="btn danger" onclick="deleteAccount(${a.id})">Delete</button></td></tr>`).join('')}
-    </tbody></table></div>`;
+    const accounts=d.accounts||[];
+    r.innerHTML='<div class="accounts-toolbar"><div><div class="eyebrow">ACCOUNT MANAGEMENT</div><b>'+accounts.length+'</b><span class="muted"> accounts</span></div><span class="muted">Manage passwords, sessions and access</span></div>'+
+      '<div class="account-list">'+(accounts.length?accounts.map((a,i)=>{
+        const roleTone=Number(a.is_super_admin)===1?'super':String(a.role||'').toLowerCase();
+        const google=a.google_linked?'<span class="account-chip google">✓ Google Linked</span>':'<span class="account-chip muted-chip">Google not linked</span>';
+        const identity=a.activation_key_preview||a.identity_code||'—';
+        return '<article class="account-row" style="--i:'+i+'"><div class="account-avatar-wrap"><img class="avatar account-avatar" src="'+esc(a.avatar_url||'/assets/logo.svg')+'" onerror="this.src=\'/assets/logo.svg\'"><span class="account-status '+(String(a.status)==='ACTIVE'?'active':'inactive')+'"></span></div><div class="account-main"><div class="account-head"><div><div class="account-name">'+esc(a.display_name||'Unnamed account')+'</div><div class="account-sub">'+esc(a.official_name||'')+'</div></div><span class="account-role '+roleTone+'">'+(Number(a.is_super_admin)===1?'SUPER ADMIN':esc(a.role||'ACCOUNT'))+'</span></div><div class="account-meta"><span><small>Identity</small><b>'+esc(identity)+'</b></span><span><small>Google</small>'+google+'</span><span><small>Status</small><b>'+esc(a.status||'—')+'</b></span></div><div class="account-actions"><button class="btn primary" onclick="resetAccount('+a.id+')">🔑 Reset Password</button><button class="btn ghost" onclick="endSession('+a.id+')">↻ End Session</button><button class="btn danger" onclick="deleteAccount('+a.id+')">Delete</button></div></div></article>';
+      }).join(''):'<div class="card empty">No accounts found.</div>')+'</div>';
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
 async function deleteAccount(id){
   if(!await confirmAction('Delete this account permanently?'))return;
   try{await api('/api/admin/accounts/'+id,{method:'DELETE'});await loadData();loadAccounts();toast('Account deleted ✓')}catch(e){toast(e.message)}
 }
-async function resetAccount(id){try{const d=await api('/api/admin/accounts/'+id+'/reset-password',{method:'POST'});modal('<div class="modalhead"><h2>Temporary password</h2><button class="close" onclick="b4Close()">×</button></div><div class="notice"><b>'+esc(d.tempPassword)+'</b></div><p class="muted">Give it to the account owner and ask them to change it.</p>')}catch(e){toast(e.message)}}
+function resetAccount(id){
+  const account=(S.accounts||[]).find(x=>Number(x.id)===Number(id));
+  const title=account?.display_name||'this account';
+  modal('<div class="account-password-modal"><div class="modalhead"><div><span class="eyebrow">ACCOUNT SECURITY</span><h2>Reset Password</h2></div><button class="close" onclick="b4Close()">×</button></div><p class="muted">Set a new password for <b>'+esc(title)+'</b>. The old password will stop working immediately.</p><form class="form" onsubmit="submitAccountPassword(event,'+Number(id)+')"><label>New Password<input id="accountResetPassword" type="password" minlength="8" autocomplete="new-password" placeholder="Enter a new password" required></label><label>Confirm Password<input id="accountResetConfirm" type="password" minlength="8" autocomplete="new-password" placeholder="Confirm the new password" required></label><div class="password-reset-hint">Minimum 8 characters</div><div class="account-password-actions"><button type="button" class="btn ghost" onclick="b4Close()">Cancel</button><button type="submit" class="btn primary" id="accountResetSubmit">Change Password</button></div></form></div>');
+  setTimeout(()=>$('#accountResetPassword')?.focus(),120);
+}
+async function submitAccountPassword(e,id){
+  e.preventDefault();
+  const password=String($('#accountResetPassword')?.value||''),confirm=String($('#accountResetConfirm')?.value||'');
+  if(password.length<8)return toast('Password must be at least 8 characters');
+  if(password!==confirm)return toast('Passwords do not match');
+  const btn=e.submitter||$('#accountResetSubmit');
+  if(btn){btn.disabled=true;btn.textContent='Changing…'}
+  try{await api('/api/admin/accounts/'+id+'/reset-password',{method:'POST',body:JSON.stringify({newPassword:password})});close();await loadAccounts();toast('Password changed successfully ✓')}
+  catch(e){toast(e.message||'Could not change password');if(btn){btn.disabled=false;btn.textContent='Change Password'}}
+}
 async function endSession(id){try{await api('/api/admin/accounts/'+id+'/end-session',{method:'POST'});toast('Session ended ✓')}catch(e){toast(e.message)}}
 async function loadKeys(){
   const r=$('#adminRoot');
