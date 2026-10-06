@@ -93,7 +93,6 @@ function notificationUrl(type,id){
   if(type==='exam'||type==='exam_submission'||type==='exam_result')return n?'/?view=exams&id='+n:'/?view=exams';
   if(type==='announcement')return '/?view=announcements';
   if(type==='resource')return n?'/?view=resources&id='+n:'/?view=resources';
-  if(type==='attendance')return '/?view=attendance';
   if(type==='assignment'||type==='assignment_submission')return n?'/?view=assignments&id='+n:'/?view=assignments';
   return '/';
 }
@@ -605,7 +604,7 @@ app.patch('/api/notifications/settings',requireAuth,async(req,res)=>{
     const current=await ensureNotificationSettings(req.session.userId);
     const allowed=['chat_messages','class_chat_messages','class_chat_reply','teacher_chat_messages','teacher_chat_reply','exam_notifications','exam_results','announcement_notifications','assignment_notifications','resource_notifications','system_notifications','push_enabled'];
     const next={}; for(const key of allowed)next[key]=req.body?.[key]===undefined?Number(current[key])?1:0:(req.body[key]?1:0);
-    await q('UPDATE notification_settings SET chat_messages=?,class_chat_messages=?,class_chat_reply=?,teacher_chat_messages=?,teacher_chat_reply=?,exam_notifications=?,exam_results=?,announcement_notifications=?,assignment_notifications=?,resource_notifications=?=?,system_notifications=?,push_enabled=? WHERE user_id=?',[next.chat_messages,next.class_chat_messages,next.class_chat_reply,next.teacher_chat_messages,next.teacher_chat_reply,next.exam_notifications,next.exam_results,next.announcement_notifications,next.assignment_notifications,next.resource_notifications,next.attendance_notifications,next.system_notifications,next.push_enabled,req.session.userId]);
+    await q('UPDATE notification_settings SET chat_messages=?,class_chat_messages=?,class_chat_reply=?,teacher_chat_messages=?,teacher_chat_reply=?,exam_notifications=?,exam_results=?,announcement_notifications=?,assignment_notifications=?,resource_notifications=?=?,system_notifications=?,push_enabled=? WHERE user_id=?',[next.chat_messages,next.class_chat_messages,next.class_chat_reply,next.teacher_chat_messages,next.teacher_chat_reply,next.exam_notifications,next.exam_results,next.announcement_notifications,next.assignment_notifications,next.resource_notifications,next.system_notifications,next.push_enabled,req.session.userId]);
     res.json({settings:await ensureNotificationSettings(req.session.userId),vapidPublicKey:VAPID_READY?process.env.VAPID_PUBLIC_KEY:null});
   }catch(e){res.status(500).json({error:'Could not save notification settings'})}
 });
