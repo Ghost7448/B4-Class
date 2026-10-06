@@ -357,11 +357,11 @@ INSERT IGNORE INTO permissions(code,label) VALUES
 ('MANAGE_ADMINS','Manage admins'),('MANAGE_ACCOUNTS','Manage accounts'),('MANAGE_KEYS','Manage activation keys'),
 ('MANAGE_TEACHERS','Manage teachers'),('MANAGE_STUDENTS','Manage students'),('MANAGE_ROLES','Manage roles'),('MANAGE_PERMISSIONS','Manage permissions'),('VIEW_ADMIN_CENTER','View Admin Center'),
 ('MANAGE_SUBJECTS','Manage subjects'),('MANAGE_SCHEDULE','Manage schedule'),('MANAGE_ASSIGNMENTS','Manage assignments'),
-('MANAGE_RESOURCES','Manage resources'),('MANAGE_EXAMS','Manage exams'),('MANAGE_ATTENDANCE','Manage attendance'),
+('MANAGE_RESOURCES','Manage resources'),('MANAGE_EXAMS','Manage exams'),
 ('MANAGE_ANNOUNCEMENTS','Manage announcements'),('MANAGE_CHAT','Moderate chat'),('VIEW_LOGS','View logs'),
 ('USE_AI','Use B4 AI'),('VIEW_CLASS','View class'),('MANAGE_BADGES','Manage badges'),
 ('MANAGE_DEVELOPERS','Manage developers'),('MANAGE_TEACHER_CHAT','Teacher chat'),
-('MANAGE_ANALYTICS','View attendance analytics'),('ADMINISTRATOR','Administrator');
+('ADMINISTRATOR','Administrator');
 
 INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'TEACHER',id FROM permissions WHERE code IN
 ('MANAGE_SUBJECTS','MANAGE_ASSIGNMENTS','MANAGE_RESOURCES','MANAGE_EXAMS','MANAGE_ANNOUNCEMENTS','MANAGE_CHAT','USE_AI','VIEW_CLASS','MANAGE_TEACHER_CHAT');
