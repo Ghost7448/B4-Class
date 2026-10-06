@@ -73,13 +73,18 @@ if(VAPID_READY){
 }
 
 const NOTIFICATION_SETTING_COLUMNS={
-  class_chat_message:'chat_messages',
+  class_chat_message:'class_chat_messages',
   class_chat_reply:'class_chat_reply',
-  teacher_chat_message:'chat_messages',
+  teacher_chat_message:'teacher_chat_messages',
   teacher_chat_reply:'teacher_chat_reply',
   exam:'exam_notifications',
+  exam_submission:'exam_notifications',
+  exam_result:'exam_results',
   announcement:'announcement_notifications',
   assignment:'assignment_notifications',
+  assignment_submission:'assignment_notifications',
+  resource:'resource_notifications',
+  attendance:'attendance_notifications',
   system:'system_notifications'
 };
 function notificationUrl(type,id){
@@ -92,14 +97,19 @@ function notificationUrl(type,id){
   return '/';
 }
 async function ensureNotificationSettings(userId){
-  const defaults={chat_messages:1,class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0};
+  const defaults={chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,attendance_notifications:1,system_notifications:1,push_enabled:0};
   if(!userId)return defaults;
   try{
-    await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_messages TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,exam_results TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,resource_notifications TINYINT(1) NOT NULL DEFAULT 1,attendance_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     const [chatSettingCol]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notification_settings' AND COLUMN_NAME='chat_messages' LIMIT 1");
     if(!chatSettingCol.length) await q("ALTER TABLE notification_settings ADD COLUMN chat_messages TINYINT(1) NOT NULL DEFAULT 1 AFTER teacher_chat_reply");
     await q('INSERT INTO notification_settings(user_id) VALUES(?) ON DUPLICATE KEY UPDATE user_id=user_id',[userId]);
-    const [rows]=await q('SELECT chat_messages,class_chat_reply,teacher_chat_reply,exam_notifications,announcement_notifications,assignment_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
+    for(const [name,def] of Object.entries({class_chat_messages:1,teacher_chat_messages:1,exam_results:1,resource_notifications:1,attendance_notifications:1})){
+      const [col]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notification_settings' AND COLUMN_NAME=? LIMIT 1",[name]);
+      if(!col.length) await q("ALTER TABLE notification_settings ADD COLUMN "+name+" TINYINT(1) NOT NULL DEFAULT "+def);
+    }
+    await q('UPDATE notification_settings SET class_chat_messages=COALESCE(class_chat_messages,chat_messages),teacher_chat_messages=COALESCE(teacher_chat_messages,chat_messages) WHERE user_id=?',[userId]);
+    const [rows]=await q('SELECT chat_messages,class_chat_messages,class_chat_reply,teacher_chat_messages,teacher_chat_reply,exam_notifications,exam_results,announcement_notifications,assignment_notifications,resource_notifications,attendance_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
     return rows[0]||defaults;
   }catch(e){
     console.error('Notification settings bootstrap failed:',e.message);
@@ -236,7 +246,7 @@ const PERMISSION_DEFS = [
 async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS profile_images(entity_type VARCHAR(20) NOT NULL,entity_id BIGINT UNSIGNED NOT NULL,mime_type VARCHAR(120) NOT NULL,data MEDIUMBLOB NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(entity_type,entity_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS chat_typing(user_id BIGINT UNSIGNED PRIMARY KEY,typing TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-  await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_messages TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,exam_results TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,resource_notifications TINYINT(1) NOT NULL DEFAULT 1,attendance_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS push_subscriptions(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,endpoint TEXT NOT NULL,endpoint_hash CHAR(64) NOT NULL UNIQUE,p256dh TEXT NOT NULL,auth TEXT NOT NULL,expiration_time BIGINT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,INDEX idx_push_user(user_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS notifications(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NULL,title VARCHAR(220) NOT NULL,body TEXT,read_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   const [examAttemptStatusCol]=await q("SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='exam_attempts' AND COLUMN_NAME='status' LIMIT 1");
@@ -553,9 +563,9 @@ app.get('/api/notifications/settings',requireAuth,async(req,res)=>{
 app.patch('/api/notifications/settings',requireAuth,async(req,res)=>{
   try{
     const current=await ensureNotificationSettings(req.session.userId);
-    const allowed=['chat_messages','class_chat_reply','teacher_chat_reply','exam_notifications','announcement_notifications','assignment_notifications','system_notifications','push_enabled'];
+    const allowed=['chat_messages','class_chat_messages','class_chat_reply','teacher_chat_messages','teacher_chat_reply','exam_notifications','exam_results','announcement_notifications','assignment_notifications','resource_notifications','attendance_notifications','system_notifications','push_enabled'];
     const next={}; for(const key of allowed)next[key]=req.body?.[key]===undefined?Number(current[key])?1:0:(req.body[key]?1:0);
-    await q('UPDATE notification_settings SET chat_messages=?,class_chat_reply=?,teacher_chat_reply=?,exam_notifications=?,announcement_notifications=?,assignment_notifications=?,system_notifications=?,push_enabled=? WHERE user_id=?',[next.chat_messages,next.class_chat_reply,next.teacher_chat_reply,next.exam_notifications,next.announcement_notifications,next.assignment_notifications,next.system_notifications,next.push_enabled,req.session.userId]);
+    await q('UPDATE notification_settings SET chat_messages=?,class_chat_messages=?,class_chat_reply=?,teacher_chat_messages=?,teacher_chat_reply=?,exam_notifications=?,exam_results=?,announcement_notifications=?,assignment_notifications=?,resource_notifications=?,attendance_notifications=?,system_notifications=?,push_enabled=? WHERE user_id=?',[next.chat_messages,next.class_chat_messages,next.class_chat_reply,next.teacher_chat_messages,next.teacher_chat_reply,next.exam_notifications,next.exam_results,next.announcement_notifications,next.assignment_notifications,next.resource_notifications,next.attendance_notifications,next.system_notifications,next.push_enabled,req.session.userId]);
     res.json({settings:await ensureNotificationSettings(req.session.userId),vapidPublicKey:VAPID_READY?process.env.VAPID_PUBLIC_KEY:null});
   }catch(e){res.status(500).json({error:'Could not save notification settings'})}
 });
@@ -577,6 +587,8 @@ app.post('/api/notifications/push/unsubscribe',requireAuth,async(req,res)=>{
 });
 app.post('/api/notifications/:id/read',requireAuth,async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid notification'});await q('UPDATE notifications SET read_at=COALESCE(read_at,NOW()) WHERE id=? AND user_id=?',[id,req.session.userId]);res.json({ok:true})});
 app.post('/api/notifications/read-all',requireAuth,async(req,res)=>{await q('UPDATE notifications SET read_at=COALESCE(read_at,NOW()) WHERE user_id=?',[req.session.userId]);res.json({ok:true})});
+app.delete('/api/notifications/read',requireAuth,async(req,res)=>{await q('DELETE FROM notifications WHERE user_id=? AND read_at IS NOT NULL',[req.session.userId]);res.json({ok:true})});
+app.delete('/api/notifications/:id',requireAuth,async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid notification'});await q('DELETE FROM notifications WHERE id=? AND user_id=?',[id,req.session.userId]);res.json({ok:true})});
 
 app.get('/api/time',(req,res)=>res.json(cairoNow()));
 app.get('/api/bootstrap', async (req, res) => {
@@ -1057,7 +1069,10 @@ app.patch('/api/admin/exams/:examId/submissions/:attemptId/questions/:questionId
 await q('UPDATE exam_answers SET is_correct=?,points_awarded=?,teacher_correct_answer=? WHERE id=?',[correct?1:0,correct?Number(qn.points):0,savedTeacherAnswer||null,qn.answer_id]);
 const [savedGradeRows]=await q('SELECT is_correct,points_awarded,teacher_correct_answer FROM exam_answers WHERE id=? LIMIT 1',[qn.answer_id]);
 if(!savedGradeRows[0] || savedGradeRows[0].is_correct===null)return res.status(500).json({error:'The teacher grade was not saved'});
-const [scoreRows]=await q("SELECT COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE','SHORT','LONG') AND ea.is_correct IS NOT NULL THEN ea.points_awarded ELSE 0 END),0) score,COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE') OR ea.is_correct IS NOT NULL THEN q.points ELSE 0 END),0) total FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=? WHERE q.exam_id=?",[attemptId,examId]);const score=Number(scoreRows[0]?.score||0),total=Number(scoreRows[0]?.total||0),percent=total?Math.round(score/total*100):0;await q('UPDATE exam_attempts SET score=? WHERE id=?',[score,attemptId]);await audit(req,'EXAM_ANSWER_GRADED','exam',examId,{attemptId,questionId,correct,score,total,percent});res.json({ok:true,correct,correctAnswer:correctAnswer||null,score,total,percent});});
+const [scoreRows]=await q("SELECT COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE','SHORT','LONG') AND ea.is_correct IS NOT NULL THEN ea.points_awarded ELSE 0 END),0) score,COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE') OR ea.is_correct IS NOT NULL THEN q.points ELSE 0 END),0) total FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=? WHERE q.exam_id=?",[attemptId,examId]);const score=Number(scoreRows[0]?.score||0),total=Number(scoreRows[0]?.total||0),percent=total?Math.round(score/total*100):0;await q('UPDATE exam_attempts SET score=? WHERE id=?',[score,attemptId]);await audit(req,'EXAM_ANSWER_GRADED','exam',examId,{attemptId,questionId,correct,score,total,percent});
+const [attemptOwner]=await q('SELECT user_id FROM exam_attempts WHERE id=? LIMIT 1',[attemptId]);
+if(attemptOwner[0]?.user_id) await createNotification(attemptOwner[0].user_id,{type:'exam_result',title:'Exam Result Updated',body:'Your exam score was updated to '+percent+'%.',entityId:examId,url:'/?view=exams&id='+examId});
+res.json({ok:true,correct,correctAnswer:correctAnswer||null,score,total,percent});});
 
 app.get('/api/exams/:id/result',requireAuth,async(req,res)=>{const id=Number(req.params.id),[r]=await q('SELECT a.id,a.status,a.score,a.started_at,a.submitted_at,e.title,e.ends_at,e.duration_minutes FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);if(!r[0])return res.status(404).json({error:'No exam submission yet'});const [tot]=await q("SELECT COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE') OR a.is_correct IS NOT NULL THEN q.points ELSE 0 END),0) total FROM exam_questions q LEFT JOIN exam_answers a ON a.question_id=q.id AND a.attempt_id=? WHERE q.exam_id=?",[r[0].id,id]);const total=Number(tot[0]?.total||0),score=Number(r[0].score||0);res.json({attempt:r[0],percent:total?Math.round(score/total*100):0,total});});
 
@@ -1101,6 +1116,10 @@ app.post('/api/chat/messages',requireAuth,async(req,res)=>{
   if(replyToId){const [reply]=await q('SELECT id FROM chat_messages WHERE id=? AND deleted_at IS NULL LIMIT 1',[replyToId]);if(!reply[0])return res.status(400).json({error:'Reply target not found'});}
   const [r]=await q('INSERT INTO chat_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);
   const [rows]=await q(`SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM chat_messages m JOIN users u ON u.id=m.user_id LEFT JOIN chat_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?`,[r.insertId]);
+  if(replyToId){
+    const [target]=await q('SELECT user_id FROM chat_messages WHERE id=? LIMIT 1',[replyToId]);
+    if(target[0]?.user_id && Number(target[0].user_id)!==Number(req.session.userId)) await createNotification(target[0].user_id,{type:'class_chat_reply',title:'Reply to your message',body:(rows[0].display_name||'Someone')+': '+String(rows[0].body||'').slice(0,180),entityId:r.insertId,url:'/?view=chat'});
+  }
   await notifyClassExcept(req.session.userId,{type:'class_chat_message',title:'New Class Chat Message',body:(rows[0].display_name||'Someone')+': '+String(rows[0].body||'').slice(0,180),entityId:r.insertId,url:'/?view=chat'});
   res.json({message:rows[0]});
   pushChatEvent('chat',{type:'created',message:rows[0]});
@@ -1227,6 +1246,7 @@ app.post('/api/admin/resources', requirePermission('MANAGE_RESOURCES'), async(re
     if(url&& !/^https?:\/\//i.test(url))return res.status(400).json({error:'Link must start with http:// or https://'});
     const [r]=await q('INSERT INTO resources(title,description,url,resource_type,subject_id,class_name,created_by) VALUES(?,?,?,?,?,\'B4\',?)',[title,description,url||null,resourceType,subjectId,req.session.userId]);
     await audit(req,'RESOURCE_CREATED','resource',r.insertId,{type:resourceType});
+    await notifyClassExcept(req.session.userId,{type:'resource',title:'New Resource',body:title,entityId:r.insertId,url:'/?view=resources'});
     res.json({ok:true,id:r.insertId});
   }catch(e){
     console.error('Resource creation failed:',e);
@@ -1260,6 +1280,7 @@ app.post('/api/admin/resources/publish', requirePermission('MANAGE_RESOURCES'), 
       fileUrl='/api/resources/files/'+f.insertId;
     }
     await audit(req,'RESOURCE_CREATED','resource',r.insertId,{type:resourceType,has_file:hasFile});
+    await notifyClassExcept(req.session.userId,{type:'resource',title:'New Resource',body:title,entityId:r.insertId,url:'/?view=resources'});
     res.json({ok:true,id:r.insertId,fileUrl});
   }catch(e){
     console.error('Resource publish failed:',e);
@@ -1275,7 +1296,9 @@ app.post('/api/admin/resources/pdf', requirePermission('MANAGE_RESOURCES'), pdfU
     const subjectId=req.body?.subjectId?Number(req.body.subjectId):null;
     const [r]=await q('INSERT INTO resources(title,description,resource_type,subject_id,class_name,created_by) VALUES(?,?,\'FILE\',?,\'B4\',?)',[title,description,subjectId||null,req.session.userId]);
     await q('INSERT INTO resource_files(resource_id,filename,mime_type,data) VALUES(?,?,?,?)',[r.insertId,req.file.originalname,'application/pdf',req.file.buffer]);
-    await audit(req,'PDF_UPLOADED','resource',r.insertId,{filename:req.file.originalname});res.json({ok:true,id:r.insertId,fileUrl:'/api/resources/files/'+r.insertId});
+    await audit(req,'PDF_UPLOADED','resource',r.insertId,{filename:req.file.originalname});
+    await notifyClassExcept(req.session.userId,{type:'resource',title:'New Resource',body:title,entityId:r.insertId,url:'/?view=resources'});
+    res.json({ok:true,id:r.insertId,fileUrl:'/api/resources/files/'+r.insertId});
   }catch(e){
     console.error('PDF upload failed:',e);
     res.status(500).json({error:e?.sqlMessage||e?.message||'Could not upload PDF'});
@@ -1465,7 +1488,9 @@ app.post('/api/admin/attendance',requirePermission('MANAGE_ATTENDANCE'),async(re
   const date=String(req.body?.date||new Date().toISOString().slice(0,10)); const uid=Number(req.body?.userId); const status=req.body?.status==='ABSENT'?'ABSENT':'PRESENT';
   if(!Number.isSafeInteger(uid))return res.status(400).json({error:'Invalid student'});
   await q(`INSERT INTO b4_attendance(user_id,attendance_date,status,marked_by) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE status=VALUES(status),marked_by=VALUES(marked_by)`,[uid,date,status,req.session.userId]);
-  await audit(req,'ATTENDANCE_MARKED','user',uid,{date,status}); res.json({ok:true});
+  await audit(req,'ATTENDANCE_MARKED','user',uid,{date,status});
+  await createNotification(uid,{type:'attendance',title:'Attendance Updated',body:'Your attendance for '+date+' was marked '+status.toLowerCase()+'.',url:'/?view=attendance'});
+  res.json({ok:true});
 });
 app.get('/api/attendance/analysis',requireAuth,async(req,res)=>{
   const [rows]=await q(`SELECT u.id,u.display_name,COUNT(a.id) marked_days,SUM(a.status='PRESENT') present_days,SUM(a.status='ABSENT') absent_days
@@ -1519,7 +1544,12 @@ app.get('/api/developers/:id/avatar',async(req,res)=>{const [r]=await q('SELECT 
 async function teacherOnly(req,res,next){if(!req.session.userId)return res.status(401).json({error:'Login required'});const [u]=await q('SELECT role,is_super_admin,status FROM users WHERE id=?',[req.session.userId]);if(!u[0]||u[0].status!=='ACTIVE')return res.status(401).json({error:'Account disabled'});if(!Number(u[0].is_super_admin)&&u[0].role!=='TEACHER'&&!(await getPermissionCodes(req.session.userId)).includes('MANAGE_TEACHER_CHAT'))return res.status(403).json({error:'Teacher chat only'});next();}
 app.get('/api/teacher-chat/stream',teacherOnly,async(req,res)=>{res.status(200).set({'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform','Connection':'keep-alive','X-Accel-Buffering':'no'});res.flushHeaders?.();const client={res,userId:req.session.userId};teacherChatStreams.add(client);res.write(': connected\\n\\n');req.on('close',()=>teacherChatStreams.delete(client));});
 app.get('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m LEFT JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100');rows.reverse();res.json({messages:rows});});
-app.post('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const body=String(req.body?.body||'').trim(),replyToId=req.body?.replyToId?Number(req.body.replyToId):null;if(!body||body.length>4000)return res.status(400).json({error:'Message is empty or too long'});if(replyToId){const [reply]=await q('SELECT id FROM b4_teacher_messages WHERE id=? AND deleted_at IS NULL LIMIT 1',[replyToId]);if(!reply[0])return res.status(400).json({error:'Reply target not found'});}const [r]=await q('INSERT INTO b4_teacher_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?',[r.insertId]);const [teacherRecipients]=await q("SELECT id FROM users WHERE status='ACTIVE' AND id<>? AND (role='TEACHER' OR is_super_admin=1)",[req.session.userId]);await notifyUsers(teacherRecipients.map(x=>x.id),{type:'teacher_chat_message',title:'New Teacher Chat Message',body:(rows[0].display_name||'Someone')+': '+String(rows[0].body||'').slice(0,180),entityId:r.insertId,url:'/?view=teacherChat'});await audit(req,'TEACHER_CHAT_MESSAGE','teacher_chat',r.insertId);res.json({message:rows[0]});pushTeacherChatEvent('teacher-chat',{type:'created',message:rows[0]});});
+app.post('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const body=String(req.body?.body||'').trim(),replyToId=req.body?.replyToId?Number(req.body.replyToId):null;if(!body||body.length>4000)return res.status(400).json({error:'Message is empty or too long'});if(replyToId){const [reply]=await q('SELECT id FROM b4_teacher_messages WHERE id=? AND deleted_at IS NULL LIMIT 1',[replyToId]);if(!reply[0])return res.status(400).json({error:'Reply target not found'});}const [r]=await q('INSERT INTO b4_teacher_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?',[r.insertId]);
+  if(replyToId){
+    const [target]=await q('SELECT user_id FROM b4_teacher_messages WHERE id=? LIMIT 1',[replyToId]);
+    if(target[0]?.user_id && Number(target[0].user_id)!==Number(req.session.userId)) await createNotification(target[0].user_id,{type:'teacher_chat_reply',title:'Reply to your teacher message',body:(rows[0].display_name||'Someone')+': '+String(rows[0].body||'').slice(0,180),entityId:r.insertId,url:'/?view=teacherChat'});
+  }
+  const [teacherRecipients]=await q("SELECT id FROM users WHERE status='ACTIVE' AND id<>? AND (role='TEACHER' OR is_super_admin=1)",[req.session.userId]);await notifyUsers(teacherRecipients.map(x=>x.id),{type:'teacher_chat_message',title:'New Teacher Chat Message',body:(rows[0].display_name||'Someone')+': '+String(rows[0].body||'').slice(0,180),entityId:r.insertId,url:'/?view=teacherChat'});await audit(req,'TEACHER_CHAT_MESSAGE','teacher_chat',r.insertId);res.json({message:rows[0]});pushTeacherChatEvent('teacher-chat',{type:'created',message:rows[0]});});
 app.patch('/api/teacher-chat/messages/:id',teacherOnly,async(req,res)=>{const id=Number(req.params.id),body=String(req.body?.body||'').trim();if(!Number.isSafeInteger(id)||!body||body.length>4000)return res.status(400).json({error:'Invalid message'});const [rows]=await q('SELECT id,user_id,body,deleted_at FROM b4_teacher_messages WHERE id=? LIMIT 1',[id]);const m=rows[0];if(!m)return res.status(404).json({error:'Message not found'});if(m.deleted_at)return res.status(400).json({error:'Deleted message cannot be edited'});const permissions=await getPermissionCodes(req.session.userId);const canEdit=Number(m.user_id)===Number(req.session.userId)||permissions.includes('MANAGE_TEACHER_CHAT');if(!canEdit)return res.status(403).json({error:'Permission denied'});if(body===m.body)return res.status(400).json({error:'No changes made'});await q('INSERT INTO b4_teacher_message_edits(message_id,editor_user_id,old_body,new_body) VALUES(?,?,?,?)',[id,req.session.userId,m.body,body]);await q('UPDATE b4_teacher_messages SET body=?,edited_at=NOW() WHERE id=?',[body,id]);await audit(req,'TEACHER_CHAT_MESSAGE_EDITED','teacher_chat',id,{old_body:m.body,new_body:body});const [updated]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?',[id]);res.json({message:updated[0]});pushTeacherChatEvent('teacher-chat',{type:'updated',message:updated[0]});});
 app.delete('/api/teacher-chat/messages/:id',teacherOnly,async(req,res)=>{const id=Number(req.params.id);const [rows]=await q('SELECT id,user_id,deleted_at FROM b4_teacher_messages WHERE id=? LIMIT 1',[id]);const m=rows[0];if(!m)return res.status(404).json({error:'Message not found'});const permissions=await getPermissionCodes(req.session.userId);const canDelete=Number(m.user_id)===Number(req.session.userId)||permissions.includes('MANAGE_TEACHER_CHAT');if(!canDelete)return res.status(403).json({error:'Permission denied'});if(m.deleted_at)return res.json({ok:true});await q('UPDATE b4_teacher_messages SET deleted_at=NOW(),deleted_by=? WHERE id=?',[req.session.userId,id]);await audit(req,'TEACHER_CHAT_MESSAGE_DELETED','teacher_chat',id,'Message deleted');res.json({ok:true});pushTeacherChatEvent('teacher-chat',{type:'deleted',id});});
 app.post('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{if(req.body?.typing)await q('INSERT INTO b4_teacher_typing(user_id) VALUES(?) ON DUPLICATE KEY UPDATE updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM b4_teacher_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
