@@ -769,7 +769,7 @@ app.post('/api/auth/activate', async (req, res) => {
 
 app.post('/api/auth/password-reset/request', async (req,res)=>{
   try{
-    if(!SMTP_READY)return res.status(503).json({error:'Password reset email is not configured'});
+    if(!RESEND_READY)return res.status(503).json({error:'Password reset email is not configured'});
     const email=String(req.body?.email||'').trim().toLowerCase();
     if(!email.includes('@')||!email.includes('.')||email.length<6)return res.status(400).json({error:'Please enter a valid Gmail address'});
     const [recent]=await q("SELECT id FROM password_reset_tokens WHERE email=? AND created_at>DATE_SUB(NOW(),INTERVAL 60 SECOND) AND used_at IS NULL ORDER BY id DESC LIMIT 1",[email]);
