@@ -557,7 +557,7 @@ async function getBootstrap(req) {
     exam.end_ms = endMs;
     exam.status = endMs !== null && nowMs >= endMs ? 'CLOSED' : 'OPEN';
   }
-  let attendance=[],messages=[],notifications=[];
+  let messages=[],notifications=[];
   if(req.session.userId) {
     const [submissions]=await q(`SELECT s.assignment_id,s.id submission_id,s.submitted_at,s.status,s.score,sf.id submission_file_id,sf.filename submission_name FROM assignment_submissions s LEFT JOIN assignment_submission_files sf ON sf.submission_id=s.id WHERE s.user_id=?`,[req.session.userId]);
     const byAssignment=new Map(submissions.map(x=>[Number(x.assignment_id),x]));
