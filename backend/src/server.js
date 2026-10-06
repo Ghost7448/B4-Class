@@ -108,7 +108,6 @@ async function ensureNotificationSettings(userId){
       const [col]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notification_settings' AND COLUMN_NAME=? LIMIT 1",[name]);
       if(!col.length) await q("ALTER TABLE notification_settings ADD COLUMN "+name+" TINYINT(1) NOT NULL DEFAULT "+def);
     }
-    await q('UPDATE notification_settings SET class_chat_messages=COALESCE(class_chat_messages,chat_messages),teacher_chat_messages=COALESCE(teacher_chat_messages,chat_messages) WHERE user_id=?',[userId]);
     const [rows]=await q('SELECT chat_messages,class_chat_messages,class_chat_reply,teacher_chat_messages,teacher_chat_reply,exam_notifications,exam_results,announcement_notifications,assignment_notifications,resource_notifications,attendance_notifications,system_notifications,push_enabled FROM notification_settings WHERE user_id=? LIMIT 1',[userId]);
     return rows[0]||defaults;
   }catch(e){
