@@ -9,7 +9,6 @@ import mysql from 'mysql2/promise';
 import { GoogleGenAI } from '@google/genai';
 import multer from 'multer';
 import webpush from 'web-push';
-import { Resend } from 'resend';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -70,7 +69,6 @@ const q = (sql, args = []) => pool.execute(sql, args);
 
 const VAPID_READY=!!(process.env.VAPID_PUBLIC_KEY&&process.env.VAPID_PRIVATE_KEY&&process.env.VAPID_SUBJECT);
 const RESEND_READY=!!(process.env.RESEND_API_KEY&&process.env.RESEND_FROM);
-const resend=RESEND_READY?new Resend(process.env.RESEND_API_KEY):null;
 function maskResetEmail(email){
   const s=String(email||'').trim().toLowerCase();
   const [name,domain]=s.split('@');
@@ -79,17 +77,26 @@ function maskResetEmail(email){
   return shown+'@'+domain;
 }
 async function sendPasswordResetEmail({to,displayName,otp}){
-  if(!RESEND_READY||!resend)throw new Error('Password reset email is not configured');
+  if(!RESEND_READY)throw new Error('Password reset email is not configured');
   const safeName=String(displayName||'B4 Class');
   const safeHtmlName=safeName.replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
-  const {error}=await resend.emails.send({
-    from:String(process.env.RESEND_FROM),
-    to:[String(to)],
-    subject:'B4 Class — Password Reset Code',
-    text:'Hello '+safeName+'\n\nYour B4 Class password reset code is: '+otp+'\n\nThis code expires in 10 minutes and can only be used once.\n\nIf you did not request this, you can safely ignore this email.',
-    html:'<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:28px;background:#f7f7fb;color:#18181b"><div style="padding:28px;border:1px solid #e5e7eb;border-radius:22px;background:#fff"><div style="font-size:12px;font-weight:900;letter-spacing:.12em;color:#7c3aed">B4 CLASS</div><h2 style="margin:10px 0 8px">Password Reset</h2><p>Hello <b>'+safeHtmlName+'</b>,</p><p>Use the verification code below to reset your B4 Class password:</p><div style="font-size:32px;letter-spacing:10px;font-weight:900;text-align:center;padding:18px;margin:22px 0;border-radius:16px;background:#7c3aed10;color:#7c3aed">'+otp+'</div><p style="color:#71717a;font-size:13px">This code expires in 10 minutes and can only be used once.</p><p style="color:#71717a;font-size:12px">If you did not request this, you can safely ignore this email.</p></div></div>'
+  const response=await fetch('https://api.resend.com/emails',{
+    method:'POST',
+    headers:{
+      'Authorization':'Bearer '+String(process.env.RESEND_API_KEY),
+      'Content-Type':'application/json'
+    },
+    body:JSON.stringify({
+      from:String(process.env.RESEND_FROM),
+      to:[String(to)],
+      subject:'B4 Class — Password Reset Code',
+      text:'Hello '+safeName+'\\n\\nYour B4 Class password reset code is: '+otp+'\\n\\nThis code expires in 10 minutes and can only be used once.\\n\\nIf you did not request this, you can safely ignore this email.',
+      html:'<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:28px;background:#f7f7fb;color:#18181b"><div style="padding:28px;border:1px solid #e5e7eb;border-radius:22px;background:#fff"><div style="font-size:12px;font-weight:900;letter-spacing:.12em;color:#7c3aed">B4 CLASS</div><h2 style="margin:10px 0 8px">Password Reset</h2><p>Hello <b>'+safeHtmlName+'</b>,</p><p>Use the verification code below to reset your B4 Class password:</p><div style="font-size:32px;letter-spacing:10px;font-weight:900;text-align:center;padding:18px;margin:22px 0;border-radius:16px;background:#7c3aed10;color:#7c3aed">'+otp+'</div><p style="color:#71717a;font-size:13px">This code expires in 10 minutes and can only be used once.</p><p style="color:#71717a;font-size:12px">If you did not request this, you can safely ignore this email.</p></div></div>'
+    })
   });
-  if(error)throw new Error(error.message||'Resend email failed');
+  let result={};
+  try{result=await response.json();}catch{}
+  if(!response.ok)throw new Error(result?.message||result?.name||'Resend email failed');
 }
 
 
