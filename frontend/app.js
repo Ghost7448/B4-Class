@@ -512,33 +512,15 @@ function messageHTML(m){
 function attendanceV(){if(!can('MANAGE_ATTENDANCE'))return title(t('attendance'),'Your attendance record.')+'<div class="card"><p>Attendance management is available to authorized staff.</p></div>';return title(t('attendance'),'<button class="btn primary" onclick="attendanceLoad()">Refresh</button>')+'<div id="attendanceRoot"></div>'}
 function adminV(){const cards=[['roles','Roles','MANAGE_ROLES'],['permissions','Permissions','MANAGE_PERMISSIONS'],['accounts','Accounts','MANAGE_ACCOUNTS'],['students','Manage Students','MANAGE_STUDENTS'],['teachers','Manage Teachers','MANAGE_TEACHERS'],['keys','Activation Keys','MANAGE_KEYS'],['badges','Manage Badges','MANAGE_BADGES'],['subjects','Manage Subjects','MANAGE_SUBJECTS'],['schedule','Manage Schedule','MANAGE_SCHEDULE'],['admins','Manage Admins','MANAGE_ADMINS'],['logs','View Logs','VIEW_LOGS'],['attendance','Attendance','MANAGE_ATTENDANCE'],['site','Manage Site','MANAGE_SITE']];if(Number(S.me?.is_super_admin)===1||can('MANAGE_DEVELOPERS'))cards.push(['developers','Manage Developers','MANAGE_DEVELOPERS']);return title(t('admin'),'Control center')+'<div class="grid c3 admin-cards">'+cards.filter(x=>can(x[2])).map(x=>'<button class="card admin-card" onclick="go(\'admin:'+x[0]+'\')"><span>◈</span><h3>'+x[1]+'</h3><small>Open management</small></button>').join('')+'</div>'}
 function teacherCenterV(){return title(t('teacherCenter'),'Teacher tools')+'<div class="grid c3">'+[['assignments','Create assignments','MANAGE_ASSIGNMENTS'],['assignment-submissions','Assignment submissions','MANAGE_ASSIGNMENTS'],['resources','Publish resources/PDFs','MANAGE_RESOURCES'],['exams','Create exams','MANAGE_EXAMS'],['announcements','Publish announcements','MANAGE_ANNOUNCEMENTS'],['subjects','Manage teaching subjects','MANAGE_SUBJECTS'],['schedule','View schedule','VIEW_CLASS']].filter(x=>can(x[2])).map(x=>'<button class="card admin-card" onclick="'+(x[0]==='assignment-submissions'?'assignmentSubmissions()':'go(\''+x[0]+'\')')+'"><span>✦</span><h3>'+x[1]+'</h3></button>').join('')+'</div>'}
-function notificationToggle(key,label,description){
-  const on=Number(S.notificationSettings?.[key])===1;
-  return '<div class="settings-lang notification-setting-row"><div><b>'+esc(label)+'</b><small class="muted" style="display:block;margin-top:3px">'+esc(description)+'</small></div><button type="button" class="btn '+(on?'primary':'ghost')+'" onclick="toggleNotificationSetting(\''+key+'\','+(on?'false':'true')+')">'+(on?'ON':'OFF')+'</button></div>';
-}
 function settingsV(){
   const ar=S.lang==='ar';
   const ns=S.notificationSettings||{};
   const pushOn=Number(ns.push_enabled)===1;
-  const groups=[
-    ['class_chat_messages',ar?'رسائل شات الفصل':'Class Chat Messages','A new message is sent in Class Chat'],
-    ['class_chat_reply',ar?'الردود على شات الفصل':'Class Chat Replies','Someone replies to one of your Class Chat messages'],
-    ['teacher_chat_messages',ar?'رسائل شات المدرسين':'Teacher Chat Messages','A new message is sent in Teacher Chat'],
-    ['teacher_chat_reply',ar?'الردود على شات المدرسين':'Teacher Chat Replies','Someone replies to one of your Teacher Chat messages'],
-    ['exam_notifications',ar?'الامتحانات':'Exam Notifications','A new exam or an exam submission event'],
-    ['exam_results',ar?'نتائج الامتحانات':'Exam Results','Your exam answer/result is graded or updated'],
-    ['assignment_notifications',ar?'الواجبات':'Assignment Notifications','A new assignment or assignment submission event'],
-    ['resource_notifications',ar?'المصادر':'Resource Notifications','A new resource, link, note or PDF is published'],
-    ['announcement_notifications',ar?'الإعلانات':'Announcement Notifications','A new class announcement is published'],
-    ['attendance_notifications',ar?'الحضور':'Attendance Notifications','Your attendance status is updated'],
-    ['system_notifications',ar?'النظام':'System Notifications','Important system notifications']
-  ];
-  return title(t('settings'),ar?'إعدادات الحساب واللغة والمظهر والإشعارات وربط Google.':'Account, language, theme, notifications and Google linking.')+
+  return title(t('settings'),ar?'إعدادات الحساب واللغة والمظهر وإشعارات الجهاز وربط Google.':'Account, language, theme, device notifications and Google linking.')+
   '<div class="grid c2"><div class="card"><h3>'+ (ar?'الملف الشخصي':'Profile') +'</h3><form class="form" onsubmit="saveProfile(event)"><label>'+ (ar?'اسم العرض':'Display name') +'<input id="displayName" value="'+esc(S.me?.display_name||'')+'" required></label><label>'+ (ar?'صورة الملف الشخصي':'Profile image') +'<input id="profileAvatar" type="file" accept="image/png,image/jpeg,image/webp"></label><button class="btn primary">'+t('save')+'</button></form><button class="btn ghost" onclick="passwordModal()">'+(ar?'تغيير كلمة المرور':'Change password')+'</button><button class="btn danger" onclick="logout()"> '+t('logout')+'</button></div>'+
-  '<div class="card"><h3>'+ (ar?'التفضيلات':'Preferences') +'</h3><div class="settings-lang"><span class="muted">'+t('arabic')+' / '+t('english')+'</span><div><button class="btn '+(S.lang==='en'?'primary':'ghost')+'" onclick="setLang(\'en\')">EN</button><button class="btn '+(S.lang==='ar'?'primary':'ghost')+'" onclick="setLang(\'ar\')">عربي</button></div></div><button class="btn ghost" onclick="toggleTheme()">'+(S.theme==='dark'?t('light'):t('dark'))+'</button><hr><h3>Google</h3><p class="muted">'+(S.linked.length?(ar?'Google مرتبط':'Google linked'):(ar?'Google غير مرتبط':'Google not linked'))+'</p><button class="btn primary" onclick="googleLink()">'+(S.linked.length?(ar?'إعادة ربط Google':'Relink Google'):(ar?'ربط Google':'Link Google'))+'</button>'+(S.linked.length?'<button class="btn danger" onclick="unlinkGoogle()">'+(ar?'إلغاء ربط Google':'Unlink Google')+'</button>':'')+'</div>'+
-  '<div class="card" style="grid-column:1/-1"><div class="head"><div><h3>🔔 '+(ar?'مركز إعدادات الإشعارات':'Notification Controls')+'</h3><p class="muted">'+(ar?'تحكم كامل في كل نوع إشعار بشكل مستقل':'Control every notification type independently')+'</p></div></div>'+
-  groups.map(x=>notificationToggle(x[0],x[1],ar?({'chat_messages':'تحكم عام للشات','class_chat_messages':'رسالة جديدة في شات الفصل','class_chat_reply':'رد على رسالتك في شات الفصل','teacher_chat_messages':'رسالة جديدة في شات المدرسين','teacher_chat_reply':'رد على رسالتك في شات المدرسين','exam_notifications':'امتحان جديد أو نشاط امتحان','exam_results':'تحديث أو تصحيح نتيجة امتحانك','assignment_notifications':'واجب جديد أو نشاط تسليم','resource_notifications':'مصدر جديد أو PDF أو رابط','announcement_notifications':'إعلان جديد للفصل','attendance_notifications':'تغيير حالة حضورك','system_notifications':'إشعارات مهمة من النظام'}[x[0]]||x[2]):x[2])).join('')+
-  '<hr><div class="settings-lang notification-setting-row"><div><b>📱 '+(ar?'إشعارات الجهاز':'Device Notifications')+'</b><small class="muted" style="display:block;margin-top:3px">'+(ar?'تظهر حتى لو الموقع أو المتصفح أو التطبيق مقفول':'Can appear even when B4 is closed')+'</small></div><button type="button" class="btn '+(pushOn?'primary':'ghost')+'" onclick="togglePushNotifications('+(pushOn?'false':'true')+')">'+(pushOn?'ON':'OFF')+'</button></div>'+
+  '<div class="card"><h3>'+ (ar?'التفضيلات':'Preferences') +'</h3><div class="settings-lang"><span class="muted">'+t('arabic')+' / '+t('english')+'</span><div><button class="btn '+(S.lang==='en'?'primary':'ghost')+'" onclick="setLang(\\'en\\')">EN</button><button class="btn '+(S.lang==='ar'?'primary':'ghost')+'" onclick="setLang(\\'ar\\')">عربي</button></div></div><button class="btn ghost" onclick="toggleTheme()">'+(S.theme==='dark'?t('light'):t('dark'))+'</button><hr><h3>Google</h3><p class="muted">'+(S.linked.length?(ar?'Google مرتبط':'Google linked'):(ar?'Google غير مرتبط':'Google not linked'))+'</p><button class="btn primary" onclick="googleLink()">'+(S.linked.length?(ar?'إعادة ربط Google':'Relink Google'):(ar?'ربط Google':'Link Google'))+'</button>'+(S.linked.length?'<button class="btn danger" onclick="unlinkGoogle()">'+(ar?'إلغاء ربط Google':'Unlink Google')+'</button>':'')+'</div>'+
+  '<div class="card" style="grid-column:1/-1"><div class="head"><div><h3>🔔 '+(ar?'إشعارات B4':'B4 Notifications')+'</h3><p class="muted">'+(ar?'كل أنواع إشعارات B4 مفعلة تلقائيًا ولا تحتاج إعدادات منفصلة':'All B4 notification types are enabled automatically — no separate notification switches.')+'</p></div></div>'+
+  '<div class="settings-lang notification-setting-row"><div><b>📱 '+(ar?'إشعارات الجهاز':'Device Notifications')+'</b><small class="muted" style="display:block;margin-top:3px">'+(ar?'تظهر حتى لو B4 مقفول — فعّلها مرة واحدة من جهازك':'Can appear even when B4 is closed — enable them once on your device')+'</small></div><button type="button" class="btn '+(pushOn?'primary':'ghost')+'" onclick="togglePushNotifications('+(pushOn?'false':'true')+')">'+(pushOn?(ar?'مفعلة ✓':'Enabled ✓'):(ar?'تفعيل':'Enable'))+'</button></div>'+
   '</div></div>';
 }
 function devV(){return title(t('developers'),'The Wep Devoleper')+'<div class="grid developers-grid">'+S.developers.map(d=>'<article class="card developer-card"><div class="developer-photo"><img class="avatar xl" src="'+esc(d.avatar_url||'/assets/logo.svg')+'" onerror="this.src=\'assets/logo.svg\'"></div><div class="developer-info"><span class="badge">B4 DEVELOPER</span>'+(d.title?'<span class="developer-title">'+esc(d.title)+'</span>':'')+(d.title2?'<span class="developer-title">'+esc(d.title2)+'</span>':'')+'<h3>'+esc(d.name)+'</h3>'+(d.link_url?'<a class="btn ghost developer-link" href="'+esc(d.link_url)+'" target="_blank" rel="noopener">Open profile ↗</a>':'')+'</div></article>').join('')||'<div class="card empty">No developers added yet.</div>'+'</div>'}
@@ -647,8 +629,8 @@ async function requestDeviceNotificationPermission({fromUser=false}={}){
     if(S.me){
       const ok=await syncPushSubscription(true);
       if(!ok)return false;
-      const d=await api('/api/notifications/settings',{method:'PATCH',body:JSON.stringify({...S.notificationSettings,push_enabled:1})});
-      S.notificationSettings={...(S.notificationSettings||{}),...(d.settings||{}),push_enabled:1};
+      const d=await api('/api/notifications/settings',{method:'PATCH',body:JSON.stringify({...S.notificationSettings,chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,attendance_notifications:1,system_notifications:1,push_enabled:1})});
+      S.notificationSettings={...(S.notificationSettings||{}),...(d.settings||{}),chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,attendance_notifications:1,system_notifications:1,push_enabled:1};
       render();
       if($('#back')?.classList.contains('show'))close();
       toast(S.lang==='ar'?'تم تفعيل إشعارات الجهاز ✓':'Device notifications enabled ✓');
@@ -665,22 +647,10 @@ async function requestDeviceNotificationPermission({fromUser=false}={}){
 async function maybeEnableDeviceNotifications(){
   try{
     if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))return;
-    if(Notification.permission==='default'){
-      setTimeout(()=>requestDeviceNotificationPermission({fromUser:false}),900);
-      return;
-    }
-    if(Notification.permission!=='granted')return;
+    // Never request browser permission automatically. Browsers require a user gesture.
+    if(Notification.permission!=='granted'||!S.me)return;
     localStorage.setItem('b4NotificationPermission','granted');
-    if(S.me){
-      const ok=await syncPushSubscription(false);
-      if(ok){
-        const current=Number(S.notificationSettings?.push_enabled)===1;
-        if(!current){
-          const d=await api('/api/notifications/settings',{method:'PATCH',body:JSON.stringify({...S.notificationSettings,push_enabled:1})});
-          S.notificationSettings={...(S.notificationSettings||{}),...(d.settings||{}),push_enabled:1};
-        }
-      }
-    }
+    await syncPushSubscription(false);
   }catch{}
 }
 function base64ToUint8Array(base64){const pad='='.repeat((4-base64.length%4)%4),s=(base64+pad).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(s);return Uint8Array.from([...raw].map(ch=>ch.charCodeAt(0)))}
