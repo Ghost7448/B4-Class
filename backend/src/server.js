@@ -142,20 +142,24 @@ async function createNotification(userId,{type='system',title,body='',entityId=n
   if(!userId||!title)return;
   const settings=await ensureNotificationSettings(userId);
   const targetUrl=url||notificationUrl(type,entityId);
-  const [r]=await q('INSERT INTO notifications(user_id,type,entity_id,title,body,target_url) VALUES(?,?,?,?,?,?)',[userId,type,entityId||null,String(title).slice(0,220),String(body||'').slice(0,4000),targetUrl]);
-  pushUserEvent(userId,'notification',{id:r.insertId,type,entityId:entityId||null,entity_id:entityId||null,title:String(title).slice(0,220),body:String(body||'').slice(0,4000),targetUrl,target_url:targetUrl,read_at:null,created_at:new Date().toISOString()});
-  if(!VAPID_READY||Number(settings.push_enabled)!==1)return r.insertId;
-  try{
-    const [subs]=await q('SELECT id,endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=?',[userId]);
-    const payload=JSON.stringify({title:String(title).slice(0,220),body:String(body||'').slice(0,4000),url:targetUrl,type});
-    await Promise.all(subs.map(async sub=>{
-      try{
-        await webpush.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},payload,{TTL:60,urgency:'high'});
-      }catch(e){
-        if(Number(e.statusCode)===404||Number(e.statusCode)===410)await q('DELETE FROM push_subscriptions WHERE id=?',[sub.id]);
+  const cleanTitle=String(title).slice(0,220);
+  const cleanBody=String(body||'').slice(0,4000);
+  const [r]=await q('INSERT INTO notifications(user_id,type,entity_id,title,body,target_url) VALUES(?,?,?,?,?,?)',[userId,type,entityId||null,cleanTitle,cleanBody,targetUrl]);
+  const eventPayload={id:r.insertId,type,entityId:entityId||null,entity_id:entityId||null,title:cleanTitle,body:cleanBody,targetUrl,target_url:targetUrl,read_at:null,created_at:new Date().toISOString()};
+  pushUserEvent(userId,'notification',eventPayload);
+
+  // Push delivery is deliberately handled per user. A failed subscription must
+  // never prevent the in-app notification from being created for that user.
+  if(VAPID_READY&&Number(settings.push_enabled)===1){
+    try{
+      const result=await sendPushToUser(userId,{title:cleanTitle,body:cleanBody,url:targetUrl,type});
+      if(!result.ok){
+        console.warn('Event push not delivered',{userId,type,code:result.code,message:result.message});
       }
-    }));
-  }catch(e){console.error('Push notification failed:',e.message)}
+    }catch(e){
+      console.error('Event push failed',{userId,type,message:String(e?.message||e)});
+    }
+  }
   return r.insertId;
 }
 async function notifyUsers(userIds,options){
