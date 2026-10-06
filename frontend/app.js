@@ -440,7 +440,14 @@ function chatTime(value){
   }).replace(',',' •');
 }
 function chatV(){
-  return title(t('chat'),'')+'<div class="card chat"><div class="messages" id="messages">'+S.messages.map(messageHTML).join('')+'</div><div id="typing" class="typing-indicator"></div><button type="button" id="chatJumpBottom" class="chat-jump-bottom" onclick="jumpChatBottom(\'messages\')" aria-label="Scroll to latest messages" title="Scroll to latest messages">↓</button><form class="chatform" onsubmit="sendChat(event)"><input id="chatInput" oninput="typing(!!this.value.trim())" placeholder="Write a message..."><button class="btn primary">➤</button></form></div>'
+  return title(t('chat'),'')+'<div class="card chat"><div class="messages" id="messages">'+S.messages.map(messageHTML).join('')+'</div><div id="typing" class="typing-indicator"></div><button type="button" id="chatJumpBottom" class="chat-jump-bottom" onclick="jumpChatBottom(\'messages\')" aria-label="Scroll to latest messages" title="Scroll to latest messages">↓</button><form class="chatform" onsubmit="sendChat(event)"><textarea id="chatInput" rows="1" oninput="typing(!!this.value.trim());autoGrowChat(this)" placeholder="Write a message..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();this.form.requestSubmit()}"></textarea><button class="btn primary">➤</button></form></div>'
+}
+function autoGrowChat(el){
+  if(!el)return;
+  el.style.height='auto';
+  const max=180;
+  el.style.height=Math.min(el.scrollHeight,max)+'px';
+  el.style.overflowY=el.scrollHeight>max?'auto':'hidden';
 }
 function jumpChatBottom(id){
   const box=document.getElementById(id);
