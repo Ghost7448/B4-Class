@@ -1,6 +1,6 @@
 const $=s=>document.querySelector(s),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const API=(window.B4_API_URL||'').replace(/\/$/,'');
-const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'light',view:'dashboard',me:null,linked:[],students:[],teachers:[],subjects:[],schedule:[],assignments:[],resources:[],exams:[],announcements:[],messages:[],attendance:[],developers:[],badges:[],accounts:[],permissions:[],users:[],teacherMessages:[],notifications:[],notificationSettings:{chat_messages:1,class_chat_reply:1,teacher_chat_reply:1,exam_notifications:1,announcement_notifications:1,assignment_notifications:1,system_notifications:1,push_enabled:0},examReview:null,examRun:null,examResult:null,examAnswers:null,serverNowMs:0,serverClockOffsetMs:0,serverTimeZone:'Africa/Cairo',error:''};
+const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'light',view:'dashboard',me:null,linked:[],students:[],teachers:[],subjects:[],schedule:[],assignments:[],resources:[],exams:[],announcements:[],messages:[],attendance:[],developers:[],badges:[],accounts:[],permissions:[],users:[],teacherMessages:[],notifications:[],notificationSettings:{chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,attendance_notifications:1,system_notifications:1,push_enabled:0},examReview:null,examRun:null,examResult:null,examAnswers:null,serverNowMs:0,serverClockOffsetMs:0,serverTimeZone:'Africa/Cairo',error:''};
 const L={en:{dashboard:'Dashboard',students:'Students',teachers:'Teachers',subjects:'Subjects',schedule:'Schedule',assignments:'Assignments',resources:'Resources',exams:'Exam Center',announcements:'Announcements',chat:'Class Chat',teacherChat:'Teacher Chat',attendance:'Attendance',admin:'Admin Center',teacherCenter:'Teacher Center',settings:'Settings',developers:'Developers',login:'Login',logout:'Log out',activate:'Activation Key',ai:'B4 AI',search:'Search everything...',guest:'Guest',save:'Save',add:'Add',edit:'Edit',delete:'Delete',open:'Open resource',light:'Light mode',dark:'Dark mode',english:'English',arabic:'Arabic',administrator:'Administrator — all permissions',superAdmin:'Super Admin',classRole:'Class role',systemAccess:'System access'},ar:{dashboard:'الرئيسية',students:'الطلاب',teachers:'المدرسين',subjects:'المواد',schedule:'الجدول',assignments:'الواجبات',resources:'المصادر',exams:'الامتحانات',announcements:'الإعلانات',chat:'شات الفصل',teacherChat:'شات المدرسين',attendance:'الحضور',admin:'مركز الإدارة',teacherCenter:'مركز المدرس',settings:'الإعدادات',developers:'المطورون',login:'تسجيل الدخول',logout:'تسجيل الخروج',activate:'مفتاح التفعيل',ai:'مساعد B4',search:'ابحث...',guest:'زائر',save:'حفظ',add:'إضافة',edit:'تعديل',delete:'حذف',open:'فتح المصدر',light:'الوضع النهاري',dark:'الوضع الليلي',english:'الإنجليزية',arabic:'العربية',administrator:'Administrator — كل الصلاحيات',superAdmin:'Super Admin',classRole:'دور الحساب',systemAccess:'صلاحية النظام'}};
 const t=k=>L[S.lang][k]||k;
 const PERMS=[['MANAGE_CHAT','Manage Chat / Moderate messages'],['MANAGE_ACCOUNTS','Manage Accounts'],['MANAGE_PERMISSIONS','Manage Permissions'],['VIEW_LOGS','View Logs'],['VIEW_ADMIN_CENTER','View Admin Center'],['MANAGE_STUDENTS','Manage Students'],['MANAGE_TEACHERS','Manage Teachers'],['MANAGE_ROLES','Manage Roles'],['MANAGE_ADMINS','Manage Admins'],['MANAGE_KEYS','Manage Activation Keys'],['MANAGE_BADGES','Manage Badges'],['MANAGE_SUBJECTS','Manage Subjects'],['MANAGE_SCHEDULE','Manage Schedule'],['MANAGE_ASSIGNMENTS','Manage Assignments'],['MANAGE_RESOURCES','Manage Resources / PDFs'],['MANAGE_EXAMS','Manage Exams'],['MANAGE_ANNOUNCEMENTS','Manage Announcements'],['MANAGE_ATTENDANCE','Manage Attendance'],['MANAGE_TEACHER_CHAT','Teacher Chat'],['MANAGE_ANALYTICS','Attendance Analytics'],['MANAGE_SITE','Manage Site'],['USE_AI','Use AI'],['MANAGE_DEVELOPERS','Manage Developers'],['VIEW_CLASS','View Class'],['ADMINISTRATOR','Administrator — ALL permissions']];
@@ -514,22 +514,32 @@ function adminV(){const cards=[['roles','Roles','MANAGE_ROLES'],['permissions','
 function teacherCenterV(){return title(t('teacherCenter'),'Teacher tools')+'<div class="grid c3">'+[['assignments','Create assignments','MANAGE_ASSIGNMENTS'],['assignment-submissions','Assignment submissions','MANAGE_ASSIGNMENTS'],['resources','Publish resources/PDFs','MANAGE_RESOURCES'],['exams','Create exams','MANAGE_EXAMS'],['announcements','Publish announcements','MANAGE_ANNOUNCEMENTS'],['subjects','Manage teaching subjects','MANAGE_SUBJECTS'],['schedule','View schedule','VIEW_CLASS']].filter(x=>can(x[2])).map(x=>'<button class="card admin-card" onclick="'+(x[0]==='assignment-submissions'?'assignmentSubmissions()':'go(\''+x[0]+'\')')+'"><span>✦</span><h3>'+x[1]+'</h3></button>').join('')+'</div>'}
 function notificationToggle(key,label,description){
   const on=Number(S.notificationSettings?.[key])===1;
-  return '<div class="settings-lang"><div><b>'+esc(label)+'</b><small class="muted" style="display:block;margin-top:3px">'+esc(description)+'</small></div><button type="button" class="btn '+(on?'primary':'ghost')+'" onclick="toggleNotificationSetting(\''+key+'\','+(on?'false':'true')+')">'+(on?'ON':'OFF')+'</button></div>';
+  return '<div class="settings-lang notification-setting-row"><div><b>'+esc(label)+'</b><small class="muted" style="display:block;margin-top:3px">'+esc(description)+'</small></div><button type="button" class="btn '+(on?'primary':'ghost')+'" onclick="toggleNotificationSetting(\''+key+'\','+(on?'false':'true')+')">'+(on?'ON':'OFF')+'</button></div>';
 }
 function settingsV(){
   const ar=S.lang==='ar';
   const ns=S.notificationSettings||{};
   const pushOn=Number(ns.push_enabled)===1;
+  const groups=[
+    ['chat_messages',ar?'الشات — الكل':'Chat — General','Messages in the class and teacher chats (legacy/general control)'],
+    ['class_chat_messages',ar?'رسائل شات الفصل':'Class Chat Messages','A new message is sent in Class Chat'],
+    ['class_chat_reply',ar?'الردود على شات الفصل':'Class Chat Replies','Someone replies to one of your Class Chat messages'],
+    ['teacher_chat_messages',ar?'رسائل شات المدرسين':'Teacher Chat Messages','A new message is sent in Teacher Chat'],
+    ['teacher_chat_reply',ar?'الردود على شات المدرسين':'Teacher Chat Replies','Someone replies to one of your Teacher Chat messages'],
+    ['exam_notifications',ar?'الامتحانات':'Exam Notifications','A new exam or an exam submission event'],
+    ['exam_results',ar?'نتائج الامتحانات':'Exam Results','Your exam answer/result is graded or updated'],
+    ['assignment_notifications',ar?'الواجبات':'Assignment Notifications','A new assignment or assignment submission event'],
+    ['resource_notifications',ar?'المصادر':'Resource Notifications','A new resource, link, note or PDF is published'],
+    ['announcement_notifications',ar?'الإعلانات':'Announcement Notifications','A new class announcement is published'],
+    ['attendance_notifications',ar?'الحضور':'Attendance Notifications','Your attendance status is updated'],
+    ['system_notifications',ar?'النظام':'System Notifications','Important system notifications']
+  ];
   return title(t('settings'),ar?'إعدادات الحساب واللغة والمظهر والإشعارات وربط Google.':'Account, language, theme, notifications and Google linking.')+
   '<div class="grid c2"><div class="card"><h3>'+ (ar?'الملف الشخصي':'Profile') +'</h3><form class="form" onsubmit="saveProfile(event)"><label>'+ (ar?'اسم العرض':'Display name') +'<input id="displayName" value="'+esc(S.me?.display_name||'')+'" required></label><label>'+ (ar?'صورة الملف الشخصي':'Profile image') +'<input id="profileAvatar" type="file" accept="image/png,image/jpeg,image/webp"></label><button class="btn primary">'+t('save')+'</button></form><button class="btn ghost" onclick="passwordModal()">'+(ar?'تغيير كلمة المرور':'Change password')+'</button><button class="btn danger" onclick="logout()"> '+t('logout')+'</button></div>'+
   '<div class="card"><h3>'+ (ar?'التفضيلات':'Preferences') +'</h3><div class="settings-lang"><span class="muted">'+t('arabic')+' / '+t('english')+'</span><div><button class="btn '+(S.lang==='en'?'primary':'ghost')+'" onclick="setLang(\'en\')">EN</button><button class="btn '+(S.lang==='ar'?'primary':'ghost')+'" onclick="setLang(\'ar\')">عربي</button></div></div><button class="btn ghost" onclick="toggleTheme()">'+(S.theme==='dark'?t('light'):t('dark'))+'</button><hr><h3>Google</h3><p class="muted">'+(S.linked.length?(ar?'Google مرتبط':'Google linked'):(ar?'Google غير مرتبط':'Google not linked'))+'</p><button class="btn primary" onclick="googleLink()">'+(S.linked.length?(ar?'إعادة ربط Google':'Relink Google'):(ar?'ربط Google':'Link Google'))+'</button>'+(S.linked.length?'<button class="btn danger" onclick="unlinkGoogle()">'+(ar?'إلغاء ربط Google':'Unlink Google')+'</button>':'')+'</div>'+
-  '<div class="card"><div class="head"><div><h3>🔔 '+(ar?'الإشعارات':'Notifications')+'</h3><p class="muted">'+(ar?'تحكم في كل نوع إشعار بشكل منفصل':'Control each notification type separately')+'</p></div></div>'+
-  notificationToggle('chat_messages',ar?'رسائل الشات':'Chat Messages',ar?'عند إرسال أي رسالة في شات الفصل أو شات المدرسين':'When anyone sends a message in Class Chat or Teacher Chat')+
-  notificationToggle('exam_notifications',ar?'إشعارات الامتحانات':'Exam Notifications',ar?'امتحان جديد أو تسليم مرتبط بامتحانك':'New exams or exam submissions')+
-  notificationToggle('announcement_notifications',ar?'إشعارات الإعلانات':'Announcement Notifications',ar?'إعلان جديد':'New class announcements')+
-  notificationToggle('assignment_notifications',ar?'إشعارات الواجبات':'Assignment Notifications',ar?'واجب جديد أو تسليم واجب':'New assignments or assignment submissions')+
-  notificationToggle('system_notifications',ar?'إشعارات النظام':'System Notifications',ar?'إشعارات مهمة من النظام':'Important system notifications')+
-  '<hr><div class="settings-lang"><div><b>📱 '+(ar?'إشعارات الجهاز':'Device Notifications')+'</b><small class="muted" style="display:block;margin-top:3px">'+(ar?'تظهر حتى لو الموقع أو المتصفح أو التطبيق مقفول':'Can appear even when B4 is closed')+'</small></div><button type="button" class="btn '+(pushOn?'primary':'ghost')+'" onclick="togglePushNotifications('+(pushOn?'false':'true')+')">'+(pushOn?'ON':'OFF')+'</button></div>'+
+  '<div class="card" style="grid-column:1/-1"><div class="head"><div><h3>🔔 '+(ar?'مركز إعدادات الإشعارات':'Notification Controls')+'</h3><p class="muted">'+(ar?'تحكم كامل في كل نوع إشعار بشكل مستقل':'Control every notification type independently')+'</p></div></div>'+
+  groups.map(x=>notificationToggle(x[0],x[1],ar?({'chat_messages':'تحكم عام للشات','class_chat_messages':'رسالة جديدة في شات الفصل','class_chat_reply':'رد على رسالتك في شات الفصل','teacher_chat_messages':'رسالة جديدة في شات المدرسين','teacher_chat_reply':'رد على رسالتك في شات المدرسين','exam_notifications':'امتحان جديد أو نشاط امتحان','exam_results':'تحديث أو تصحيح نتيجة امتحانك','assignment_notifications':'واجب جديد أو نشاط تسليم','resource_notifications':'مصدر جديد أو PDF أو رابط','announcement_notifications':'إعلان جديد للفصل','attendance_notifications':'تغيير حالة حضورك','system_notifications':'إشعارات مهمة من النظام'}[x[0]]||x[2]):x[2])).join('')+
+  '<hr><div class="settings-lang notification-setting-row"><div><b>📱 '+(ar?'إشعارات الجهاز':'Device Notifications')+'</b><small class="muted" style="display:block;margin-top:3px">'+(ar?'تظهر حتى لو الموقع أو المتصفح أو التطبيق مقفول':'Can appear even when B4 is closed')+'</small></div><button type="button" class="btn '+(pushOn?'primary':'ghost')+'" onclick="togglePushNotifications('+(pushOn?'false':'true')+')">'+(pushOn?'ON':'OFF')+'</button></div>'+
   '</div></div>';
 }
 function devV(){return title(t('developers'),'The Wep Devoleper')+'<div class="grid developers-grid">'+S.developers.map(d=>'<article class="card developer-card"><div class="developer-photo"><img class="avatar xl" src="'+esc(d.avatar_url||'/assets/logo.svg')+'" onerror="this.src=\'assets/logo.svg\'"></div><div class="developer-info"><span class="badge">B4 DEVELOPER</span>'+(d.title?'<span class="developer-title">'+esc(d.title)+'</span>':'')+(d.title2?'<span class="developer-title">'+esc(d.title2)+'</span>':'')+'<h3>'+esc(d.name)+'</h3>'+(d.link_url?'<a class="btn ghost developer-link" href="'+esc(d.link_url)+'" target="_blank" rel="noopener">Open profile ↗</a>':'')+'</div></article>').join('')||'<div class="card empty">No developers added yet.</div>'+'</div>'}
@@ -700,53 +710,47 @@ async function notificationTime(value){
 }
 function notificationMeta(n){
   const type=String(n?.type||'');
-  if(type==='class_chat_reply')return {icon:'💬',tone:'chat'};
-  if(type==='teacher_chat_reply')return {icon:'☷',tone:'teacher'};
-  if(type==='exam'||type==='exam_submission')return {icon:'📝',tone:'exam'};
-  if(type==='announcement')return {icon:'📢',tone:'announcement'};
-  if(type==='assignment'||type==='assignment_submission')return {icon:'✓',tone:'assignment'};
-  return {icon:'⚙',tone:'system'};
+  if(type==='class_chat_message'||type==='class_chat_reply')return {icon:'💬',tone:'chat',label:'Chat'};
+  if(type==='teacher_chat_message'||type==='teacher_chat_reply')return {icon:'☷',tone:'teacher',label:'Teacher Chat'};
+  if(type==='exam'||type==='exam_submission'||type==='exam_result')return {icon:'📝',tone:'exam',label:'Exam'};
+  if(type==='announcement')return {icon:'📢',tone:'announcement',label:'Announcement'};
+  if(type==='assignment'||type==='assignment_submission')return {icon:'✓',tone:'assignment',label:'Assignment'};
+  if(type==='resource')return {icon:'📚',tone:'resource',label:'Resource'};
+  if(type==='attendance')return {icon:'📅',tone:'attendance',label:'Attendance'};
+  return {icon:'⚙',tone:'system',label:'System'};
 }
-async function openNotifications(){
+async function openNotifications(filter='all'){
   try{
     await loadData();
-    const list=(S.notifications||[]).filter(n=>!n.read_at);
+    const all=S.notifications||[];
     const ar=S.lang==='ar';
-    const unread=list.filter(n=>!n.read_at).length;
+    const unread=all.filter(n=>!n.read_at).length;
+    const list=filter==='unread'?all.filter(n=>!n.read_at):all;
     const items=list.length?list.map((n,i)=>{
       const meta=notificationMeta(n);
-      return '<button class="notification-row '+(n.read_at?'':'unread')+'" style="width:100%;text-align:inherit;--notification-i:'+i+';" onclick="openNotificationTarget('+Number(n.id)+')" data-notification-id="'+Number(n.id)+'">'+
-        '<span class="notification-dot"></span>'+
-        '<span class="notification-icon '+meta.tone+'">'+meta.icon+'</span>'+
-        '<span class="notification-copy">'+
-          '<span class="notification-title">'+esc(n.title)+'</span>'+
-          '<span class="notification-body">'+esc(n.body||'')+'</span>'+
-        '</span>'+
-        '<span class="notification-time">'+esc(notificationTime(n.created_at))+'</span>'+
-        '<span class="notification-arrow">›</span>'+
-      '</button>';
-    }).join(''):'<div class="notification-empty"><span>🔔</span><b>'+(ar?'لا توجد إشعارات':'No notifications')+'</b><small>'+(ar?'كل الإشعارات المقروءة تم إخفاؤها':'Read notifications are hidden here')+'</small></div>';
-    modal(
-      '<div class="notification-modal">'+
-        '<div class="notification-head">'+
-          '<div class="notification-heading"><span class="notification-heading-icon">🔔</span><div><h2>'+(ar?'الإشعارات':'Notifications')+'</h2><p>'+(ar?'آخر نشاط في الفصل':'Latest activity in your class')+'</p></div></div>'+
-          '<div class="notification-actions">'+
-            '<button class="btn ghost notification-readall" onclick="markAllNotifications()">'+(ar?'إخفاء الكل':'Mark all read')+(unread?' <span>'+unread+'</span>':'')+'</button>'+
-            '<button class="close notification-close" onclick="b4Close()">×</button>'+
-          '</div>'+
-        '</div>'+
-        '<div class="notification-list">'+items+'</div>'+
-      '</div>'
-    );
+      return '<div class="notification-row '+(n.read_at?'':'unread')+'" style="--notification-i:'+i+';" data-notification-id="'+Number(n.id)+'">'+
+        '<button class="notification-main" type="button" onclick="openNotificationTarget('+Number(n.id)+')" style="display:flex;align-items:center;gap:10px;flex:1;background:none;border:0;color:inherit;text-align:inherit;padding:0;min-width:0">'+
+          '<span class="notification-dot"></span><span class="notification-icon '+meta.tone+'">'+meta.icon+'</span>'+
+          '<span class="notification-copy"><span class="notification-title">'+esc(n.title)+'</span><span class="notification-body">'+esc(n.body||'')+'</span><span class="notification-type">'+esc(meta.label)+'</span></span>'+
+          '<span class="notification-time">'+esc(notificationTime(n.created_at))+'</span>'+
+        '</button>'+
+        '<div class="notification-row-actions"><button class="btn ghost" title="'+(n.read_at?(ar?'مقروء':'Read'):(ar?'تحديد كمقروء':'Mark read'))+'" onclick="event.stopPropagation();markNotificationRead('+Number(n.id)+');setTimeout(()=>openNotifications(\''+filter+'\'),120)">'+(n.read_at?'✓':'○')+'</button><button class="btn danger" title="'+(ar?'حذف':'Delete')+'" onclick="event.stopPropagation();deleteNotification('+Number(n.id)+')">×</button></div>'+
+      '</div>';
+    }).join(''):'<div class="notification-empty"><span>🔔</span><b>'+(filter==='unread'?(ar?'لا توجد إشعارات غير مقروءة':'No unread notifications'):(ar?'لا توجد إشعارات':'No notifications'))+'</b><small>'+(ar?'كل شيء محدث':'You are all caught up')+'</small></div>';
+    modal('<div class="notification-modal">'+
+      '<div class="notification-head"><div class="notification-heading"><span class="notification-heading-icon">🔔</span><div><h2>'+(ar?'الإشعارات':'Notifications')+'</h2><p>'+(unread?unread+' '+(ar?'غير مقروء':'unread'):(ar?'كل الإشعارات مقروءة':'Everything is read'))+'</p></div></div>'+
+      '<div class="notification-actions"><button class="btn ghost" onclick="openNotifications(\'all\')">'+(ar?'الكل':'All')+'</button><button class="btn ghost" onclick="openNotifications(\'unread\')">'+(ar?'غير مقروء':'Unread')+(unread?' <span>'+unread+'</span>':'')+'</button><button class="btn ghost notification-readall" onclick="markAllNotifications()">'+(ar?'قراءة الكل':'Mark all read')+'</button><button class="btn danger" onclick="deleteReadNotifications();">'+(ar?'حذف المقروء':'Delete read')+'</button><button class="close notification-close" onclick="b4Close()">×</button></div></div>'+
+      '<div class="notification-list">'+items+'</div></div>');
   }catch(e){toast(e.message)}
 }
 async function markAllNotifications(){
-  try{
-    await api('/api/notifications/read-all',{method:'POST'});
-    S.notifications=[];
-    updateNotificationBadge();
-    openNotifications();
-  }catch(e){toast(e.message)}
+  try{await api('/api/notifications/read-all',{method:'POST'});S.notifications=(S.notifications||[]).map(n=>({...n,read_at:new Date().toISOString()}));updateNotificationBadge();openNotifications('all');toast('All notifications marked as read ✓')}catch(e){toast(e.message)}
+}
+async function deleteNotification(id){
+  try{await api('/api/notifications/'+id,{method:'DELETE'});S.notifications=(S.notifications||[]).filter(n=>Number(n.id)!==Number(id));updateNotificationBadge();openNotifications('all')}catch(e){toast(e.message)}
+}
+async function deleteReadNotifications(){
+  try{await api('/api/notifications/read',{method:'DELETE'});S.notifications=(S.notifications||[]).filter(n=>!n.read_at);updateNotificationBadge();openNotifications('all');toast('Read notifications deleted')}catch(e){toast(e.message)}
 }
 async function forgotPassword(){try{const d=await api('/api/auth/forgot-password',{method:'POST'});location.href=d.whatsapp}catch(e){toast('WhatsApp support is unavailable')}} 
 function passwordModal(){modal('<div class="modalhead"><h2>Change password</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="changePassword(event)"><label>Current password<input id="oldPw" type="password" required></label><label>New password<input id="newPw" type="password" minlength="8" required></label><button class="btn primary">Save</button></form>')}
