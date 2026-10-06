@@ -9,6 +9,7 @@ import mysql from 'mysql2/promise';
 import { GoogleGenAI } from '@google/genai';
 import multer from 'multer';
 import webpush from 'web-push';
+import nodemailer from 'nodemailer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -68,6 +69,32 @@ app.use(session({
 const q = (sql, args = []) => pool.execute(sql, args);
 
 const VAPID_READY=!!(process.env.VAPID_PUBLIC_KEY&&process.env.VAPID_PRIVATE_KEY&&process.env.VAPID_SUBJECT);
+const SMTP_READY=!!(process.env.SMTP_HOST&&process.env.SMTP_PORT&&process.env.SMTP_USER&&process.env.SMTP_PASS&&process.env.SMTP_FROM);
+const mailer=SMTP_READY?nodemailer.createTransport({
+  host:process.env.SMTP_HOST,
+  port:Number(process.env.SMTP_PORT||465),
+  secure:Number(process.env.SMTP_PORT||465)===465,
+  auth:{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS}
+}):null;
+function maskResetEmail(email){
+  const s=String(email||'').trim().toLowerCase();
+  const [name,domain]=s.split('@');
+  if(!name||!domain)return 'your email';
+  const shown=name.length<=2?name[0]+'*':name.slice(0,2)+'*'.repeat(Math.max(1,name.length-2));
+  return shown+'@'+domain;
+}
+async function sendPasswordResetEmail({to,displayName,otp}){
+  if(!SMTP_READY||!mailer)throw new Error('Password reset email is not configured');
+  const safeName=String(displayName||'B4 Class');
+  await mailer.sendMail({
+    from:process.env.SMTP_FROM,
+    to,
+    subject:'B4 Class — Password Reset Code',
+    text:'Hello '+safeName+'\n\nYour B4 Class password reset code is: '+otp+'\n\nThis code expires in 10 minutes and can only be used once.\n\nIf you did not request this, you can safely ignore this email.',
+    html:'<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:28px;background:#f7f7fb;color:#18181b"><div style="padding:28px;border:1px solid #e5e7eb;border-radius:22px;background:#fff"><div style="font-size:12px;font-weight:900;letter-spacing:.12em;color:#7c3aed">B4 CLASS</div><h2 style="margin:10px 0 8px">Password Reset</h2><p>Hello <b>'+safeName.replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))+'</b>,</p><p>Use the verification code below to reset your B4 Class password:</p><div style="font-size:32px;letter-spacing:10px;font-weight:900;text-align:center;padding:18px;margin:22px 0;border-radius:16px;background:#7c3aed10;color:#7c3aed">'+otp+'</div><p style="color:#71717a;font-size:13px">This code expires in 10 minutes and can only be used once.</p><p style="color:#71717a;font-size:12px">If you did not request this, you can safely ignore this email.</p></div></div>'
+  });
+}
+
 if(VAPID_READY){
   webpush.setVapidDetails(process.env.VAPID_SUBJECT,process.env.VAPID_PUBLIC_KEY,process.env.VAPID_PRIVATE_KEY);
 }
@@ -441,7 +468,7 @@ async function userById(id) {
 }
 
 
-const SITE_LOCK_EXEMPT = new Set(['/api/auth/login','/api/auth/logout','/api/auth/activate','/api/auth/google/login','/api/auth/google/callback','/api/site/status','/api/health']);
+const SITE_LOCK_EXEMPT = new Set(['/api/auth/login','/api/auth/logout','/api/auth/activate','/api/auth/password-reset/request','/api/auth/password-reset/verify','/api/auth/password-reset/complete','/api/auth/google/login','/api/auth/google/callback','/api/site/status','/api/health']);
 const siteAsset = p => p==='/sw.js' || p==='/manifest.webmanifest' || p.startsWith('/assets/') || p.startsWith('/frontend/') || /\.(?:js|css|map|svg|png|jpg|jpeg|webp|ico|woff2?|ttf)$/i.test(p);
 function lockedSiteHtml(message='This site is temporarily unavailable.') {
   const safe=String(message||'This site is temporarily unavailable.').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
@@ -732,6 +759,75 @@ app.post('/api/auth/activate', async (req, res) => {
     res.status(400).json({ error: e.message || 'Activation failed' });
   } finally {
     conn.release();
+  }
+});
+
+app.post('/api/auth/password-reset/request', async (req,res)=>{
+  try{
+    if(!SMTP_READY)return res.status(503).json({error:'Password reset email is not configured'});
+    const email=String(req.body?.email||'').trim().toLowerCase();
+    if(!/^\\S+@\\S+\\.\\S+$/.test(email))return res.status(400).json({error:'Please enter a valid Gmail address'});
+    const [recent]=await q("SELECT id FROM password_reset_tokens WHERE email=? AND created_at>DATE_SUB(NOW(),INTERVAL 60 SECOND) AND used_at IS NULL ORDER BY id DESC LIMIT 1",[email]);
+    if(recent[0])return res.json({ok:true,message:'If this email is linked to a B4 Class account, a code has been sent.',maskedEmail:maskResetEmail(email)});
+    const [rows]=await q("SELECT u.id,u.display_name,l.provider_email FROM linked_accounts l JOIN users u ON u.id=l.user_id WHERE l.provider='GOOGLE' AND LOWER(l.provider_email)=LOWER(?) AND u.status='ACTIVE' LIMIT 1",[email]);
+    if(!rows[0])return res.json({ok:true,message:'If this email is linked to a B4 Class account, a code has been sent.'});
+    const otp=String(crypto.randomInt(1000,10000));
+    const hash=crypto.createHash('sha256').update(otp).digest('hex');
+    await q("UPDATE password_reset_tokens SET used_at=NOW() WHERE user_id=? AND used_at IS NULL",[rows[0].id]);
+    await q("INSERT INTO password_reset_tokens(user_id,email,otp_hash,expires_at) VALUES(?,?,?,DATE_ADD(NOW(),INTERVAL 10 MINUTE))",[rows[0].id,email,hash]);
+    await sendPasswordResetEmail({to:email,displayName:rows[0].display_name,otp});
+    res.json({ok:true,message:'If this email is linked to a B4 Class account, a code has been sent.',maskedEmail:maskResetEmail(email)});
+  }catch(e){
+    console.error('Password reset request failed:',e.message);
+    res.status(500).json({error:'Could not send the verification code'});
+  }
+});
+
+app.post('/api/auth/password-reset/verify', async (req,res)=>{
+  try{
+    const email=String(req.body?.email||'').trim().toLowerCase();
+    const otp=String(req.body?.otp||'').trim();
+    if(!/^\\S+@\\S+\\.\\S+$/.test(email)||!/^\\d{4}$/.test(otp))return res.status(400).json({error:'Enter the 4-digit verification code'});
+    const [rows]=await q("SELECT * FROM password_reset_tokens WHERE email=? AND used_at IS NULL ORDER BY id DESC LIMIT 1",[email]);
+    const token=rows[0];
+    if(!token)return res.status(400).json({error:'This verification code is invalid or expired'});
+    if(new Date(token.expires_at).getTime()<=Date.now())return res.status(400).json({error:'This verification code has expired. Request a new one.'});
+    if(Number(token.attempts)>=Number(token.max_attempts))return res.status(429).json({error:'Too many incorrect attempts. Request a new code.'});
+    const hash=crypto.createHash('sha256').update(otp).digest('hex');
+    if(hash!==String(token.otp_hash)){
+      await q("UPDATE password_reset_tokens SET attempts=attempts+1 WHERE id=?",[token.id]);
+      return res.status(400).json({error:'Incorrect verification code'});
+    }
+    const resetToken=crypto.randomBytes(32).toString('hex');
+    const resetHash=crypto.createHash('sha256').update(resetToken).digest('hex');
+    await q("UPDATE password_reset_tokens SET verified_at=NOW(),reset_token_hash=?,reset_token_expires_at=DATE_ADD(NOW(),INTERVAL 10 MINUTE) WHERE id=?",[resetHash,token.id]);
+    res.json({ok:true,resetToken});
+  }catch(e){
+    console.error('Password reset verification failed:',e.message);
+    res.status(500).json({error:'Could not verify the code'});
+  }
+});
+
+app.post('/api/auth/password-reset/complete', async (req,res)=>{
+  try{
+    const resetToken=String(req.body?.resetToken||'').trim();
+    const newPassword=String(req.body?.newPassword||'');
+    const confirmPassword=String(req.body?.confirmPassword||'');
+    if(!resetToken)return res.status(400).json({error:'Reset session is missing. Start again.'});
+    if(newPassword.length<8)return res.status(400).json({error:'New password must be at least 8 characters'});
+    if(newPassword!==confirmPassword)return res.status(400).json({error:'Passwords do not match'});
+    const hash=crypto.createHash('sha256').update(resetToken).digest('hex');
+    const [rows]=await q("SELECT * FROM password_reset_tokens WHERE reset_token_hash=? AND verified_at IS NOT NULL AND used_at IS NULL AND reset_token_expires_at>NOW() ORDER BY id DESC LIMIT 1",[hash]);
+    const token=rows[0];
+    if(!token)return res.status(400).json({error:'This reset session is invalid or expired'});
+    const pwHash=await bcrypt.hash(newPassword,12);
+    await q("UPDATE users SET password_hash=?,session_version=COALESCE(session_version,1)+1 WHERE id=?",[pwHash,token.user_id]);
+    await q("UPDATE password_reset_tokens SET used_at=NOW() WHERE id=?",[token.id]);
+    await q("INSERT INTO security_logs(actor_user_id,action,details) VALUES(NULL,'PASSWORD_RESET',?)",['Password reset completed for user '+token.user_id]);
+    res.json({ok:true,message:'Password reset successfully'});
+  }catch(e){
+    console.error('Password reset completion failed:',e.message);
+    res.status(500).json({error:'Could not reset the password'});
   }
 });
 
