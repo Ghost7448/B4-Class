@@ -603,46 +603,23 @@ function notificationPermissionModal(){
 }
 async function requestDeviceNotificationPermission({fromUser=false}={}){
   try{
-    if(!('Notification' in window)){
-      toast(S.lang==='ar'?'هذا المتصفح لا يدعم الإشعارات':'This browser does not support notifications');
-      return false;
-    }
-    if(!('serviceWorker' in navigator)||!('PushManager' in window)){
-      toast(S.lang==='ar'?'إشعارات الجهاز غير مدعومة في هذا المتصفح':'Device notifications are not supported by this browser');
-      return false;
-    }
+    if(!('Notification' in window)){toast(S.lang==='ar'?'المتصفح لا يدعم إشعارات الجهاز':'This browser does not support device notifications');return false;}
+    if(!window.isSecureContext){toast(S.lang==='ar'?'إشعارات الجهاز تحتاج HTTPS':'Device notifications require HTTPS');return false;}
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)){toast(S.lang==='ar'?'إشعارات الجهاز غير مدعومة هنا — جرّب Chrome':'Device notifications are not supported here — try Chrome');return false;}
+    toast(S.lang==='ar'?'جاري تفعيل إشعارات الجهاز…':'Enabling device notifications…');
     let permission=Notification.permission;
-    if(permission==='default'){
-      try{permission=await Notification.requestPermission()}catch{}
-    }
-    if(permission!=='granted'){
-      if(permission==='denied'){
-        toast(S.lang==='ar'?'الإشعارات مقفولة. اسمح بها من إعدادات الموقع في المتصفح.':'Notifications are blocked. Allow them from the browser site settings.');
-      }else if(!fromUser){
-        notificationPermissionModal();
-      }else{
-        toast(S.lang==='ar'?'لم يتم السماح بالإشعارات':'Notification permission was not granted');
-      }
-      return false;
-    }
+    if(permission==='default')permission=await Notification.requestPermission();
+    if(permission!=='granted'){toast(permission==='denied'?(S.lang==='ar'?'الإشعارات مقفولة من إعدادات المتصفح — اسمح بها للموقع ثم جرّب مرة أخرى':'Notifications are blocked in browser settings — allow them for this site and try again'):(S.lang==='ar'?'لم يتم السماح بالإشعارات':'Notification permission was not granted'));return false;}
+    if(!S.me){toast(S.lang==='ar'?'لازم تسجل دخول الأول':'Please log in first');return false;}
     localStorage.setItem('b4NotificationPermission','granted');
-    if(S.me){
-      const ok=await syncPushSubscription(true);
-      if(!ok)return false;
-      const d=await api('/api/notifications/settings',{method:'PATCH',body:JSON.stringify({...S.notificationSettings,chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,attendance_notifications:1,system_notifications:1,push_enabled:1})});
-      S.notificationSettings={...(S.notificationSettings||{}),...(d.settings||{}),chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,attendance_notifications:1,system_notifications:1,push_enabled:1};
-      render();
-      if($('#back')?.classList.contains('show'))close();
-      toast(S.lang==='ar'?'تم تفعيل إشعارات الجهاز ✓':'Device notifications enabled ✓');
-    }else{
-      if($('#back')?.classList.contains('show'))close();
-      toast(S.lang==='ar'?'تم السماح بالإشعارات — سجّل الدخول لتفعيل إشعارات حسابك ✓':'Notifications allowed — log in to enable account push notifications ✓');
-    }
+    const ok=await syncPushSubscription(true);
+    if(!ok)return false;
+    const d=await api('/api/notifications/settings',{method:'PATCH',body:JSON.stringify({...S.notificationSettings,chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,attendance_notifications:1,system_notifications:1,push_enabled:1})});
+    S.notificationSettings={...(S.notificationSettings||{}),...(d.settings||{}),push_enabled:1};
+    render();
+    toast(S.lang==='ar'?'تم تفعيل إشعارات الجهاز ✓':'Device notifications enabled ✓');
     return true;
-  }catch(e){
-    toast(e.message||'Could not enable notifications');
-    return false;
-  }
+  }catch(e){console.error('B4 device notifications:',e);toast((S.lang==='ar'?'فشل تفعيل الإشعارات: ':'Could not enable notifications: ')+(e?.message||'Unknown error'));return false;}
 }
 async function maybeEnableDeviceNotifications(){
   try{
@@ -659,16 +636,18 @@ function base64ToUint8Array(base64){const pad='='.repeat((4-base64.length%4)%4),
 async function syncPushSubscription(showErrors=true){
   try{
     if(!('serviceWorker' in navigator)||!('PushManager' in window))throw Error('Push notifications are not supported by this browser');
-    const cfg=S.vapidPublicKey?{vapidPublicKey:S.vapidPublicKey}:await api('/api/notifications/settings');const publicKey=cfg.vapidPublicKey;if(!publicKey)throw Error('Push notifications are not configured yet');
-    const permission=Notification.permission;
-    if(permission!=='granted')throw Error(permission==='denied'?'Browser notifications are blocked. Enable them in browser settings.':'Notification permission is required');
-    const registration=await navigator.serviceWorker.ready;
+    if(!window.isSecureContext)throw Error('Push notifications require HTTPS');
+    const cfg=S.vapidPublicKey?{vapidPublicKey:S.vapidPublicKey}:await api('/api/notifications/settings');
+    const publicKey=cfg.vapidPublicKey;if(!publicKey)throw Error('Push notifications are not configured on the server');
+    if(Notification.permission!=='granted')throw Error(Notification.permission==='denied'?'Browser notifications are blocked. Allow them for this site.':'Notification permission is required');
+    let registration=await navigator.serviceWorker.getRegistration();
+    if(!registration)registration=await navigator.serviceWorker.register('/sw.js?v=push10');
+    await navigator.serviceWorker.ready;
     let subscription=await registration.pushManager.getSubscription();
     if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:base64ToUint8Array(publicKey)});
     await api('/api/notifications/push/subscribe',{method:'POST',body:JSON.stringify(subscription.toJSON())});
-    S.notificationSettings={...(S.notificationSettings||{}),push_enabled:1};updateNotificationBadge();
-    return true;
-  }catch(e){if(showErrors)toast(e.message);return false}
+    S.notificationSettings={...(S.notificationSettings||{}),push_enabled:1};updateNotificationBadge();return true;
+  }catch(e){console.error('B4 push subscription:',e);if(showErrors)toast(e?.message||'Could not enable device notifications');return false;}
 }
 async function togglePushNotifications(enabled){
   if(!enabled){
