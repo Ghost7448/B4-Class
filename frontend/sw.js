@@ -1,4 +1,4 @@
-const CACHE='b4-v29';
+const CACHE='b4-v30';
 const FILES=['./','./index.html','./style.css','./app.js','./manifest.webmanifest','./assets/logo.svg'];
 
 self.addEventListener('install',function(event){
