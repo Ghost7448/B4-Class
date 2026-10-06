@@ -1,5 +1,5 @@
-const CACHE='b4-v32';
-const FILES=['./','./index.html','./style.css','./app.js','./manifest.webmanifest','./assets/logo.svg','./assets/notification-icon.svg'];
+const CACHE='b4-v33';
+const FILES=['./','./index.html','./style.css','./app.js','./manifest.webmanifest','./assets/logo.svg','./assets/logo.svg'];
 
 self.addEventListener('install',function(event){
   event.waitUntil(
@@ -31,8 +31,8 @@ self.addEventListener('push',function(event){
   var title=data.title||'B4 Class';
   var options={
     body:data.body||'',
-    icon:'/assets/notification-icon.svg',
-    badge:'/assets/notification-icon.svg',
+    icon:'/assets/logo.svg',
+    badge:'/assets/logo.svg',
     tag:'b4-'+(data.type||'notification')+'-'+Date.now(),
     data:{url:data.url||'/'},
     renotify:true
