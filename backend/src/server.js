@@ -774,13 +774,14 @@ app.post('/api/auth/password-reset/request', async (req,res)=>{
     const [recent]=await q("SELECT id FROM password_reset_tokens WHERE email=? AND created_at>DATE_SUB(NOW(),INTERVAL 60 SECOND) AND used_at IS NULL ORDER BY id DESC LIMIT 1",[email]);
     if(recent[0])return res.json({ok:true,message:'If this email is linked to a B4 Class account, a code has been sent.',maskedEmail:maskResetEmail(email)});
     const [rows]=await q("SELECT u.id,u.display_name,l.provider_email FROM linked_accounts l JOIN users u ON u.id=l.user_id WHERE l.provider='GOOGLE' AND LOWER(l.provider_email)=LOWER(?) AND u.status='ACTIVE' LIMIT 1",[email]);
-    if(!rows[0])return res.json({ok:true,message:'If this email is linked to a B4 Class account, a code has been sent.'});
+    if(!rows[0])return res.status(404).json({error:'No B4 Class account is linked to this Gmail address'});
     const otp=String(crypto.randomInt(1000,10000));
     const hash=crypto.createHash('sha256').update(otp).digest('hex');
+    // Send the email first. Only create a reset token after Gmail accepts the message.
+    await sendPasswordResetEmail({to:email,displayName:rows[0].display_name,otp});
     await q("UPDATE password_reset_tokens SET used_at=NOW() WHERE user_id=? AND used_at IS NULL",[rows[0].id]);
     await q("INSERT INTO password_reset_tokens(user_id,email,otp_hash,expires_at) VALUES(?,?,?,DATE_ADD(NOW(),INTERVAL 10 MINUTE))",[rows[0].id,email,hash]);
-    await sendPasswordResetEmail({to:email,displayName:rows[0].display_name,otp});
-    res.json({ok:true,message:'If this email is linked to a B4 Class account, a code has been sent.',maskedEmail:maskResetEmail(email)});
+    res.json({ok:true,message:'Verification code sent.',maskedEmail:maskResetEmail(email)});
   }catch(e){
     console.error('Password reset request failed:',e.message);
     res.status(500).json({error:'Could not send the verification code'});
