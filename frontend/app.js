@@ -761,7 +761,164 @@ async function deleteNotification(id){
 async function deleteReadNotifications(){
   try{await api('/api/notifications/read',{method:'DELETE'});S.notifications=(S.notifications||[]).filter(n=>!n.read_at);updateNotificationBadge();openNotifications('all');toast('Read notifications deleted')}catch(e){toast(e.message)}
 }
-async function forgotPassword(){try{const d=await api('/api/auth/forgot-password',{method:'POST'});location.href=d.whatsapp}catch(e){toast('WhatsApp support is unavailable')}} 
+let passwordResetState={email:'',maskedEmail:'',resetToken:'',resendAt:0,countdownTimer:null};
+
+function forgotPassword(){
+  passwordResetState={email:'',maskedEmail:'',resetToken:'',resendAt:0,countdownTimer:null};
+  renderForgotPasswordEmail();
+}
+
+function renderForgotPasswordEmail(){
+  modal('<div class="password-reset-shell"><div class="password-reset-orb orb-a"></div><div class="password-reset-orb orb-b"></div><div class="password-reset-content">'+
+    '<div class="password-reset-icon">🔐</div>'+
+    '<div class="password-reset-kicker">ACCOUNT RECOVERY</div>'+
+    '<div class="password-reset-head"><h2>Find Your Account</h2><p class="muted">Enter the Gmail address linked to your B4 Class Google account.</p></div>'+
+    '<form class="form" onsubmit="requestPasswordReset(event)">'+
+      '<label>Gmail address<input id="resetEmail" type="email" inputmode="email" autocomplete="email" placeholder="you@gmail.com" required></label>'+
+      '<button class="btn primary password-reset-submit" type="submit">Send Verification Code →</button>'+
+      '<button class="btn ghost password-reset-back" type="button" onclick="loginModal()">Back to Login</button>'+
+    '</form></div></div>');
+  setTimeout(()=>$('#resetEmail')?.focus(),120);
+}
+
+async function requestPasswordReset(e){
+  e.preventDefault();
+  const email=String($('#resetEmail')?.value||'').trim().toLowerCase();
+  if(!email){toast('Enter your Gmail address');return;}
+  const btn=e.submitter||document.querySelector('.password-reset-submit');
+  if(btn){btn.disabled=true;btn.textContent='Sending code…';}
+  try{
+    const d=await api('/api/auth/password-reset/request',{method:'POST',body:JSON.stringify({email})});
+    passwordResetState.email=email;
+    passwordResetState.maskedEmail=d.maskedEmail||email;
+    renderPasswordResetOtp();
+    toast('Verification code sent ✓');
+  }catch(err){
+    toast(err.message||'Could not send the verification code');
+    if(btn){btn.disabled=false;btn.textContent='Send Verification Code →';}
+  }
+}
+
+function renderPasswordResetOtp(){
+  modal('<div class="password-reset-shell"><div class="password-reset-orb orb-a"></div><div class="password-reset-orb orb-b"></div><div class="password-reset-content">'+
+    '<div class="password-reset-icon">✉️</div>'+
+    '<div class="password-reset-kicker">VERIFY YOUR ACCOUNT</div>'+
+    '<div class="password-reset-head"><h2>Enter Your Code</h2><p class="muted">We sent a 4-digit code to <b>'+esc(passwordResetState.maskedEmail)+'</b>.</p></div>'+
+    '<form class="form" onsubmit="verifyPasswordReset(event)">'+
+      '<div class="otp-inputs" id="otpInputs"><input class="otp-input" maxlength="1" inputmode="numeric" autocomplete="one-time-code" aria-label="Digit 1"><input class="otp-input" maxlength="1" inputmode="numeric" aria-label="Digit 2"><input class="otp-input" maxlength="1" inputmode="numeric" aria-label="Digit 3"><input class="otp-input" maxlength="1" inputmode="numeric" aria-label="Digit 4"></div>'+
+      '<p id="resetOtpError" class="reset-error"></p>'+
+      '<button class="btn primary password-reset-submit" type="submit">Verify Code →</button>'+
+      '<div class="otp-resend-row"><span class="muted" id="otpCountdown">Resend available in 60s</span><button class="btn ghost" id="otpResend" type="button" onclick="resendPasswordReset()" disabled>Resend Code</button></div>'+
+      '<button class="btn ghost password-reset-back" type="button" onclick="renderForgotPasswordEmail()">Use another email</button>'+
+    '</form></div></div>');
+  setupOtpInputs();
+  startOtpCountdown(60);
+}
+
+function setupOtpInputs(){
+  const inputs=[...document.querySelectorAll('.otp-input')];
+  inputs.forEach((input,index)=>{
+    input.addEventListener('input',()=>{
+      input.value=input.value.replace(/\\D/g,'').slice(-1);
+      if(input.value&&inputs[index+1])inputs[index+1].focus();
+      if(inputs.every(x=>x.value))document.getElementById('otpInputs')?.classList.add('otp-complete');
+    });
+    input.addEventListener('keydown',ev=>{
+      if(ev.key==='Backspace'&&!input.value&&inputs[index-1])inputs[index-1].focus();
+      if(ev.key==='ArrowLeft'&&inputs[index-1]){ev.preventDefault();inputs[index-1].focus();}
+      if(ev.key==='ArrowRight'&&inputs[index+1]){ev.preventDefault();inputs[index+1].focus();}
+    });
+    input.addEventListener('paste',ev=>{
+      ev.preventDefault();
+      const text=(ev.clipboardData?.getData('text')||'').replace(/\\D/g,'').slice(0,4);
+      text.split('').forEach((ch,i)=>{if(inputs[i])inputs[i].value=ch;});
+      (inputs[Math.min(text.length,4)-1]||inputs[0]).focus();
+    });
+  });
+  inputs[0]?.focus();
+}
+
+function startOtpCountdown(seconds){
+  if(passwordResetState.countdownTimer)clearInterval(passwordResetState.countdownTimer);
+  passwordResetState.resendAt=Date.now()+seconds*1000;
+  const tick=()=>{
+    const left=Math.max(0,Math.ceil((passwordResetState.resendAt-Date.now())/1000));
+    const label=$('#otpCountdown'),btn=$('#otpResend');
+    if(label)label.textContent=left?'Resend available in '+left+'s':'You can request a new code';
+    if(btn)btn.disabled=left>0;
+    if(!left){clearInterval(passwordResetState.countdownTimer);passwordResetState.countdownTimer=null;}
+  };
+  tick();
+  passwordResetState.countdownTimer=setInterval(tick,250);
+}
+
+async function resendPasswordReset(){
+  if(Date.now()<passwordResetState.resendAt)return;
+  const btn=$('#otpResend');
+  if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  try{
+    const d=await api('/api/auth/password-reset/request',{method:'POST',body:JSON.stringify({email:passwordResetState.email})});
+    passwordResetState.maskedEmail=d.maskedEmail||passwordResetState.maskedEmail;
+    renderPasswordResetOtp();
+    toast('New code sent ✓');
+  }catch(err){
+    toast(err.message||'Could not resend the code');
+    startOtpCountdown(5);
+    if(btn)btn.textContent='Resend Code';
+  }
+}
+
+async function verifyPasswordReset(e){
+  e.preventDefault();
+  const otp=[...document.querySelectorAll('.otp-input')].map(x=>x.value).join('');
+  const error=$('#resetOtpError');
+  if(otp.length!==4){if(error)error.textContent='Enter all 4 digits';return;}
+  const form=e.currentTarget,btn=form.querySelector('.password-reset-submit');
+  if(btn){btn.disabled=true;btn.textContent='Verifying…';}
+  try{
+    const d=await api('/api/auth/password-reset/verify',{method:'POST',body:JSON.stringify({email:passwordResetState.email,otp})});
+    passwordResetState.resetToken=d.resetToken;
+    if(passwordResetState.countdownTimer)clearInterval(passwordResetState.countdownTimer);
+    renderPasswordResetPassword();
+  }catch(err){
+    if(error)error.textContent=err.message||'Invalid verification code';
+    document.getElementById('otpInputs')?.classList.add('otp-shake');
+    setTimeout(()=>document.getElementById('otpInputs')?.classList.remove('otp-shake'),500);
+    if(btn){btn.disabled=false;btn.textContent='Verify Code →';}
+  }
+}
+
+function renderPasswordResetPassword(){
+  modal('<div class="password-reset-shell"><div class="password-reset-orb orb-a"></div><div class="password-reset-orb orb-b"></div><div class="password-reset-content">'+
+    '<div class="password-reset-icon">🔑</div>'+
+    '<div class="password-reset-kicker">ALMOST DONE</div>'+
+    '<div class="password-reset-head"><h2>Create New Password</h2><p class="muted">Choose a new password with at least 8 characters.</p></div>'+
+    '<form class="form" onsubmit="completePasswordReset(event)">'+
+      '<label>New Password<input id="resetNewPassword" type="password" minlength="8" autocomplete="new-password" required></label>'+
+      '<label>Confirm Password<input id="resetConfirmPassword" type="password" minlength="8" autocomplete="new-password" required></label>'+
+      '<button class="btn primary password-reset-submit" type="submit">Create New Password →</button>'+
+    '</form></div></div>');
+  setTimeout(()=>$('#resetNewPassword')?.focus(),120);
+}
+
+async function completePasswordReset(e){
+  e.preventDefault();
+  const newPassword=String($('#resetNewPassword')?.value||'');
+  const confirmPassword=String($('#resetConfirmPassword')?.value||'');
+  const btn=e.submitter||document.querySelector('.password-reset-submit');
+  if(newPassword!==confirmPassword){toast('Passwords do not match');return;}
+  if(newPassword.length<8){toast('Password must be at least 8 characters');return;}
+  if(btn){btn.disabled=true;btn.textContent='Updating password…';}
+  try{
+    await api('/api/auth/password-reset/complete',{method:'POST',body:JSON.stringify({resetToken:passwordResetState.resetToken,newPassword,confirmPassword})});
+    if(passwordResetState.countdownTimer)clearInterval(passwordResetState.countdownTimer);
+    toast('Password changed successfully ✓');
+    setTimeout(()=>loginModal(),350);
+  }catch(err){
+    toast(err.message||'Could not change password');
+    if(btn){btn.disabled=false;btn.textContent='Create New Password →';}
+  }
+} 
 function passwordModal(){modal('<div class="modalhead"><h2>Change password</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="changePassword(event)"><label>Current password<input id="oldPw" type="password" required></label><label>New password<input id="newPw" type="password" minlength="8" required></label><button class="btn primary">Save</button></form>')}
 async function changePassword(e){e.preventDefault();try{await api('/api/auth/password',{method:'POST',body:JSON.stringify({currentPassword:$('#oldPw').value,newPassword:$('#newPw').value})});close();toast('Password changed ✓')}catch(x){toast(x.message)}}
 async function saveProfile(e){e.preventDefault();try{await api('/api/auth/profile',{method:'PATCH',body:JSON.stringify({displayName:$('#displayName').value.trim()})});const f=$('#profileAvatar')?.files?.[0];if(f){const fd=new FormData();fd.append('file',f);const r=await fetch(API+'/api/auth/avatar',{method:'POST',credentials:'include',body:fd});if(!r.ok)throw Error('Image upload failed')}await loadMe();toast('Saved ✓')}catch(x){toast(x.message)}}
