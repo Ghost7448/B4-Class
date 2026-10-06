@@ -618,18 +618,35 @@ async function syncPushSubscription(showErrors=true){
   }catch(e){if(showErrors)toast(e.message);return false}
 }
 async function togglePushNotifications(enabled){
-  if(enabled){
-    if(!('Notification' in window)){toast('This browser does not support device notifications');return}
-    const permission=await Notification.requestPermission();
-    if(permission!=='granted'){toast('Notification permission was not granted');return}
-    if(await syncPushSubscription(true)){render()}
-  }else{
-    try{
-      const registration=await navigator.serviceWorker.ready;const sub=await registration.pushManager.getSubscription();
+  try{
+    if(enabled){
+      if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)){
+        toast('Device notifications are not supported by this browser');
+        return;
+      }
+      let permission=Notification.permission;
+      if(permission==='default')permission=await Notification.requestPermission();
+      if(permission!=='granted'){
+        toast(permission==='denied'?'Notifications are blocked. Allow notifications for B4 in browser/site settings.':'Notification permission was not granted');
+        return;
+      }
+      const ok=await syncPushSubscription(true);
+      if(!ok)return;
+      const d=await api('/api/notifications/settings',{method:'PATCH',body:JSON.stringify({...S.notificationSettings,push_enabled:1})});
+      S.notificationSettings={...(S.notificationSettings||{}),...(d.settings||{}),push_enabled:1};
+      render();
+      toast('Device notifications enabled ✓');
+    }else{
+      const registration=await navigator.serviceWorker.ready;
+      const sub=await registration.pushManager.getSubscription();
       await api('/api/notifications/push/unsubscribe',{method:'POST',body:JSON.stringify({endpoint:sub?.endpoint||''})});
-      await sub?.unsubscribe();
-      S.notificationSettings={...(S.notificationSettings||{}),push_enabled:0};render();
-    }catch(e){toast(e.message)}
+      if(sub)await sub.unsubscribe();
+      S.notificationSettings={...(S.notificationSettings||{}),push_enabled:0};
+      render();
+      toast('Device notifications disabled');
+    }
+  }catch(e){
+    toast(e.message||'Could not change device notifications');
   }
 }
 async function toggleNotificationSetting(key,enabled){
