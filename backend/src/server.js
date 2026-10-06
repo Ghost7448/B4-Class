@@ -115,6 +115,29 @@ async function ensureNotificationSettings(userId){
     return defaults;
   }
 }
+async function sendPushToUser(userId,{title='B4 Class — Test Notification',body='If you can see this, device Push Notifications are working ✓',url='/?view=settings',type='system'}={}){
+  if(!userId)return {ok:false,code:'NO_USER',message:'No user selected'};
+  if(!VAPID_READY)return {ok:false,code:'VAPID_NOT_CONFIGURED',message:'VAPID keys are not configured on the server'};
+  const settings=await ensureNotificationSettings(userId);
+  if(Number(settings.push_enabled)!==1)return {ok:false,code:'PUSH_DISABLED',message:'Device notifications are disabled for this account'};
+  const [subs]=await q('SELECT id,endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=?',[userId]);
+  if(!subs.length)return {ok:false,code:'NO_SUBSCRIPTION',message:'No push subscription is registered for this device'};
+  const payload=JSON.stringify({title,body,url,type});
+  const results=[];
+  for(const sub of subs){
+    try{
+      const response=await webpush.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},payload,{TTL:60,urgency:'high'});
+      results.push({id:sub.id,ok:true,statusCode:Number(response?.statusCode||201)});
+    }catch(e){
+      const status=Number(e.statusCode||0);
+      if(status===404||status===410)await q('DELETE FROM push_subscriptions WHERE id=?',[sub.id]);
+      results.push({id:sub.id,ok:false,statusCode:status,message:String(e.message||'Push send failed').slice(0,300)});
+    }
+  }
+  const sent=results.filter(x=>x.ok).length;
+  if(sent)return {ok:true,code:'PUSH_SENT',message:'Push notification sent to '+sent+' device'+(sent===1?'':'s'),devices:results.length,results};
+  return {ok:false,code:'PUSH_SEND_FAILED',message:results[0]?.message||'Push send failed',devices:results.length,results};
+}
 async function createNotification(userId,{type='system',title,body='',entityId=null,url=null}={}){
   if(!userId||!title)return;
   const settings=await ensureNotificationSettings(userId);
@@ -574,6 +597,16 @@ app.post('/api/notifications/push/subscribe',requireAuth,async(req,res)=>{
   await q('INSERT INTO push_subscriptions(user_id,endpoint,endpoint_hash,p256dh,auth,expiration_time) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE user_id=VALUES(user_id),p256dh=VALUES(p256dh),auth=VALUES(auth),expiration_time=VALUES(expiration_time),updated_at=CURRENT_TIMESTAMP',[req.session.userId,endpoint,hash,p256dh,auth,sub.expirationTime?Number(sub.expirationTime):null]);
   await q('UPDATE notification_settings SET push_enabled=1 WHERE user_id=?',[req.session.userId]);
   res.json({ok:true});
+});
+app.post('/api/notifications/push/test',requireAuth,async(req,res)=>{
+  try{
+    const result=await sendPushToUser(req.session.userId);
+    const status=result.ok?200:(result.code==='NO_SUBSCRIPTION'||result.code==='PUSH_DISABLED'?400:500);
+    res.status(status).json(result);
+  }catch(e){
+    console.error('Push test failed:',e);
+    res.status(500).json({ok:false,code:'TEST_ERROR',message:String(e.message||'Push test failed').slice(0,300)});
+  }
 });
 app.post('/api/notifications/push/unsubscribe',requireAuth,async(req,res)=>{
   const endpoint=String(req.body?.endpoint||'').trim();
