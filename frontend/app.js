@@ -430,7 +430,14 @@ function announcementsV(){return title(t('announcements'),'class announcements.'
 function chatTime(value){
   const d=new Date(value);
   if(!Number.isFinite(d.getTime()))return String(value||'');
-  return d.toLocaleTimeString('en-US',{timeZone:'Africa/Cairo',hour:'numeric',minute:'2-digit',hour12:true});
+  return d.toLocaleString('en-US',{
+    timeZone:'Africa/Cairo',
+    day:'2-digit',
+    month:'2-digit',
+    hour:'numeric',
+    minute:'2-digit',
+    hour12:true
+  }).replace(',',' •');
 }
 function chatV(){
   return title(t('chat'),'')+'<div class="card chat"><div class="messages" id="messages">'+S.messages.map(messageHTML).join('')+'</div><div id="typing" class="typing-indicator"></div><button type="button" id="chatJumpBottom" class="chat-jump-bottom" onclick="jumpChatBottom(\'messages\')" aria-label="Scroll to latest messages" title="Scroll to latest messages">↓</button><form class="chatform" onsubmit="sendChat(event)"><input id="chatInput" oninput="typing(!!this.value.trim())" placeholder="Write a message..."><button class="btn primary">➤</button></form></div>'
