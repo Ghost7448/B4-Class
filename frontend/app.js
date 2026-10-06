@@ -570,7 +570,7 @@ function animateDashboardStats(){
     requestAnimationFrame(tick);
   });
 }
-function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='attendance'?attendanceV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
+function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
 function teacherChatV(){
   return title(t('teacherChat'),'')+'<div class="card chat"><div class="messages" id="teacherMessages">'+S.teacherMessages.map(teacherMessageHTML).join('')+'</div><div id="teacherTyping" class="typing-indicator"></div><button type="button" id="teacherChatJumpBottom" class="chat-jump-bottom" onclick="jumpChatBottom(\'teacherMessages\')" aria-label="Scroll to latest messages" title="Scroll to latest messages">↓</button><form class="chatform" onsubmit="sendTeacherChat(event)"><input id="teacherInput" oninput="teacherTyping(!!this.value.trim())" placeholder="Write a message..."><button class="btn primary">➤</button></form></div>'
 }
@@ -614,7 +614,7 @@ async function loadMe(){
   await loadData();render();updateNotificationBadge();profileSyncLoop();startAssignmentCountdown();liveDataLoop();
   if(S.me) maybeEnableDeviceNotifications();
 }
-async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],attendance:d.attendance||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}updateNotificationBadge();S.error=''}catch(e){S.error=e.message}}
+async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}updateNotificationBadge();S.error=''}catch(e){S.error=e.message}}
 
 
 async function login(e){e.preventDefault();try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({login:$('#loginName').value.trim(),password:$('#loginPassword').value})});close();await loadMe();toast('Login successful ✓')}catch(x){toast(x.message)}}
@@ -726,7 +726,7 @@ function notificationMeta(n){
   if(type==='announcement')return {icon:'📢',tone:'announcement',label:'Announcement'};
   if(type==='assignment'||type==='assignment_submission')return {icon:'✓',tone:'assignment',label:'Assignment'};
   if(type==='resource')return {icon:'📚',tone:'resource',label:'Resource'};
-  if(type==='attendance')return {icon:'📅',tone:'attendance',label:'Attendance'};
+  
   return {icon:'⚙',tone:'system',label:'System'};
 }
 async function openNotifications(filter='all'){
@@ -973,26 +973,6 @@ function teacherMessageHTML(m){
   return '<div class="msg '+(S.me&&Number(m.user_id)===Number(S.me.id)?'me':'')+'" data-message-id="'+esc(m.id)+'" onclick="teacherMessageMenu(event,'+m.id+')"><img class="avatar" src="'+esc(m.avatar_url||'/assets/logo.svg')+'"><div><div class="chat-name-line"><b>'+esc(m.display_name||'Deleted user')+'</b>'+badgeHTML(m.badges,true)+'</div>'+reply+'<div class="bubble">'+esc(m.body||'')+edited+'</div><small class="muted">'+esc(chatTime(m.created_at))+'</small></div></div>';
 }
 
-async function attendanceLoad(){
-  if(!can('MANAGE_ATTENDANCE'))return;
-  const root=$('#attendanceRoot');
-  if(!root)return;
-  const date=new Date().toISOString().slice(0,10);
-  try{
-    const [d,a]=await Promise.all([
-      api('/api/admin/attendance?date='+date),
-      api('/api/attendance/analysis')
-    ]);
-    root.innerHTML='<div class="card"><h3>'+date+'</h3><div class="grid c3"><div class="card"><b>'+Number(d.summary?.present_count||0)+'</b><small>Present</small></div><div class="card"><b>'+Number(d.summary?.absent_count||0)+'</b><small>Absent</small></div><div class="card"><b>'+Number(d.summary?.total_count||0)+'</b><small>Marked</small></div></div><div class="attendance-analysis-head"><div><h3>Attendance Analysis</h3><p class="muted">Attendance rate for each student</p></div><span class="badge">LIVE</span></div><div class="analysis-list">'+(a.students||[]).map(s=>{
-      const rate=Math.max(0,Math.min(100,Number(s.present_rate||0)));
-      const tone=rate<=35?'red':rate<=50?'yellow':'green';
-      return '<div class="analysis-row"><div class="analysis-person"><b>'+esc(s.display_name)+'</b><small><span>'+Number(s.present_days||0)+' present</span><span>'+Number(s.absent_days||0)+' absent</span></small></div><div class="analysis-progress"><div class="analysis-bar '+tone+'"><span style="width:'+rate+'%"></span></div><div class="analysis-scale"><span>0%</span><span>100%</span></div></div><strong class="analysis-percent '+tone+'">'+rate+'%</strong></div>';
-    }).join('')+'</div><div class="list">'+d.students.map(s=>'<div class="item"><span class="grow"><b>'+esc(s.display_name)+'</b><small class="muted identity-line">'+(s.student_code?'<span class="identity-code">'+esc(s.student_code)+'</span>':'')+'</small></span><button class="btn '+(s.status==='PRESENT'?'primary':'ghost')+'" onclick="markAttendance('+s.id+',\'PRESENT\')">Present</button><button class="btn '+(s.status==='ABSENT'?'danger':'ghost')+'" onclick="markAttendance('+s.id+',\'ABSENT\')">Absent</button></div>').join('')+'</div></div>';
-  }catch(e){
-    root.innerHTML='<div class="card notice">'+esc(e.message)+'</div>';
-  }
-}
-async function markAttendance(id,status){try{await api('/api/admin/attendance',{method:'POST',body:JSON.stringify({userId:id,status,date:new Date().toISOString().slice(0,10)})});attendanceLoad();toast(status)}catch(e){toast(e.message)}}
 function adminLoad(p){if(p==='roles')loadRoles();if(p==='permissions')loadPermissions();if(p==='accounts')loadAccounts();if(p==='keys')loadKeys();if(p==='badges')loadBadges();if(p==='admins')loadAdmins();if(p==='logs')loadLogs();if(p==='site')loadSiteManagement();if(p==='developers')loadDevelopers()}
 async function loadSiteManagement(){
   const r=$('#adminRoot');
@@ -1515,5 +1495,5 @@ function setupMobileDockAutoHide(){
 function cancelReply(){window.replyTo=null;const i=$('#chatInput');if(i){i.value='';i.placeholder='Write a message...'}close()}
 window.addEventListener('beforeunload',()=>clearInterval(window.examTimer));
 document.addEventListener('DOMContentLoaded',async()=>{
-const params=new URLSearchParams(location.search);const requestedView=params.get('view');const requestedId=Number(params.get('id')||0);if(['dashboard','students','teachers','subjects','schedule','assignments','resources','exams','announcements','chat','teacherChat','attendance','admin','teacherCenter','settings','developers'].includes(requestedView))S.view=requestedView;
+const params=new URLSearchParams(location.search);const requestedView=params.get('view');const requestedId=Number(params.get('id')||0);if(['dashboard','students','teachers','subjects','schedule','assignments','resources','exams','announcements','chat','teacherChat','admin','teacherCenter','settings','developers'].includes(requestedView))S.view=requestedView;
 setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=installB4;$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe();if(requestedView&&requestedId&&requestedView==='assignments')setTimeout(()=>openAssignment(requestedId),120);if(requestedView&&requestedId&&requestedView==='exams')setTimeout(()=>startExam(requestedId),120);startAssignmentCountdown()});
