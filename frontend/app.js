@@ -520,7 +520,7 @@ function settingsV(){
   '<div class="grid c2"><div class="card"><h3>'+ (ar?'الملف الشخصي':'Profile') +'</h3><form class="form" onsubmit="saveProfile(event)"><label>'+ (ar?'اسم العرض':'Display name') +'<input id="displayName" value="'+esc(S.me?.display_name||'')+'" required></label><label>'+ (ar?'صورة الملف الشخصي':'Profile image') +'<input id="profileAvatar" type="file" accept="image/png,image/jpeg,image/webp"></label><button class="btn primary">'+t('save')+'</button></form><button class="btn ghost" onclick="passwordModal()">'+(ar?'تغيير كلمة المرور':'Change password')+'</button><button class="btn danger" onclick="logout()"> '+t('logout')+'</button></div>'+
   '<div class="card"><h3>'+ (ar?'التفضيلات':'Preferences') +'</h3><div class="settings-lang"><span class="muted">'+t('arabic')+' / '+t('english')+'</span><div><button class="btn '+(S.lang==='en'?'primary':'ghost')+'" onclick="setLang(\'en\')">EN</button><button class="btn '+(S.lang==='ar'?'primary':'ghost')+'" onclick="setLang(\'ar\')">عربي</button></div></div><button class="btn ghost" onclick="toggleTheme()">'+(S.theme==='dark'?t('light'):t('dark'))+'</button><hr><h3>Google</h3><p class="muted">'+(S.linked.length?(ar?'Google مرتبط':'Google linked'):(ar?'Google غير مرتبط':'Google not linked'))+'</p><button class="btn primary" onclick="googleLink()">'+(S.linked.length?(ar?'إعادة ربط Google':'Relink Google'):(ar?'ربط Google':'Link Google'))+'</button>'+(S.linked.length?'<button class="btn danger" onclick="unlinkGoogle()">'+(ar?'إلغاء ربط Google':'Unlink Google')+'</button>':'')+'</div>'+
   '<div class="card" style="grid-column:1/-1"><div class="head"><div><h3>🔔 '+(ar?'إشعارات B4':'B4 Notifications')+'</h3><p class="muted">'+(ar?'كل أنواع إشعارات B4 مفعلة تلقائيًا ولا تحتاج إعدادات منفصلة':'All B4 notification types are enabled automatically — no separate notification switches.')+'</p></div></div>'+
-  '<div class="settings-lang notification-setting-row"><div><b>📱 '+(ar?'إشعارات الجهاز':'Device Notifications')+'</b><small class="muted" style="display:block;margin-top:3px">'+(ar?'تظهر حتى لو B4 مقفول — فعّلها مرة واحدة من جهازك':'Can appear even when B4 is closed — enable them once on your device')+'</small></div><button type="button" class="btn '+(pushOn?'primary':'ghost')+'" onclick="togglePushNotifications('+(pushOn?'false':'true')+')">'+(pushOn?(ar?'مفعلة ✓':'Enabled ✓'):(ar?'تفعيل':'Enable'))+'</button></div>'+
+  '<div class="settings-lang notification-setting-row"><div><b>📱 '+(ar?'إشعارات الجهاز':'Device Notifications')+'</b><small class="muted" style="display:block;margin-top:3px">'+(ar?'تظهر حتى لو B4 مقفول — فعّلها مرة واحدة من جهازك':'Can appear even when B4 is closed — enable them once on your device')+'</small></div><div class="actions-row"><button type="button" class="btn '+(pushOn?'primary':'ghost')+'" onclick="togglePushNotifications('+(pushOn?'false':'true')+')">'+(pushOn?(ar?'مفعلة ✓':'Enabled ✓'):(ar?'تفعيل':'Enable'))+'</button>'+(pushOn?'<button type="button" class="btn ghost" onclick="sendTestPush()">🔔 Test Notification</button>':'')+'</div></div>'+
   '</div></div>';
 }
 function devV(){return title(t('developers'),'The Wep Devoleper')+'<div class="grid developers-grid">'+S.developers.map(d=>'<article class="card developer-card"><div class="developer-photo"><img class="avatar xl" src="'+esc(d.avatar_url||'/assets/logo.svg')+'" onerror="this.src=\'assets/logo.svg\'"></div><div class="developer-info"><span class="badge">B4 DEVELOPER</span>'+(d.title?'<span class="developer-title">'+esc(d.title)+'</span>':'')+(d.title2?'<span class="developer-title">'+esc(d.title2)+'</span>':'')+'<h3>'+esc(d.name)+'</h3>'+(d.link_url?'<a class="btn ghost developer-link" href="'+esc(d.link_url)+'" target="_blank" rel="noopener">Open profile ↗</a>':'')+'</div></article>').join('')||'<div class="card empty">No developers added yet.</div>'+'</div>'}
@@ -648,6 +648,15 @@ async function syncPushSubscription(showErrors=true){
     await api('/api/notifications/push/subscribe',{method:'POST',body:JSON.stringify(subscription.toJSON())});
     S.notificationSettings={...(S.notificationSettings||{}),push_enabled:1};updateNotificationBadge();return true;
   }catch(e){console.error('B4 push subscription:',e);if(showErrors)toast(e?.message||'Could not enable device notifications');return false;}
+}
+async function sendTestPush(){
+  try{
+    toast(S.lang==='ar'?'جاري إرسال اختبار الإشعار…':'Sending test notification…');
+    const d=await api('/api/notifications/push/test',{method:'POST',body:JSON.stringify({})});
+    toast((S.lang==='ar'?'تم إرسال الاختبار ✓ ':'Test push sent ✓ ')+(d.message||''));
+  }catch(e){
+    toast((S.lang==='ar'?'فشل اختبار الإشعار: ':'Push test failed: ')+(e.message||'Unknown error'));
+  }
 }
 async function togglePushNotifications(enabled){
   if(!enabled){
