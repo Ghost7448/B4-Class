@@ -1234,7 +1234,9 @@ async function loadAccounts(){
     r.innerHTML='<div class="accounts-toolbar"><div><div class="eyebrow">ACCOUNT MANAGEMENT</div><b>'+accounts.length+'</b><span class="muted"> accounts</span></div><span class="muted">Manage passwords, sessions and access</span></div>'+
       '<div class="account-list">'+(accounts.length?accounts.map((a,i)=>{
         const roleTone=Number(a.is_super_admin)===1?'super':String(a.role||'').toLowerCase();
-        const google=a.google_linked?'<span class="account-chip google">✓ Google Linked</span>':'<span class="account-chip muted-chip">Google not linked</span>';
+        const google=a.google_linked
+  ?'<span class="account-chip google">✓ '+esc(a.google_email||'Google linked')+'</span>'
+  :'<span class="account-chip muted-chip">Google not linked</span>';
         const identity=a.activation_key_preview||a.identity_code||'—';
         return '<article class="account-row" style="--i:'+i+'"><div class="account-avatar-wrap"><img class="avatar account-avatar" src="'+esc(a.avatar_url||'/assets/logo.svg')+'" onerror="this.src=\'/assets/logo.svg\'"><span class="account-status '+(String(a.status)==='ACTIVE'?'active':'inactive')+'"></span></div><div class="account-main"><div class="account-head"><div><div class="account-name">'+esc(a.display_name||'Unnamed account')+'</div><div class="account-sub">'+esc(a.official_name||'')+'</div></div><span class="account-role '+roleTone+'">'+(Number(a.is_super_admin)===1?'SUPER ADMIN':esc(a.role||'ACCOUNT'))+'</span></div><div class="account-meta"><span><small>Identity</small><b>'+esc(identity)+'</b></span><span><small>Google</small>'+google+'</span><span><small>Status</small><b>'+esc(a.status||'—')+'</b></span></div><div class="account-actions"><button class="btn primary" onclick="resetAccount('+a.id+')">🔑 Reset Password</button><button class="btn ghost" onclick="endSession('+a.id+')">↻ End Session</button><button class="btn danger" onclick="deleteAccount('+a.id+')">Delete</button></div></div></article>';
       }).join(''):'<div class="card empty">No accounts found.</div>')+'</div>';
