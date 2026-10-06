@@ -589,19 +589,17 @@ function loginModal(){modal('<div class="modalhead"><h2>'+t('login')+'</h2><butt
 function activationModal(){modal('<div class="modalhead"><h2>'+t('activate')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="activate(event)"><label>One-time key<input id="actKey" required></label><label>Display name<input id="actName" required></label><label>Password<input id="actPw" type="password" minlength="8" required></label><button class="btn primary">Create account</button></form>')}
 async function activate(e){e.preventDefault();try{await api('/api/auth/activate',{method:'POST',body:JSON.stringify({key:$('#actKey').value.trim(),displayName:$('#actName').value.trim(),password:$('#actPw').value})});close();toast('Account created ✓');loginModal()}catch(x){toast(x.message)}}
 function googleLogin(){location.href=API+'/api/auth/google/login'}
-async function maybeEnableDeviceNotifications(){
+async async function maybeEnableDeviceNotifications(){
   try{
     if(!S.me||!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window))return;
     if(Number(S.notificationSettings?.push_enabled)===1){
       if(Notification.permission==='granted')await syncPushSubscription(false);
       return;
     }
-    if(Notification.permission!=='default')return;
-    const permission=await Notification.requestPermission();
-    if(permission==='granted'){
-      await syncPushSubscription(false);
-      render();
-    }
+    // Do not request permission automatically on page load.
+    // Browsers require a user gesture for notification permission prompts.
+    if(Notification.permission!=='granted')return;
+    await syncPushSubscription(false);
   }catch{}
 }
 function base64ToUint8Array(base64){const pad='='.repeat((4-base64.length%4)%4),s=(base64+pad).replace(/-/g,'+').replace(/_/g,'/');const raw=atob(s);return Uint8Array.from([...raw].map(ch=>ch.charCodeAt(0)))}
