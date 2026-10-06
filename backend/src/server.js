@@ -122,7 +122,7 @@ async function createNotification(userId,{type='system',title,body='',entityId=n
   if(Number(settings[column])!==1)return;
   const targetUrl=url||notificationUrl(type,entityId);
   const [r]=await q('INSERT INTO notifications(user_id,type,entity_id,title,body,target_url) VALUES(?,?,?,?,?,?)',[userId,type,entityId||null,String(title).slice(0,220),String(body||'').slice(0,4000),targetUrl]);
-  pushUserEvent(userId,'notification',{id:r.insertId,type,entityId:entityId||null,title:String(title).slice(0,220),body:String(body||'').slice(0,4000),targetUrl});
+  pushUserEvent(userId,'notification',{id:r.insertId,type,entityId:entityId||null,entity_id:entityId||null,title:String(title).slice(0,220),body:String(body||'').slice(0,4000),targetUrl,target_url:targetUrl,read_at:null,created_at:new Date().toISOString()});
   if(!VAPID_READY||Number(settings.push_enabled)!==1)return r.insertId;
   try{
     const [subs]=await q('SELECT id,endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=?',[userId]);
