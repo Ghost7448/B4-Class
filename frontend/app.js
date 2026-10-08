@@ -1389,21 +1389,30 @@ function openLogDetailsByKey(key){
   const x=(window.__b4LogRows||[]).find(v=>logKey(v)===String(key));
   if(!x)return;
   const d=parseLogDetails(x.details);
-  const isDeleted=/MESSAGE_DELETED/i.test(x.action||'')&&d.message_content!==undefined;
+  const isDeleted=/MESSAGE_DELETED/i.test(x.action||'');
   const field=(label,value)=>'<div class="log-detail-field"><small>'+esc(label)+'</small><b>'+esc(value===null||value===undefined||value===''?'—':String(value))+'</b></div>';
-  const ownerName=d.message_owner_name??d.message_owner??'Unknown';
+  const ownerName=d.message_owner_name??d.message_owner??'—';
   const ownerId=d.message_owner_id??d.message_owner_user_id??'—';
   const messageDate=d.message_created_at??d.created_at;
-  const deletedBy=d.deleted_by_name??d.deleted_by??x.actor_name??'Unknown';
+  const deletedBy=d.deleted_by_name??d.deleted_by??x.actor_name??'—';
   const deletedById=d.deleted_by_id??d.deleted_by_user_id??x.actor_user_id??'—';
   const deletionType=d.deletion_type??d.delete_type??'—';
-  let body='<div class="log-detail-grid">'+field('Action',x.action)+field('Log actor',x.actor_name||'System')+field('Date',logTime(x.created_at));
+  let body='<div class="log-detail-grid">';
+  body+=field('Action',x.action||'EVENT');
+  body+=field('Log actor',x.actor_name||'System');
+  body+=field('Actor ID',x.actor_user_id||'—');
+  body+=field('Date',logTime(x.created_at));
+  body+=field('Log type',x.kind||'activity');
+  body+=field('Entity type',x.entity_type||'—');
+  body+=field('Entity ID',x.entity_id||'—');
   if(isDeleted){
-    body+=field('Message owner',ownerName)+field('Message owner ID',ownerId)+field('Message date',messageDate?logTime(messageDate):'—')+field('Deleted by',deletedBy)+field('Deleted by ID',deletedById)+field('Deletion type',deletionType)+'<div class="log-detail-content"><small>Message content</small><div>'+esc(d.message_content||'')+'</div></div>';
+    body+=field('Message owner',ownerName)+field('Message owner ID',ownerId)+field('Message date',messageDate?logTime(messageDate):'—')+field('Deleted by',deletedBy)+field('Deleted by ID',deletedById)+field('Deletion type',deletionType);
+    body+='<div class="log-detail-content"><small>Message content</small><div>'+esc(d.message_content??d.message??'—')+'</div></div>';
   }
   const hidden=['message_owner_name','message_owner','message_owner_id','message_owner_user_id','message_created_at','created_at','deleted_by_name','deleted_by','deleted_by_id','deleted_by_user_id','deletion_type','delete_type','message_content','message'];
   const extra=Object.entries(d).filter(([k])=>!hidden.includes(k));
   if(extra.length)body+='<div class="log-detail-content"><small>Additional details</small><div>'+extra.map(([k,v])=>'<b>'+esc(k.replaceAll('_',' '))+'</b>: '+esc(typeof v==='object'?JSON.stringify(v):String(v))).join('<br>')+'</div></div>';
+  if(!x.details)body+='<div class="log-detail-content"><small>Historical log</small><div>This log was created before detailed audit information was enabled. The original action, actor, time and entity information are shown above.</div></div>';
   body+='</div>';
   modal('<div class="modalhead"><div><span class="eyebrow">LOG DETAILS</span><h2>'+esc(x.action||'EVENT')+'</h2></div><button class="close" onclick="b4Close()">×</button></div>'+body);
 }
@@ -1416,9 +1425,9 @@ async function loadLogs(){
   if(!r)return;
   try{
     const d=await api('/api/admin/logs');
-    const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+    const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0);
     window.__b4LogRows=rows;
-    r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Tap any event for full details</span></div><div class="log-list">'+(rows.map(logRowHTML).join('')||'<div class="empty">No activity yet.</div>')+'</div>';
+    r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Every historical log is clickable</span></div><div class="log-list">'+(rows.map(logRowHTML).join('')||'<div class="empty">No activity yet.</div>')+'</div>';
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
 async function loadDevelopers(){
