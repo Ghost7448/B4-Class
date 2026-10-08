@@ -1805,3 +1805,77 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
 
   frame();
 })();
+
+/* ===== CUSTOM NAV SCROLLBAR ===== */
+(function(){
+  const init=()=>{
+    const nav=document.querySelector('nav#nav');
+    if(!nav||nav.dataset.customScrollbar==='1')return;
+    nav.dataset.customScrollbar='1';
+
+    const bar=document.createElement('div');
+    const thumb=document.createElement('div');
+    bar.className='b4-custom-scrollbar';
+    thumb.className='b4-custom-scrollbar-thumb';
+    bar.appendChild(thumb);
+    nav.appendChild(bar);
+
+    let dragging=false,offset=0;
+
+    const update=()=>{
+      const max=nav.scrollHeight-nav.clientHeight;
+      if(max<=1){bar.classList.remove('visible');return}
+      bar.classList.add('visible');
+      const h=bar.clientHeight;
+      const min=28;
+      const th=Math.max(min,(nav.clientHeight/nav.scrollHeight)*h);
+      const travel=Math.max(1,h-th);
+      const top=(nav.scrollTop/max)*travel;
+      thumb.style.height=th+'px';
+      thumb.style.transform=`translate3d(0,${top}px,0)`;
+    };
+
+    const start=e=>{
+      dragging=true;
+      const r=thumb.getBoundingClientRect();
+      offset=e.clientY-r.top;
+      document.body.classList.add('b4-cursor-scrollbar-drag');
+      e.preventDefault();
+    };
+
+    const move=e=>{
+      if(!dragging)return;
+      const r=bar.getBoundingClientRect();
+      const th=thumb.offsetHeight;
+      const travel=Math.max(1,r.height-th);
+      const pos=Math.max(0,Math.min(travel,e.clientY-r.top-offset));
+      const max=nav.scrollHeight-nav.clientHeight;
+      nav.scrollTop=(pos/travel)*max;
+    };
+
+    const stop=()=>{
+      if(!dragging)return;
+      dragging=false;
+      document.body.classList.remove('b4-cursor-scrollbar-drag');
+    };
+
+    thumb.addEventListener('pointerdown',start);
+    document.addEventListener('pointermove',move,{passive:false});
+    document.addEventListener('pointerup',stop,{passive:true});
+    nav.addEventListener('scroll',update,{passive:true});
+    window.addEventListener('resize',update,{passive:true});
+
+    bar.addEventListener('pointerdown',e=>{
+      if(e.target===thumb)return;
+      const r=bar.getBoundingClientRect();
+      const max=nav.scrollHeight-nav.clientHeight;
+      nav.scrollTop=Math.max(0,Math.min(max,((e.clientY-r.top)/r.height)*nav.scrollHeight-nav.clientHeight/2));
+    });
+
+    update();
+    new MutationObserver(update).observe(nav,{childList:true,subtree:true});
+  };
+
+  init();
+  new MutationObserver(init).observe(document.body,{childList:true,subtree:true});
+})();
