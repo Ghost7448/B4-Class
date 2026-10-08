@@ -1765,34 +1765,51 @@ window.addEventListener('beforeunload',()=>clearInterval(window.examTimer));
   const ring=document.createElement('div'),dot=document.createElement('div');
   ring.className='b4-cursor-ring';dot.className='b4-cursor-dot';
   document.body.append(ring,dot);
-  let x=-100,y=-100,rx=-100,ry=-100,inside=false,raf=0;
+  let x=-100,y=-100,rx=-100,ry=-100,raf=0;
+
   const move=e=>{
     x=e.clientX;y=e.clientY;
-    if(!inside){inside=true;document.body.classList.add('b4-cursor-ready')}
+    document.body.classList.add('b4-cursor-ready');
     cancelAnimationFrame(raf);
     raf=requestAnimationFrame(()=>{
-      rx+=((x-rx)*.32);ry+=((y-ry)*.32);
+      rx+=(x-rx)*.42;ry+=(y-ry)*.42;
       ring.style.transform=`translate3d(${rx}px,${ry}px,0)`;
       dot.style.transform=`translate3d(${x}px,${y}px,0)`;
     });
   };
+
   const refreshHover=e=>{
-    const target=e.target.closest('button,a,[role="button"],input,textarea,select,label,.clickable');
+    const target=e.target?.closest?.('button,a,[role="button"],input,textarea,select,label,.clickable');
     document.body.classList.toggle('b4-cursor-hover',!!target);
   };
+
+  const reenter=e=>{
+    document.body.classList.remove('b4-cursor-click','b4-cursor-hover');
+    move(e);
+    refreshHover(e);
+  };
+
   document.addEventListener('pointermove',move,{passive:true});
   document.addEventListener('pointerover',refreshHover,{passive:true});
   document.addEventListener('pointerout',e=>{
     if(!e.relatedTarget)document.body.classList.remove('b4-cursor-ready','b4-cursor-hover');
     else refreshHover(e);
   },{passive:true});
+
+  window.addEventListener('pointerenter',reenter,{passive:true});
+  window.addEventListener('focus',()=>{
+    document.body.classList.remove('b4-cursor-click');
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if(!document.hidden)document.body.classList.remove('b4-cursor-click');
+  });
+
   document.addEventListener('pointerdown',()=>{
     document.body.classList.add('b4-cursor-click');
     clearTimeout(window.__b4CursorClick);
     window.__b4CursorClick=setTimeout(()=>document.body.classList.remove('b4-cursor-click'),180);
   },{passive:true});
 })();
-
 document.addEventListener('DOMContentLoaded',async()=>{
 const params=new URLSearchParams(location.search);const requestedView=params.get('view');const requestedId=Number(params.get('id')||0);if(['dashboard','students','teachers','subjects','schedule','assignments','resources','exams','announcements','chat','teacherChat','admin','teacherCenter','settings','developers'].includes(requestedView))S.view=requestedView;
 setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=installB4;$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe();if(requestedView&&requestedId&&requestedView==='assignments')setTimeout(()=>openAssignment(requestedId),120);if(requestedView&&requestedId&&requestedView==='exams')setTimeout(()=>startExam(requestedId),120);startAssignmentCountdown()});
