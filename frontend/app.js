@@ -1718,6 +1718,23 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   const move=e=>{
     x=e.clientX;y=e.clientY;
     if(!inside) enter(e);
+    const el=document.elementFromPoint(e.clientX,e.clientY);
+    let onScroll=false;
+    if(el){
+      let n=el;
+      while(n&&n!==document.body){
+        const r=n.getBoundingClientRect();
+        const hasV=n.scrollHeight>n.clientHeight+2;
+        const hasH=n.scrollWidth>n.clientWidth+2;
+        if((hasV&&e.clientX>=r.right-9&&e.clientX<=r.right+1) ||
+           (hasH&&e.clientY>=r.bottom-9&&e.clientY<=r.bottom+1)){
+          onScroll=true;
+          break;
+        }
+        n=n.parentElement;
+      }
+    }
+    document.body.classList.toggle('b4-cursor-scrollbar',onScroll);
   };
   const leave=e=>{
     if(!e.relatedTarget){
@@ -1735,8 +1752,15 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   document.addEventListener('pointerover',hover,{passive:true});
   document.addEventListener('pointerout',e=>{if(e.relatedTarget)hover(e);},{passive:true});
   document.addEventListener('pointerleave',leave,{passive:true});
-  window.addEventListener('blur',()=>document.body.classList.remove('b4-cursor-hover','b4-cursor-click'));
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click')});
+  window.addEventListener('blur',()=>document.body.classList.remove('b4-cursor-hover','b4-cursor-click','b4-cursor-scrollbar'));
+  document.addEventListener('pointerdown',e=>{
+    if(document.body.classList.contains('b4-cursor-scrollbar')){
+      document.body.classList.add('b4-cursor-scroll-drag');
+      clearTimeout(window.__b4CursorScrollDrag);
+      window.__b4CursorScrollDrag=setTimeout(()=>document.body.classList.remove('b4-cursor-scroll-drag'),260);
+    }
+  },{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scrollbar','b4-cursor-scroll-drag')});
   document.addEventListener('pointerdown',()=>{
     document.body.classList.add('b4-cursor-click');
     clearTimeout(window.__b4CursorClick);
