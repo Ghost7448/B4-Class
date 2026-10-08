@@ -2363,3 +2363,15 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
 .b4-number-step:hover:not(:disabled){background:linear-gradient(135deg,#7c3aed,#a855f7)!important;color:#fff!important;border-color:#a855f766!important}
 .b4-number-step:active:not(:disabled){transform:scale(.92)}
 .b4-number-step:disabled{opacity:.28;cursor:not-allowed!important}
+
+
+/* Hide number-stepper arrows only inside the custom calendar time picker.
+   The picker already provides its own large, styled up/down controls. */
+.b4-time-unit .b4-number-controls{display:none!important}
+.b4-time-unit .b4-number-wrap{width:100%;min-width:0;grid-column:1}
+.b4-time-unit .b4-number-source{position:static!important;width:100%!important;height:40px!important;min-height:40px!important;padding:5px!important;clip-path:none!important;opacity:1!important;pointer-events:auto!important;overflow:visible!important;border:1px solid var(--line)!important;border-radius:10px!important;background:var(--s2)!important;color:var(--t)!important;text-align:center!important;font-size:18px!important;font-weight:800!important;}
+
+/* Keep the custom B4 cursor and never show the operating-system pointer on hover. */
+@media (hover:hover) and (pointer:fine){
+  html,html *,body,body *{cursor:none!important}
+}
