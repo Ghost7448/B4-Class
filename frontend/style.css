@@ -1526,3 +1526,35 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
     transition:transform .14s ease,filter .14s ease;
   }
 }
+
+/* ===== PURPLE MOBILE PRESS EFFECT ===== */
+@media(pointer:coarse){
+  button,a,.clickable,[role="button"]{
+    position:relative;
+    overflow:hidden;
+    -webkit-tap-highlight-color:transparent;
+  }
+  button:active,a:active,.clickable:active,[role="button"]:active{
+    transform:scale(.96)!important;
+    filter:brightness(1.08);
+    box-shadow:0 0 0 2px #a855f755,0 0 18px #a855f744!important;
+  }
+  button:active::after,a:active::after,.clickable:active::after,[role="button"]:active::after{
+    content:"";
+    position:absolute;
+    width:90px;
+    height:90px;
+    left:50%;
+    top:50%;
+    border-radius:50%;
+    background:#a855f755;
+    box-shadow:0 0 28px #a855f766;
+    transform:translate(-50%,-50%) scale(.2);
+    animation:b4PurplePress .38s ease-out forwards;
+    pointer-events:none;
+  }
+}
+@keyframes b4PurplePress{
+  0%{opacity:.8;transform:translate(-50%,-50%) scale(.2)}
+  100%{opacity:0;transform:translate(-50%,-50%) scale(1.7)}
+}
