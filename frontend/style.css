@@ -1756,3 +1756,29 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
 @media(pointer:coarse){
   .b4-cursor-ring,.b4-cursor-dot,.b4-cursor-trail{display:none!important}
 }
+
+/* ===== NATIVE SCROLLBAR CURSOR HIDE ===== */
+@media(pointer:fine){
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  *::-webkit-scrollbar,
+  html::-webkit-scrollbar-thumb,
+  body::-webkit-scrollbar-thumb,
+  *::-webkit-scrollbar-thumb,
+  html::-webkit-scrollbar-track,
+  body::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-track{
+    cursor:none!important;
+  }
+
+  /* Keep the custom cursor above every native scrollbar layer. */
+  .b4-cursor-ring,.b4-cursor-dot,.b4-cursor-trail{
+    z-index:2147483647!important;
+  }
+
+  /* When hovering the scrollbar, force the page into a no-native-pointer state. */
+  html.b4-no-native-cursor,
+  html.b4-no-native-cursor *{
+    cursor:none!important;
+  }
+}
