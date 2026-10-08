@@ -1384,7 +1384,7 @@ function renderLogList(rows,animate=false){
 }
 async function fetchLogsData(){
   const d=await api('/api/admin/logs');
-  const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0);
+  const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
   return rows;
 }
 async function loadLogs(){
