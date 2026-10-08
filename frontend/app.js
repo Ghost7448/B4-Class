@@ -1957,3 +1957,18 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   setup();
   new MutationObserver(setup).observe(document.body,{childList:true,subtree:true});
 })();
+
+
+/* ===== HARD TRANSPARENT POINTER FIX V2 ===== */
+(function(){
+  if(!window.matchMedia || !window.matchMedia('(pointer:fine)').matches)return;
+  const transparent='url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=") 0 0, auto';
+  const force=()=>{
+    document.documentElement.style.setProperty('cursor',transparent,'important');
+    document.body.style.setProperty('cursor',transparent,'important');
+  };
+  force();
+  window.addEventListener('pageshow',force,{passive:true});
+  window.addEventListener('focus',force,{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)force()},{passive:true});
+})();
