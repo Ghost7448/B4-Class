@@ -1479,3 +1479,24 @@ to{opacity:1;transform:translateY(0)}}
 #bell .notification-bell-icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 #bell i{position:absolute;width:7px;height:7px;background:#a855f7;border:2px solid var(--s);border-radius:50%;right:8px;top:7px;display:none}
 @media(max-width:800px){#bell{width:40px;height:40px;border-radius:13px}.top i{display:none}}
+
+
+/* ===== LIVE LOGS + LOG DETAILS ===== */
+.log-list.live-log-update .log-row{animation:none!important}
+.log-row{position:relative;cursor:pointer;transition:transform .18s ease,border-color .18s ease,background .18s ease}
+.log-row:hover{transform:translateY(-1px);border-color:#7c3aed55;background:color-mix(in srgb,var(--s2) 92%,#7c3aed 8%)}
+.log-open{margin-left:auto;align-self:center;color:var(--m);font-size:22px;line-height:1;transition:transform .18s ease,color .18s ease}
+.log-row:hover .log-open{transform:translateX(3px);color:var(--p)}
+.log-detail{margin-top:7px;padding:7px 9px;border-radius:9px;background:var(--s);border:1px solid var(--line);color:var(--m);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.log-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:18px}
+.log-detail-field{display:grid;gap:5px;padding:12px 13px;border:1px solid var(--line);border-radius:13px;background:var(--s2);min-width:0}
+.log-detail-field small,.log-detail-content small{color:var(--m);font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.06em}
+.log-detail-field b{font-size:12px;overflow-wrap:anywhere}
+.log-detail-content{grid-column:1/-1;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--s2)}
+.log-detail-content>div{margin-top:7px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;color:var(--t);font-size:13px}
+@media(max-width:600px){
+  .log-detail-grid{grid-template-columns:1fr}
+  .log-detail-content{grid-column:auto}
+  .log-row{padding:12px}
+  .log-detail{max-width:calc(100vw - 120px)}
+}
