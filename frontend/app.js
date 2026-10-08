@@ -2185,6 +2185,27 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
     });
     input.addEventListener('input',refresh);
   }
+  function enhanceNumberInput(input){
+    if(input.dataset.b4Number==='1'||input.type!=='number')return;
+    input.dataset.b4Number='1';
+    const wrap=document.createElement('div');wrap.className='b4-number-wrap';
+    input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);input.classList.add('b4-number-source');
+    const controls=document.createElement('span');controls.className='b4-number-controls';
+    controls.innerHTML='<button type="button" class="b4-number-step" data-step="1" aria-label="Increase value"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 12 5-5 5 5"/></svg></button><button type="button" class="b4-number-step" data-step="-1" aria-label="Decrease value"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></button>';
+    wrap.appendChild(controls);
+    controls.querySelectorAll('button').forEach(btn=>btn.addEventListener('click',e=>{
+      e.preventDefault();e.stopPropagation();if(input.disabled||input.readOnly)return;
+      const step=Number(input.step)>0?Number(input.step):1;
+      const min=input.min!==''?Number(input.min):-Infinity,max=input.max!==''?Number(input.max):Infinity;
+      let value=input.value===''?(btn.dataset.step==='1'?(Number.isFinite(min)?min:0):(Number.isFinite(max)?max:0)):Number(input.value);
+      value=Math.max(min,Math.min(max,value+Number(btn.dataset.step)*step));
+      const decimals=(String(input.step).split('.')[1]||'').length;
+      input.value=String(Number(value.toFixed(Math.min(8,decimals+2))));
+      emit(input);sync();
+    }));
+    const sync=()=>{controls.querySelectorAll('button').forEach(b=>b.disabled=input.disabled||input.readOnly||(b.dataset.step==='-1'&&input.value!==''&&Number(input.value)<=Number(input.min||-Infinity))||(b.dataset.step==='1'&&input.value!==''&&Number(input.value)>=Number(input.max||Infinity)))};
+    input.addEventListener('input',sync);input.addEventListener('change',sync);sync();
+  }
   function enhanceSelect(select){
     if(select.dataset.b4Select==='1'||select.multiple||select.size>1)return;
     select.dataset.b4Select='1';
@@ -2214,6 +2235,7 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   function enhanceAll(root=document){
     root.querySelectorAll?.('input[type="date"],input[type="datetime-local"],input[type="time"]').forEach(enhanceDate);
     root.querySelectorAll?.('select').forEach(enhanceSelect);
+    root.querySelectorAll?.('input[type="number"]').forEach(enhanceNumberInput);
   }
   document.addEventListener('click',e=>{
     if(!e.target.closest('.b4-picker-popover,.b4-date-wrap,.b4-select-menu,.b4-select-wrap'))removePopup();
@@ -2222,6 +2244,6 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   window.addEventListener('resize',()=>{document.querySelectorAll('.b4-picker-popover,.b4-select-menu').forEach(pop=>{const anchor=document.querySelector('.b4-picker-open,.b4-select-open');if(anchor)positionPopup(pop,anchor)})});
   window.addEventListener('scroll',()=>{document.querySelectorAll('.b4-picker-popover,.b4-select-menu').forEach(pop=>{const anchor=document.querySelector('.b4-picker-open,.b4-select-open');if(anchor)positionPopup(pop,anchor)})},{passive:true,capture:true});
   enhanceAll();
-  new MutationObserver(records=>records.forEach(r=>{if(r.type==='attributes'&&r.target.matches?.('select[data-b4-select="1"]')){const w=r.target.closest('.b4-select-wrap');if(w){w.hidden=r.target.hidden;const b=w.querySelector('.b4-select-trigger');if(b)b.disabled=r.target.disabled;}return}r.addedNodes.forEach(n=>{if(n.nodeType===1){if(n.matches?.('input[type="date"],input[type="datetime-local"],input[type="time"],select'))enhanceAll(n.parentNode||document);else enhanceAll(n)}})})).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','disabled']});
+  new MutationObserver(records=>records.forEach(r=>{if(r.type==='attributes'&&r.target.matches?.('select[data-b4-select="1"]')){const w=r.target.closest('.b4-select-wrap');if(w){w.hidden=r.target.hidden;const b=w.querySelector('.b4-select-trigger');if(b)b.disabled=r.target.disabled;}return}r.addedNodes.forEach(n=>{if(n.nodeType===1){if(n.matches?.('input[type="date"],input[type="datetime-local"],input[type="time"],input[type="number"],select'))enhanceAll(n.parentNode||document);else enhanceAll(n)}})})).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','disabled']});
   window.B4RefreshCustomControls=enhanceAll;
 })();
