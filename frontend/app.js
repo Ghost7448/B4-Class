@@ -361,7 +361,6 @@ function ensureGlobalRealtime(){
       clearInterval(window.liveFallbackTimer);
     });
     window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
-    window.globalRealtimeStream.addEventListener('data-changed',()=>syncLogsLive());
     window.globalRealtimeStream.addEventListener('notification',(event)=>{
       try{
         const n=JSON.parse(event.data||'{}');
@@ -570,14 +569,7 @@ function animateDashboardStats(){
     requestAnimationFrame(tick);
   });
 }
-function render(){
-  const navEl=$('#nav');
-  const navScroll=navEl?.scrollTop||0;
-  document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
-  if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';
-  if(navEl)navEl.innerHTML=buildNav();
-  if(navEl)requestAnimationFrame(()=>{navEl.scrollTop=navScroll});
-  let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
+function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown();if(v==='exam-answers')examAnswersLoop(S.examAnswers?.examId)}
 function teacherChatV(){
   return title(t('teacherChat'),'')+'<div class="card chat"><div class="messages" id="teacherMessages">'+S.teacherMessages.map(teacherMessageHTML).join('')+'</div><div id="teacherTyping" class="typing-indicator"></div><button type="button" id="teacherChatJumpBottom" class="chat-jump-bottom" onclick="jumpChatBottom(\'teacherMessages\')" aria-label="Scroll to latest messages" title="Scroll to latest messages">↓</button><form class="chatform" onsubmit="sendTeacherChat(event)"><input id="teacherInput" oninput="teacherTyping(!!this.value.trim())" placeholder="Write a message..."><button class="btn primary">➤</button></form></div>'
 }
@@ -1351,84 +1343,30 @@ function logTime(value){
   if(!Number.isFinite(d.getTime()))return String(value||'');
   return d.toLocaleString('en-US',{timeZone:'Africa/Cairo',day:'2-digit',month:'2-digit',hour:'numeric',minute:'2-digit',hour12:true}).replace(',',' •');
 }
-function logTime(value){
-  const d=new Date(value);
-  if(!Number.isFinite(d.getTime()))return String(value||'');
-  return d.toLocaleString('en-US',{timeZone:'Africa/Cairo',day:'2-digit',month:'2-digit',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).replace(',',' •');
-}
-function parseLogDetails(value){
-  if(value&&typeof value==='object')return value;
-  try{const d=JSON.parse(value||'null');return d&&typeof d==='object'?d:{message:String(value||'')};}catch{return value?{message:String(value)}:{}}
-}
-function logIcon(x){
-  return x.kind==='security'?'⚿':/DELETE|REMOVED|FAILED|DENIED/i.test(x.action||'')?'✕':/CREATE|ADD|ACTIV/i.test(x.action||'')?'＋':/UPDATE|EDIT|CHANGED/i.test(x.action||'')?'✦':'•';
-}
-function logKey(x){return String(x.kind||'activity')+':'+String(x.id||'')}
-function logRowHTML(x){
-  const details=parseLogDetails(x.details);
-  const summary=details.message_content?String(details.message_content).slice(0,120):details.message?String(details.message).slice(0,120):'';
-  return '<article class="log-row" data-log-key="'+esc(logKey(x))+'" onclick="openLogDetails('+Number(x.id)+',\''+esc(x.kind||'activity')+'\')"><span class="log-icon">'+logIcon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+esc(x.kind||'activity')+'">'+esc(x.kind||'activity')+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(summary?'<div class="log-detail">'+esc(summary)+'</div>':'')+'</div><span class="log-open">›</span></article>';
-}
-function logsSignature(rows){return rows.map(x=>logKey(x)+'|'+String(x.created_at||'')+'|'+String(x.action||'')+'|'+String(x.details||'')).join('§')}
-function renderLogList(rows,animate=false){
-  const box=document.querySelector('.log-list');
-  if(!box)return;
-  if(!rows.length){box.innerHTML='<div class="empty">No activity yet.</div>';return}
-  if(animate)box.classList.add('live-log-update');
-  const existing=new Map([...box.querySelectorAll('[data-log-key]')].map(el=>[el.dataset.logKey,el]));
-  const keep=new Set();
-  rows.forEach(x=>{
-    const key=logKey(x),html=logRowHTML(x),holder=document.createElement('div');
-    holder.innerHTML=html.trim();
-    const next=holder.firstElementChild;if(!next)return;
-    const old=existing.get(key);
-    if(old){keep.add(key);if(old.outerHTML!==next.outerHTML)old.replaceWith(next);}
-    else{keep.add(key);box.prepend(next);}
+function openLogDetails(index){
+  const rows=window.__b4LogRows||[],x=rows[index];
+  if(!x)return;
+  let d=x.details;
+  try{if(typeof d==='string')d=JSON.parse(d)}catch{}
+  const labels={message_id:'Message ID',message_owner:'Message owner',message_owner_user_id:'Owner User ID',message_content:'Message content',created_at:'Created at',deleted_at:'Deleted at',deleted_by:'Deleted by',deleted_by_user_id:'Executor User ID',deleted_by_role:'Executor role',delete_type:'Delete type',old_body:'Old content',new_body:'New content'};
+  const fields=[];
+  if(d&&typeof d==='object')Object.entries(d).forEach(([k,v])=>{
+    if(v===null||v===undefined||v==='')return;
+    fields.push('<div class="log-detail-field"><small>'+esc(labels[k]||k.replaceAll('_',' '))+'</small><div>'+esc(typeof v==='object'?JSON.stringify(v):String(v))+'</div></div>');
   });
-  [...box.querySelectorAll('[data-log-key]')].forEach(el=>{if(!keep.has(el.dataset.logKey))el.remove()});
-  const ordered=rows.map(x=>existing.get(logKey(x))||box.querySelector('[data-log-key="'+CSS.escape(logKey(x))+'"]')).filter(Boolean);
-  ordered.forEach(el=>box.appendChild(el));
-  if(animate)setTimeout(()=>box.classList.remove('live-log-update'),80);
-}
-async function fetchLogsData(){
-  const d=await api('/api/admin/logs');
-  const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
-  return rows;
+  if(!fields.length)fields.push('<div class="empty">No additional details were recorded for this event.</div>');
+  modal('<div class="modalhead"><div><span class="eyebrow">'+esc(x.kind||'LOG')+'</span><h2>'+esc(x.action||'EVENT')+'</h2></div><button class="close" onclick="b4Close()">×</button></div><div class="log-detail-modal"><div class="log-detail-meta"><b>'+esc(x.actor_name||'System')+'</b><span>'+esc(logTime(x.created_at))+'</span><span>'+esc(x.entity_type||'system')+(x.entity_id?' #'+x.entity_id:'')+'</span></div>'+fields.join('')+'</div>');
 }
 async function loadLogs(){
-  const r=$('#adminRoot');if(!r)return;
+  const r=$('#adminRoot');
   try{
-    const rows=await fetchLogsData();
-    S.logRows=rows;
-    S.logSignature=logsSignature(rows);
-    r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security • LIVE</span></div><div class="log-list">'+(rows.length?rows.map(logRowHTML).join(''):'<div class="empty">No activity yet.</div>')+'</div>';
+    const d=await api('/api/admin/logs');
+    const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+    window.__b4LogRows=rows;
+    const icon=x=>x.kind==='security'?'⚿':/DELETE|REMOVED|FAILED|DENIED/i.test(x.action||'')?'✕':/CREATE|ADD|ACTIV/i.test(x.action||'')?'＋':/UPDATE|EDIT|CHANGED/i.test(x.action||'')?'✦':'•';
+    const detail=x=>{let d=x.details;try{if(typeof d==='string')d=JSON.parse(d)}catch{}if(!d||typeof d!=='object')return '';const vals=[];if(d.message_content)vals.push('Message: '+String(d.message_content).slice(0,100));if(d.deleted_by)vals.push('By: '+d.deleted_by);if(d.delete_type)vals.push(d.delete_type);if(d.old_body)vals.push('Old: '+String(d.old_body).slice(0,70));if(d.new_body)vals.push('New: '+String(d.new_body).slice(0,70));return vals.join(' • ')};
+    r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Tap any event for full details</span></div><div class="log-list">'+(rows.map((x,i)=>'<article class="log-row log-row-clickable" style="--i:'+i+'" onclick="openLogDetails('+i+')"><span class="log-icon">'+icon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+x.kind+'">'+x.kind+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(detail(x)?'<div class="log-detail">'+esc(detail(x))+'</div>':'')+'</div><span class="log-open">›</span></article>').join('')||'<div class="empty">No activity yet.</div>')+'</div>';
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
-}
-async function syncLogsLive(){
-  if(S.view!=='logs'||!S.me)return;
-  try{
-    const rows=await fetchLogsData(),sig=logsSignature(rows);
-    if(sig===S.logSignature)return;
-    S.logRows=rows;S.logSignature=sig;
-    const toolbar=document.querySelector('.logs-toolbar');
-    if(toolbar){const count=toolbar.querySelector('b');if(count)count.textContent=String(rows.length)}
-    renderLogList(rows,true);
-  }catch{}
-}
-function openLogDetails(id,kind='activity'){
-  const x=(S.logRows||[]).find(v=>Number(v.id)===Number(id)&&String(v.kind||'activity')===String(kind||'activity'));
-  if(!x)return;
-  const d=parseLogDetails(x.details);
-  const isDeleted=/MESSAGE_DELETED/i.test(x.action||'')&&d.message_content!==undefined;
-  const field=(label,value)=>'<div class="log-detail-field"><small>'+esc(label)+'</small><b>'+esc(value===null||value===undefined||value===''?'—':String(value))+'</b></div>';
-  let body='<div class="log-detail-grid">'+field('Action',x.action)+field('Log actor',x.actor_name||'System')+field('Date',logTime(x.created_at));
-  if(isDeleted){
-    body+=field('Message owner',d.message_owner_name||'Unknown')+field('Message owner ID',d.message_owner_id||'—')+field('Message date',d.message_created_at?logTime(d.message_created_at):'—')+field('Deleted by',d.deleted_by_name||x.actor_name||'Unknown')+field('Deleted by ID',d.deleted_by_id||x.actor_user_id||'—')+field('Deletion type',d.deletion_type||'—')+'<div class="log-detail-content"><small>Message content</small><div>'+esc(d.message_content||'')+'</div></div>';
-  }
-  const extra=Object.entries(d).filter(([k])=>!['message_owner_name','message_owner_id','message_created_at','deleted_by_name','deleted_by_id','deletion_type','message_content','message'].includes(k));
-  if(extra.length)body+='<div class="log-detail-content"><small>Additional details</small><div>'+extra.map(([k,v])=>'<b>'+esc(k)+'</b>: '+esc(typeof v==='object'?JSON.stringify(v):String(v))).join('<br>')+'</div></div>';
-  body+='</div>';
-  modal('<div class="modalhead"><div><span class="eyebrow">LOG DETAILS</span><h2>'+esc(x.action||'EVENT')+'</h2></div><button class="close" onclick="b4Close()">×</button></div>'+body);
 }
 async function loadDevelopers(){
   const r=$('#adminRoot');
@@ -1616,7 +1554,7 @@ function examRunV(){
     `<div class="exam-page-shell"><div class="exam-run-hero"><div><span class="eyebrow">EXAM CENTER</span><h2>${esc(r.exam?.title||'Exam')}</h2><p>${esc(r.exam?.description||'Answer each question carefully. MCQ and True/False are auto-graded. Short and Long answers are reviewed by the teacher.')}</p></div><div id="examTimer" class="exam-timer">Loading…</div></div><form class="exam-page-form" id="examRunForm" onsubmit="submitExam(event,${Number(r.id)})">${cards}<div class="exam-submit-row"><p class="muted">Your answers are saved when you submit the exam. Short and Long answers will be reviewed by the teacher.</p><button id="examSubmitBtn" class="btn primary">Submit Exam</button></div></form></div>`;
 }
 function startExamTimer(deadline,id){
-  clearInterval(window.examTimer);
+  clearInterval(window.examTimer);clearInterval(window.examAnswersTimer);
   const box=$('#examTimer');
   const raw=deadline?new Date(deadline).getTime():NaN;
   const duration=Number(S.examRun?.exam?.duration_minutes||0);
@@ -1657,7 +1595,23 @@ function examLockedV(){
   '<div class="exam-locked-page"><div class="exam-locked-card"><div class="exam-lock-icon">🔒</div><span class="eyebrow">EXAM LOCKED</span><h2>Exam Locked</h2><p class="muted">'+esc(r.lockMessage||'Leaving the exam screen was detected. Please contact your Teacher to unlock this attempt.')+'</p><div class="exam-locked-note">Your answers were not deleted. A Teacher can unlock this attempt from Submissions.</div><button class="btn primary" onclick="go(\'exams\')">Back to Exams</button></div></div>';
 }
 async function loadStudentExamAnswers(id){
-  try{const d=await api('/api/exams/'+id+'/answers');S.examAnswers={...d,examId:id};S.view='exam-answers';render();window.scrollTo({top:0,behavior:'smooth'});}catch(e){toast(e.message)}
+  try{const d=await api('/api/exams/'+id+'/answers?_='+Date.now(),{cache:'no-store'});S.examAnswers={...d,examId:id};S.view='exam-answers';render();window.scrollTo({top:0,behavior:'smooth'});}catch(e){toast(e.message)}
+}
+function examAnswersLoop(id){
+  clearInterval(window.examAnswersTimer);
+  if(!S.me||S.view!=='exam-answers'||!id)return;
+  const sync=async()=>{
+    try{
+      const d=await api('/api/exams/'+id+'/answers?_='+Date.now(),{cache:'no-store'});
+      const before=JSON.stringify(S.examAnswers?.questions||[]);
+      const after=JSON.stringify(d.questions||[]);
+      if(before!==after||Number(S.examAnswers?.score)!==Number(d.score)){
+        S.examAnswers={...d,examId:id};
+        render();
+      }
+    }catch{}
+  };
+  window.examAnswersTimer=setInterval(sync,3000);
 }
 function examResultV(){
   const r=S.examResult||{};
@@ -1669,12 +1623,12 @@ function examAnswersV(){
   return title('View Answers','Review what you submitted and what was marked correct or incorrect.',`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
   '<div class="exam-answers-summary"><div><b>'+Number(r.percent||0)+'%</b><span>Current score</span></div><div><b>'+Number(r.score||r.attempt?.score||0)+' / '+Number(r.total||0)+'</b><span>Graded points</span></div></div>'+
   '<div class="exam-answer-review-list">'+qs.map((q,i)=>{
-    const type=q.question_type==='TRUE_FALSE'?'TRUE / FALSE':(q.question_type||'MCQ');
+    const type=q.question_type==='TRUE_FALSE'?'TRUE/FALSE':(q.question_type||'MCQ');
     const manual=q.question_type==='SHORT'||q.question_type==='LONG';
-    const pending=q.is_correct===null||q.is_correct===undefined;
+    const pending=Number(q.graded)!==1;
     const state=pending?'pending':(q.is_correct?'correct':'incorrect');
     const status=pending?(manual?'Pending teacher review':'Not graded'):(q.is_correct?'✓ Correct':'✕ Incorrect');
-    const answerToShow=manual?(pending?'Not graded yet':(q.teacher_correct_answer||'Correct — no correction needed')):(q.auto_correct_answer||'Correct answer was not saved');
+    const answerToShow=manual?(pending?'Not graded yet':(q.teacher_correct_answer||'Correct — no correction needed')):(q.correct_answer||q.auto_correct_answer||'Correct answer was not saved');
     return '<article class="exam-answer-review '+state+'"><div class="head"><div><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div><h3>'+esc(q.question_text)+'</h3></div><span class="answer-status">'+status+'</span></div><div class="answer-review-grid"><div class="answer-review-box"><small>Your answer</small><p>'+esc(q.answer_text||'No answer')+'</p></div><div class="answer-review-box"><small>'+((!manual)?'Correct answer':'Teacher answer')+'</small><p>'+esc(answerToShow)+'</p></div></div></article>';
   }).join('')+'</div>';
 }
@@ -1714,8 +1668,8 @@ function examReviewV(){
     '<div class="grid review-questions">'+(d.questions||[]).map((q,i)=>{
       const manual=q.question_type==='SHORT'||q.question_type==='LONG';
       const pending=q.is_correct===null||q.is_correct===undefined;
-      const type=q.question_type==='TRUE_FALSE'?'TRUE / FALSE':(q.question_type||'MCQ');
-      const answer=manual?(pending?'Awaiting teacher grading':(q.teacher_correct_answer||'Correct — no correction needed')):(q.auto_correct_answer||'Correct answer was not saved');
+      const type=q.question_type==='TRUE_FALSE'?'TRUE/FALSE':(q.question_type||'MCQ');
+      const answer=manual?(pending?'Awaiting teacher grading':(q.teacher_correct_answer||'Correct — no correction needed')):(q.correct_answer||q.auto_correct_answer||'Correct answer was not saved');
       const result=pending?'• Awaiting teacher grading':(q.is_correct?'✓ Correct':'✕ Incorrect')+' • '+Number(q.points_awarded||0)+' / '+Number(q.points||0);
       return '<article class="card review-question"><div class="head"><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div></div><h3>'+esc(q.question_text)+'</h3><div class="answer-block"><small>Student answer</small><p>'+esc(q.answer_text||'No answer')+'</p></div><div class="answer-block"><small>Correct answer</small><p>'+esc(answer)+'</p></div>'+ (manual?'<div class="manual-grade-panel"><div class="answer-result '+(pending?'not-graded':(q.is_correct?'correct':'incorrect'))+'">'+result+'</div><button class="btn primary" onclick="examGradeModal('+examId+','+attemptId+','+q.id+')">Grade Answer</button></div>':'<div class="answer-result '+(q.is_correct?'correct':'incorrect')+'">'+(q.is_correct?'✓ Correct':'✕ Incorrect')+' • '+Number(q.points_awarded||0)+' / '+Number(q.points||0)+'</div>')+'</article>';
     }).join('')+'</div>';
@@ -1759,55 +1713,291 @@ function setupMobileDockAutoHide(){
 }
 function cancelReply(){window.replyTo=null;const i=$('#chatInput');if(i){i.value='';i.placeholder='Write a message...'}close()}
 window.addEventListener('beforeunload',()=>clearInterval(window.examTimer));
-/* ===== PREMIUM CUSTOM CURSOR ===== */
-(function(){
-  if(!window.matchMedia||!window.matchMedia('(pointer:fine)').matches)return;
-  const ring=document.createElement('div'),dot=document.createElement('div');
-  ring.className='b4-cursor-ring';dot.className='b4-cursor-dot';
-  document.body.append(ring,dot);
-  let x=-100,y=-100,rx=-100,ry=-100,inside=false,raf=0;
-  const move=e=>{
-    x=e.clientX;y=e.clientY;
-    if(!inside){inside=true;document.body.classList.add('b4-cursor-ready')}
-    cancelAnimationFrame(raf);
-    raf=requestAnimationFrame(()=>{
-      rx+=((x-rx)*.32);ry+=((y-ry)*.32);
-      ring.style.transform=`translate3d(${rx}px,${ry}px,0)`;
-      dot.style.transform=`translate3d(${x}px,${y}px,0)`;
-    });
-  };
-  const refreshHover=e=>{
-    const target=e.target.closest('button,a,[role="button"],input,textarea,select,label,.clickable');
-    document.body.classList.toggle('b4-cursor-hover',!!target);
-  };
-  document.addEventListener('pointermove',move,{passive:true});
-  document.addEventListener('pointerover',refreshHover,{passive:true});
-  document.addEventListener('pointerout',e=>{
-    if(!e.relatedTarget)document.body.classList.remove('b4-cursor-ready','b4-cursor-hover');
-    else refreshHover(e);
-  },{passive:true});
-  document.addEventListener('pointerdown',()=>{
-    document.body.classList.add('b4-cursor-click');
-    clearTimeout(window.__b4CursorClick);
-    window.__b4CursorClick=setTimeout(()=>document.body.classList.remove('b4-cursor-click'),180);
-  },{passive:true});
-})();
-
 document.addEventListener('DOMContentLoaded',async()=>{
 const params=new URLSearchParams(location.search);const requestedView=params.get('view');const requestedId=Number(params.get('id')||0);if(['dashboard','students','teachers','subjects','schedule','assignments','resources','exams','announcements','chat','teacherChat','admin','teacherCenter','settings','developers'].includes(requestedView))S.view=requestedView;
 setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=installB4;$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe();if(requestedView&&requestedId&&requestedView==='assignments')setTimeout(()=>openAssignment(requestedId),120);if(requestedView&&requestedId&&requestedView==='exams')setTimeout(()=>startExam(requestedId),120);startAssignmentCountdown()});
 
 
-/* ===== PREMIUM PRESS RIPPLE ===== */
-document.addEventListener('pointerdown',e=>{
-  const el=e.target.closest('button,a,.btn,[role="button"]');
-  if(!el)return;
-  const rect=el.getBoundingClientRect();
-  el.style.setProperty('--press-x',(e.clientX-rect.left)+'px');
-  el.style.setProperty('--press-y',(e.clientY-rect.top)+'px');
-  el.classList.remove('press-ripple');
-  void el.offsetWidth;
-  el.classList.add('press-ripple');
-  clearTimeout(el._pressRippleTimer);
-  el._pressRippleTimer=setTimeout(()=>el.classList.remove('press-ripple'),620);
-},{passive:true});
+/* ===== PREMIUM CUSTOM CURSOR ===== */
+(function(){
+  if(!window.matchMedia||!window.matchMedia('(pointer:fine)').matches)return;
+
+  const ring=document.createElement('div');
+  const dot=document.createElement('div');
+  const trail=document.createElement('div');
+  ring.className='b4-cursor-ring';
+  dot.className='b4-cursor-dot';
+  trail.className='b4-cursor-trail';
+  document.body.append(ring,trail,dot);
+
+  let x=-100,y=-100,rx=-100,ry=-100,tx=-100,ty=-100;
+  let inside=false,raf=0,scrollTimer=0;
+
+  const setPos=(el,px,py)=>{
+    el.style.transform=`translate3d(${px}px,${py}px,0)`;
+  };
+
+  const frame=()=>{
+    rx+=(x-rx)*.28;
+    ry+=(y-ry)*.28;
+    tx+=(x-tx)*.12;
+    ty+=(y-ty)*.12;
+
+    setPos(ring,rx,ry);
+    setPos(dot,x,y);
+    setPos(trail,tx,ty);
+    raf=requestAnimationFrame(frame);
+  };
+
+  const isScrollbar=e=>{
+    const el=document.elementFromPoint(e.clientX,e.clientY);
+    if(!el)return false;
+    let n=el;
+    while(n&&n!==document.body){
+      const r=n.getBoundingClientRect();
+      if(n.scrollHeight>n.clientHeight+2 && e.clientX>=r.right-10 && e.clientX<=r.right+2)return true;
+      if(n.scrollWidth>n.clientWidth+2 && e.clientY>=r.bottom-10 && e.clientY<=r.bottom+2)return true;
+      n=n.parentElement;
+    }
+    return false;
+  };
+
+  const update=e=>{
+    x=e.clientX;
+    y=e.clientY;
+    if(!inside){
+      inside=true;
+      rx=tx=x;
+      ry=ty=y;
+      document.body.classList.add('b4-cursor-ready');
+    }
+
+    const target=e.target?.closest?.('button,a,[role="button"],input,textarea,select,label,.clickable');
+    const overScrollbar=isScrollbar(e);
+
+    /* Native scrollbar cursors cannot always be styled by ::-webkit-scrollbar,
+       so keep the document in cursor:none mode while the pointer is over it. */
+    document.documentElement.classList.toggle('b4-no-native-cursor',overScrollbar);
+
+    /* Scrollbar behaves like a normal interactive/hover target. */
+    document.body.classList.toggle('b4-cursor-hover',!!target||overScrollbar);
+  };
+
+  const enter=e=>{
+    inside=true;
+    x=rx=tx=e.clientX;
+    y=ry=ty=e.clientY;
+    document.body.classList.remove('b4-cursor-out');
+    document.body.classList.add('b4-cursor-ready');
+    update(e);
+  };
+
+  const leave=e=>{
+    inside=false;
+    document.documentElement.classList.remove('b4-no-native-cursor');
+    document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+    document.body.classList.add('b4-cursor-out');
+  };
+
+  document.addEventListener('pointerenter',enter,{passive:true});
+  document.addEventListener('pointermove',update,{passive:true});
+  document.addEventListener('pointerleave',leave,{passive:true});
+
+  /* Wheel scrolling changes the cursor into a vertical scrolling shape. */
+  document.addEventListener('wheel',()=>{
+    document.body.classList.add('b4-cursor-scroll');
+    clearTimeout(scrollTimer);
+    scrollTimer=setTimeout(()=>document.body.classList.remove('b4-cursor-scroll'),480);
+  },{passive:true});
+
+  document.addEventListener('pointerdown',()=>{
+    document.body.classList.add('b4-cursor-click');
+    clearTimeout(window.__b4CursorClick);
+    window.__b4CursorClick=setTimeout(()=>document.body.classList.remove('b4-cursor-click'),220);
+  },{passive:true});
+
+  window.addEventListener('blur',()=>{
+    inside=false;
+    document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+    document.body.classList.add('b4-cursor-out');
+  });
+
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){
+      document.documentElement.classList.remove('b4-no-native-cursor');
+      document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+      document.body.classList.add('b4-cursor-out');
+    }else{
+      document.body.classList.add('b4-cursor-out');
+    }
+  });
+
+  frame();
+})();
+
+/* ===== CUSTOM NAV SCROLLBAR ===== */
+(function(){
+  const init=()=>{
+    const nav=document.querySelector('nav#nav');
+    if(!nav||nav.dataset.customScrollbar==='1')return;
+    nav.dataset.customScrollbar='1';
+
+    const bar=document.createElement('div');
+    const thumb=document.createElement('div');
+    bar.className='b4-custom-scrollbar';
+    thumb.className='b4-custom-scrollbar-thumb';
+    bar.appendChild(thumb);
+    nav.appendChild(bar);
+
+    let dragging=false,offset=0;
+
+    const update=()=>{
+      const max=nav.scrollHeight-nav.clientHeight;
+      if(max<=1){bar.classList.remove('visible');return}
+      bar.classList.add('visible');
+      const h=bar.clientHeight;
+      const min=28;
+      const th=Math.max(min,(nav.clientHeight/nav.scrollHeight)*h);
+      const travel=Math.max(1,h-th);
+      const top=(nav.scrollTop/max)*travel;
+      thumb.style.height=th+'px';
+      thumb.style.transform=`translate3d(0,${top}px,0)`;
+    };
+
+    const start=e=>{
+      dragging=true;
+      const r=thumb.getBoundingClientRect();
+      offset=e.clientY-r.top;
+      document.body.classList.add('b4-cursor-scrollbar-drag');
+      e.preventDefault();
+    };
+
+    const move=e=>{
+      if(!dragging)return;
+      const r=bar.getBoundingClientRect();
+      const th=thumb.offsetHeight;
+      const travel=Math.max(1,r.height-th);
+      const pos=Math.max(0,Math.min(travel,e.clientY-r.top-offset));
+      const max=nav.scrollHeight-nav.clientHeight;
+      nav.scrollTop=(pos/travel)*max;
+    };
+
+    const stop=()=>{
+      if(!dragging)return;
+      dragging=false;
+      document.body.classList.remove('b4-cursor-scrollbar-drag');
+    };
+
+    thumb.addEventListener('pointerdown',start);
+    document.addEventListener('pointermove',move,{passive:false});
+    document.addEventListener('pointerup',stop,{passive:true});
+    nav.addEventListener('scroll',update,{passive:true});
+    window.addEventListener('resize',update,{passive:true});
+
+    bar.addEventListener('pointerdown',e=>{
+      if(e.target===thumb)return;
+      const r=bar.getBoundingClientRect();
+      const max=nav.scrollHeight-nav.clientHeight;
+      nav.scrollTop=Math.max(0,Math.min(max,((e.clientY-r.top)/r.height)*nav.scrollHeight-nav.clientHeight/2));
+    });
+
+    update();
+    new MutationObserver(update).observe(nav,{childList:true,subtree:true});
+  };
+
+  init();
+  new MutationObserver(init).observe(document.body,{childList:true,subtree:true});
+})();
+
+/* ===== FORCE NATIVE POINTER OFF ===== */
+(function(){
+  if(!window.matchMedia || !window.matchMedia('(pointer:fine)').matches)return;
+  const style=document.createElement('style');
+  style.id='b4-force-no-native-pointer';
+  style.textContent=`
+    html,html *,body,body *{cursor:none!important}
+    ::-webkit-scrollbar,::-webkit-scrollbar-thumb,::-webkit-scrollbar-track{cursor:none!important}
+  `;
+  document.head.appendChild(style);
+  document.documentElement.style.cursor='none';
+  document.body.style.cursor='none';
+})();
+
+/* ===== TRANSPARENT NATIVE POINTER FALLBACK ===== */
+(function(){
+  if(!window.matchMedia||!window.matchMedia('(pointer:fine)').matches)return;
+  const transparentCursor="url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1' viewBox='0 0 1 1'%3E%3Crect width='1' height='1' fill='transparent'/%3E%3C/svg%3E\") 0 0, none";
+  const apply=()=>{
+    document.documentElement.style.setProperty('cursor',transparentCursor,'important');
+    document.body.style.setProperty('cursor',transparentCursor,'important');
+  };
+  apply();
+  new MutationObserver(apply).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['style','class']});
+})();
+
+
+/* ===== FINAL CURSOR EDGE FIX ===== */
+(function(){
+  if(!window.matchMedia || !window.matchMedia('(pointer:fine)').matches)return;
+
+  const setup=()=>{
+    const nav=document.querySelector('nav#nav');
+    if(!nav || nav.dataset.edgeDragFix==='1')return;
+    nav.dataset.edgeDragFix='1';
+
+    let dragging=false;
+    let startY=0;
+    let startScroll=0;
+
+    const isRightEdge=e=>{
+      const r=nav.getBoundingClientRect();
+      return e.clientX>=r.right-18 && e.clientX<=r.right+2 &&
+             e.clientY>=r.top && e.clientY<=r.bottom;
+    };
+
+    nav.addEventListener('pointerdown',e=>{
+      if(!isRightEdge(e))return;
+      dragging=true;
+      startY=e.clientY;
+      startScroll=nav.scrollTop;
+      nav.setPointerCapture?.(e.pointerId);
+      document.body.classList.add('b4-cursor-scrollbar-drag');
+      e.preventDefault();
+    },{passive:false});
+
+    nav.addEventListener('pointermove',e=>{
+      if(!dragging)return;
+      const max=Math.max(0,nav.scrollHeight-nav.clientHeight);
+      const track=Math.max(1,nav.clientHeight);
+      nav.scrollTop=Math.max(0,Math.min(max,startScroll+((e.clientY-startY)/track)*nav.scrollHeight));
+      e.preventDefault();
+    },{passive:false});
+
+    const stop=()=>{
+      if(!dragging)return;
+      dragging=false;
+      document.body.classList.remove('b4-cursor-scrollbar-drag');
+    };
+    nav.addEventListener('pointerup',stop,{passive:true});
+    nav.addEventListener('pointercancel',stop,{passive:true});
+    window.addEventListener('blur',stop,{passive:true});
+  };
+
+  setup();
+  new MutationObserver(setup).observe(document.body,{childList:true,subtree:true});
+})();
+
+
+/* ===== HARD TRANSPARENT POINTER FIX V2 ===== */
+(function(){
+  if(!window.matchMedia || !window.matchMedia('(pointer:fine)').matches)return;
+  const transparent='url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=") 0 0, auto';
+  const force=()=>{
+    document.documentElement.style.setProperty('cursor',transparent,'important');
+    document.body.style.setProperty('cursor',transparent,'important');
+  };
+  force();
+  window.addEventListener('pageshow',force,{passive:true});
+  window.addEventListener('focus',force,{passive:true});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)force()},{passive:true});
+})();
