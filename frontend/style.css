@@ -1500,3 +1500,79 @@ to{opacity:1;transform:translateY(0)}}
   .log-row{padding:12px}
   .log-detail{max-width:calc(100vw - 120px)}
 }
+
+
+/* ===== PREMIUM POINTER + MOBILE PRESS FEEDBACK ===== */
+@media (pointer:fine) and (hover:hover){
+  html,body,button,a,input,textarea,select,[role="button"]{
+    cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M7 3.5 24.8 20l-8.2.9 5.1 7.1-3.2 2.1-5.2-7.3-4.8 6.2L7 3.5Z' fill='%237c3aed' stroke='%23ffffff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E") 5 3,auto;
+  }
+  button:hover,a:hover,[role="button"]:hover{
+    cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cpath d='M7 3.5 24.8 20l-8.2.9 5.1 7.1-3.2 2.1-3.2 2.1-5.2-7.3-4.8 6.2L7 3.5Z' fill='%239855f7' stroke='%23ffffff' stroke-width='1.8' stroke-linejoin='round'/%3E%3C/svg%3E") 5 3,auto;
+  }
+}
+button,a,.btn,[role="button"]{
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+  position:relative;
+  overflow:hidden;
+  transition:transform .18s cubic-bezier(.22,1,.36,1),filter .18s ease,box-shadow .22s ease,background .22s ease,border-color .22s ease;
+}
+button:active,a:active,.btn:active,[role="button"]:active{
+  transform:translateY(1px) scale(.965);
+  filter:brightness(.96);
+}
+button::after,.btn::after,[role="button"]::after{
+  content:'';
+  position:absolute;
+  left:var(--press-x,50%);
+  top:var(--press-y,50%);
+  width:10px;height:10px;
+  border-radius:50%;
+  background:rgba(124,58,237,.22);
+  transform:translate(-50%,-50%) scale(0);
+  opacity:0;
+  pointer-events:none;
+}
+button.press-ripple::after,.btn.press-ripple::after,[role="button"].press-ripple::after{
+  animation:pressRipple .55s ease-out;
+}
+@keyframes pressRipple{
+  0%{transform:translate(-50%,-50%) scale(0);opacity:.55}
+  100%{transform:translate(-50%,-50%) scale(16);opacity:0}
+}
+.card,.item,.stat,.hero,.panel,.modal,.notification-row,.analysis-row,.exam-run-question,.exam-answer-review{
+  animation:premiumRise .45s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes premiumRise{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.card:hover,.item:hover,.stat:hover,.hero:hover{
+  transform:translateY(-2px);
+  box-shadow:0 14px 34px #0000000d;
+}
+.dark .card:hover,.dark .item:hover,.dark .stat:hover,.dark .hero:hover{
+  box-shadow:0 14px 34px #00000030;
+}
+.btn.primary,.btn.ghost,.btn.danger{
+  box-shadow:0 5px 18px #7c3aed14;
+}
+.btn.primary:hover{
+  box-shadow:0 9px 26px #7c3aed30;
+}
+@media(max-width:700px){
+  button:active,.btn:active,a:active,[role="button"]:active{
+    transform:scale(.94);
+    transition-duration:.08s;
+  }
+  .card,.item,.stat,.hero,.panel,.modal,.notification-row,.analysis-row,.exam-run-question,.exam-answer-review{
+    animation-duration:.34s;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  button,a,.btn,[role="button"],.card,.item,.stat,.hero,.panel,.modal,.notification-row,.analysis-row,.exam-run-question,.exam-answer-review{
+    animation:none!important;
+    transition:none!important;
+  }
+}
