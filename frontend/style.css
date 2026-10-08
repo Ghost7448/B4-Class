@@ -2135,3 +2135,129 @@ body.dark,
 @media(max-width:480px){
   .log-detail-grid{grid-template-columns:1fr}
 }
+
+
+/* ===== B4 UNIVERSAL CUSTOM FORM CONTROLS — LIGHT / DARK ===== */
+:root{
+  color-scheme:light;
+  --control-bg:var(--s2);
+  --control-hover:color-mix(in srgb,var(--p) 9%,var(--s));
+  --control-focus:color-mix(in srgb,var(--p) 13%,transparent);
+}
+[data-theme="dark"],.dark{
+  color-scheme:dark;
+  --control-bg:#151923;
+  --control-hover:#211a31;
+  --control-focus:#a855f72b;
+}
+input,select,textarea,button{
+  accent-color:var(--p);
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+select,textarea{
+  color:var(--t);
+  background-color:var(--control-bg);
+  border:1px solid var(--line);
+  border-radius:12px;
+  outline:none;
+  transition:border-color .18s ease,box-shadow .18s ease,background-color .18s ease;
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):hover,
+select:hover,textarea:hover{
+  border-color:color-mix(in srgb,var(--p) 42%,var(--line));
+}
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,
+select:focus,textarea:focus{
+  border-color:var(--p)!important;
+  box-shadow:0 0 0 3px var(--control-focus)!important;
+}
+input::placeholder,textarea::placeholder{color:var(--m);opacity:.82}
+select{
+  appearance:none;
+  -webkit-appearance:none;
+  padding-right:42px!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a855f7' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 13px center;
+  background-size:16px;
+  cursor:pointer;
+}
+.ar select{padding-right:11px!important;padding-left:42px!important;background-position:left 13px center}
+select option,optgroup{
+  background:var(--s);
+  color:var(--t);
+}
+input[type="date"],input[type="datetime-local"],input[type="time"],input[type="month"],input[type="week"]{
+  min-height:43px;
+  padding:10px 12px;
+  color-scheme:inherit;
+  font-variant-numeric:tabular-nums;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator{
+  cursor:pointer;
+  border-radius:6px;
+  padding:4px;
+  opacity:.82;
+  filter:var(--picker-icon-filter,none);
+  transition:background .18s ease,opacity .18s ease;
+}
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="time"]::-webkit-calendar-picker-indicator,
+[data-theme="dark"] input[type="month"]::-webkit-calendar-picker-indicator,
+.dark input[type="date"]::-webkit-calendar-picker-indicator,
+.dark input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+.dark input[type="time"]::-webkit-calendar-picker-indicator,
+.dark input[type="month"]::-webkit-calendar-picker-indicator{
+  filter:invert(1) hue-rotate(225deg) saturate(1.4);
+}
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+input[type="time"]::-webkit-calendar-picker-indicator:hover,
+input[type="month"]::-webkit-calendar-picker-indicator:hover{
+  background:var(--control-hover);opacity:1;
+}
+input[type="number"]{font-variant-numeric:tabular-nums}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button{
+  opacity:.85;
+  cursor:pointer;
+  filter:var(--number-spinner-filter,none);
+}
+[data-theme="dark"] input[type="number"]::-webkit-inner-spin-button,
+[data-theme="dark"] input[type="number"]::-webkit-outer-spin-button,
+.dark input[type="number"]::-webkit-inner-spin-button,
+.dark input[type="number"]::-webkit-outer-spin-button{
+  filter:invert(1) hue-rotate(225deg) saturate(1.4);
+}
+input[type="checkbox"],input[type="radio"]{
+  accent-color:var(--p);
+  width:16px;height:16px;
+  cursor:pointer;
+}
+input[type="range"]{accent-color:var(--p);cursor:pointer}
+input[type="file"]{max-width:100%;color:var(--t)}
+button, .btn{ -webkit-tap-highlight-color:transparent }
+button:focus-visible,.btn:focus-visible{
+  outline:2px solid var(--p);
+  outline-offset:3px;
+}
+:where(.form,.field,.modal,.card,.permission-card,.question-editor) input,
+:where(.form,.field,.modal,.card,.permission-card,.question-editor) select,
+:where(.form,.field,.modal,.card,.permission-card,.question-editor) textarea{
+  max-width:100%;
+}
+:where(.form,.field,.modal,.card,.permission-card,.question-editor) select{
+  min-height:42px;
+}
+@media(max-width:600px){
+  input[type="date"],input[type="datetime-local"],input[type="time"],input[type="month"],select{
+    font-size:16px;
+  }
+}
+/* Preserve the selected site theme for browser-native date/time dialogs. */
+html[data-theme="dark"],html.dark,body.dark{color-scheme:dark}
+html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:light}
