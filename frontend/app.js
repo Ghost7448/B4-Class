@@ -569,7 +569,7 @@ function animateDashboardStats(){
     requestAnimationFrame(tick);
   });
 }
-function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown();if(v==='exam-answers')examAnswersLoop(S.examAnswers?.examId)}
+function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown()}
 function teacherChatV(){
   return title(t('teacherChat'),'')+'<div class="card chat"><div class="messages" id="teacherMessages">'+S.teacherMessages.map(teacherMessageHTML).join('')+'</div><div id="teacherTyping" class="typing-indicator"></div><button type="button" id="teacherChatJumpBottom" class="chat-jump-bottom" onclick="jumpChatBottom(\'teacherMessages\')" aria-label="Scroll to latest messages" title="Scroll to latest messages">↓</button><form class="chatform" onsubmit="sendTeacherChat(event)"><input id="teacherInput" oninput="teacherTyping(!!this.value.trim())" placeholder="Write a message..."><button class="btn primary">➤</button></form></div>'
 }
@@ -1530,7 +1530,7 @@ function examRunV(){
     `<div class="exam-page-shell"><div class="exam-run-hero"><div><span class="eyebrow">EXAM CENTER</span><h2>${esc(r.exam?.title||'Exam')}</h2><p>${esc(r.exam?.description||'Answer each question carefully. MCQ and True/False are auto-graded. Short and Long answers are reviewed by the teacher.')}</p></div><div id="examTimer" class="exam-timer">Loading…</div></div><form class="exam-page-form" id="examRunForm" onsubmit="submitExam(event,${Number(r.id)})">${cards}<div class="exam-submit-row"><p class="muted">Your answers are saved when you submit the exam. Short and Long answers will be reviewed by the teacher.</p><button id="examSubmitBtn" class="btn primary">Submit Exam</button></div></form></div>`;
 }
 function startExamTimer(deadline,id){
-  clearInterval(window.examTimer);clearInterval(window.examAnswersTimer);
+  clearInterval(window.examTimer);
   const box=$('#examTimer');
   const raw=deadline?new Date(deadline).getTime():NaN;
   const duration=Number(S.examRun?.exam?.duration_minutes||0);
@@ -1571,23 +1571,7 @@ function examLockedV(){
   '<div class="exam-locked-page"><div class="exam-locked-card"><div class="exam-lock-icon">🔒</div><span class="eyebrow">EXAM LOCKED</span><h2>Exam Locked</h2><p class="muted">'+esc(r.lockMessage||'Leaving the exam screen was detected. Please contact your Teacher to unlock this attempt.')+'</p><div class="exam-locked-note">Your answers were not deleted. A Teacher can unlock this attempt from Submissions.</div><button class="btn primary" onclick="go(\'exams\')">Back to Exams</button></div></div>';
 }
 async function loadStudentExamAnswers(id){
-  try{const d=await api('/api/exams/'+id+'/answers?_='+Date.now(),{cache:'no-store'});S.examAnswers={...d,examId:id};S.view='exam-answers';render();window.scrollTo({top:0,behavior:'smooth'});}catch(e){toast(e.message)}
-}
-function examAnswersLoop(id){
-  clearInterval(window.examAnswersTimer);
-  if(!S.me||S.view!=='exam-answers'||!id)return;
-  const sync=async()=>{
-    try{
-      const d=await api('/api/exams/'+id+'/answers?_='+Date.now(),{cache:'no-store'});
-      const before=JSON.stringify(S.examAnswers?.questions||[]);
-      const after=JSON.stringify(d.questions||[]);
-      if(before!==after||Number(S.examAnswers?.score)!==Number(d.score)){
-        S.examAnswers={...d,examId:id};
-        render();
-      }
-    }catch{}
-  };
-  window.examAnswersTimer=setInterval(sync,3000);
+  try{const d=await api('/api/exams/'+id+'/answers');S.examAnswers={...d,examId:id};S.view='exam-answers';render();window.scrollTo({top:0,behavior:'smooth'});}catch(e){toast(e.message)}
 }
 function examResultV(){
   const r=S.examResult||{};
@@ -1599,12 +1583,12 @@ function examAnswersV(){
   return title('View Answers','Review what you submitted and what was marked correct or incorrect.',`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
   '<div class="exam-answers-summary"><div><b>'+Number(r.percent||0)+'%</b><span>Current score</span></div><div><b>'+Number(r.score||r.attempt?.score||0)+' / '+Number(r.total||0)+'</b><span>Graded points</span></div></div>'+
   '<div class="exam-answer-review-list">'+qs.map((q,i)=>{
-    const type=q.question_type==='TRUE_FALSE'?'TRUE/FALSE':(q.question_type||'MCQ');
+    const type=q.question_type==='TRUE_FALSE'?'TRUE / FALSE':(q.question_type||'MCQ');
     const manual=q.question_type==='SHORT'||q.question_type==='LONG';
-    const pending=Number(q.graded)!==1;
+    const pending=q.is_correct===null||q.is_correct===undefined;
     const state=pending?'pending':(q.is_correct?'correct':'incorrect');
     const status=pending?(manual?'Pending teacher review':'Not graded'):(q.is_correct?'✓ Correct':'✕ Incorrect');
-    const answerToShow=manual?(pending?'Not graded yet':(q.teacher_correct_answer||'Correct — no correction needed')):(q.correct_answer||q.auto_correct_answer||'Correct answer was not saved');
+    const answerToShow=manual?(pending?'Not graded yet':(q.teacher_correct_answer||'Correct — no correction needed')):(q.auto_correct_answer||'Correct answer was not saved');
     return '<article class="exam-answer-review '+state+'"><div class="head"><div><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div><h3>'+esc(q.question_text)+'</h3></div><span class="answer-status">'+status+'</span></div><div class="answer-review-grid"><div class="answer-review-box"><small>Your answer</small><p>'+esc(q.answer_text||'No answer')+'</p></div><div class="answer-review-box"><small>'+((!manual)?'Correct answer':'Teacher answer')+'</small><p>'+esc(answerToShow)+'</p></div></div></article>';
   }).join('')+'</div>';
 }
@@ -1644,8 +1628,8 @@ function examReviewV(){
     '<div class="grid review-questions">'+(d.questions||[]).map((q,i)=>{
       const manual=q.question_type==='SHORT'||q.question_type==='LONG';
       const pending=q.is_correct===null||q.is_correct===undefined;
-      const type=q.question_type==='TRUE_FALSE'?'TRUE/FALSE':(q.question_type||'MCQ');
-      const answer=manual?(pending?'Awaiting teacher grading':(q.teacher_correct_answer||'Correct — no correction needed')):(q.correct_answer||q.auto_correct_answer||'Correct answer was not saved');
+      const type=q.question_type==='TRUE_FALSE'?'TRUE / FALSE':(q.question_type||'MCQ');
+      const answer=manual?(pending?'Awaiting teacher grading':(q.teacher_correct_answer||'Correct — no correction needed')):(q.auto_correct_answer||'Correct answer was not saved');
       const result=pending?'• Awaiting teacher grading':(q.is_correct?'✓ Correct':'✕ Incorrect')+' • '+Number(q.points_awarded||0)+' / '+Number(q.points||0);
       return '<article class="card review-question"><div class="head"><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div></div><h3>'+esc(q.question_text)+'</h3><div class="answer-block"><small>Student answer</small><p>'+esc(q.answer_text||'No answer')+'</p></div><div class="answer-block"><small>Correct answer</small><p>'+esc(answer)+'</p></div>'+ (manual?'<div class="manual-grade-panel"><div class="answer-result '+(pending?'not-graded':(q.is_correct?'correct':'incorrect'))+'">'+result+'</div><button class="btn primary" onclick="examGradeModal('+examId+','+attemptId+','+q.id+')">Grade Answer</button></div>':'<div class="answer-result '+(q.is_correct?'correct':'incorrect')+'">'+(q.is_correct?'✓ Correct':'✕ Incorrect')+' • '+Number(q.points_awarded||0)+' / '+Number(q.points||0)+'</div>')+'</article>';
     }).join('')+'</div>';

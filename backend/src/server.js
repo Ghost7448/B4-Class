@@ -1207,7 +1207,8 @@ app.get('/api/admin/exams/:id/submissions/:attemptId',requirePermission('MANAGE_
   const [attemptRows]=await q(`SELECT a.id,a.exam_id,a.user_id,a.status,a.score,a.started_at,a.submitted_at,u.display_name,u.official_name,e.title,e.subject_id
     FROM exam_attempts a JOIN users u ON u.id=a.user_id JOIN exams e ON e.id=a.exam_id WHERE a.id=? AND a.exam_id=? LIMIT 1`,[attemptId,examId]);
   if(!attemptRows[0]) return res.status(404).json({error:'Submission not found'});
-  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points, ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer, CASE WHEN ans.is_correct IS NULL THEN 0 ELSE 1 END AS graded FROM exam_questions q
+  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points,
+    ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer FROM exam_questions q
     LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptId,examId]);
   const total=questions.reduce((n,x)=>n+((x.question_type==='MCQ'||x.question_type==='TRUE_FALSE'||x.is_correct!==null)?Number(x.points||0):0),0);
@@ -1222,7 +1223,7 @@ if(!savedGradeRows[0] || savedGradeRows[0].is_correct===null)return res.status(5
 const [scoreRows]=await q("SELECT COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE','SHORT','LONG') AND ea.is_correct IS NOT NULL THEN ea.points_awarded ELSE 0 END),0) score,COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE') OR ea.is_correct IS NOT NULL THEN q.points ELSE 0 END),0) total FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=? WHERE q.exam_id=?",[attemptId,examId]);const score=Number(scoreRows[0]?.score||0),total=Number(scoreRows[0]?.total||0),percent=total?Math.round(score/total*100):0;await q('UPDATE exam_attempts SET score=? WHERE id=?',[score,attemptId]);await audit(req,'EXAM_ANSWER_GRADED','exam',examId,{attemptId,questionId,correct,score,total,percent});
 const [attemptOwner]=await q('SELECT user_id FROM exam_attempts WHERE id=? LIMIT 1',[attemptId]);
 if(attemptOwner[0]?.user_id) await createNotification(attemptOwner[0].user_id,{type:'exam_result',title:'Exam Result Updated',body:'Your exam score was updated to '+percent+'%.',entityId:examId,url:'/?view=exams&id='+examId});
-res.json({ok:true,correct,correctAnswer:savedGradeRows[0].teacher_correct_answer||null,score,total,percent,graded:true});});
+res.json({ok:true,correct,correctAnswer:correctAnswer||null,score,total,percent});});
 
 app.get('/api/exams/:id/result',requireAuth,async(req,res)=>{const id=Number(req.params.id),[r]=await q('SELECT a.id,a.status,a.score,a.started_at,a.submitted_at,e.title,e.ends_at,e.duration_minutes FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);if(!r[0])return res.status(404).json({error:'No exam submission yet'});const [tot]=await q("SELECT COALESCE(SUM(CASE WHEN q.question_type IN ('MCQ','TRUE_FALSE') OR a.is_correct IS NOT NULL THEN q.points ELSE 0 END),0) total FROM exam_questions q LEFT JOIN exam_answers a ON a.question_id=q.id AND a.attempt_id=? WHERE q.exam_id=?",[r[0].id,id]);const total=Number(tot[0]?.total||0),score=Number(r[0].score||0);res.json({attempt:r[0],percent:total?Math.round(score/total*100):0,total});});
 
@@ -1582,7 +1583,8 @@ app.get('/api/exams/:id/answers',requireAuth,async(req,res)=>{
   const [attemptRows]=await q('SELECT a.id,a.status,a.score,a.submitted_at,e.title FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? ORDER BY a.submitted_at DESC,a.started_at DESC,a.id DESC LIMIT 1',[id,req.session.userId]);
   if(!attemptRows[0])return res.status(404).json({error:'No exam submission yet'});
   if(attemptRows[0].status!=='SUBMITTED')return res.status(400).json({error:'Exam has not been submitted yet'});
-  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points, ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer, CASE WHEN ans.is_correct IS NULL THEN 0 ELSE 1 END AS graded
+  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points,
+    ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer
     FROM exam_questions q LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptRows[0].id,id]);
   const total=questions.reduce((n,x)=>n+((x.question_type==='MCQ'||x.question_type==='TRUE_FALSE'||x.is_correct!==null)?Number(x.points||0):0),0);
