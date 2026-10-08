@@ -1501,3 +1501,28 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
   body.b4-cursor-hover .b4-cursor-ring{width:32px;height:32px;margin:-16px 0 0 -16px}
   body.b4-cursor-click .b4-cursor-ring{width:19px;height:19px;margin:-9.5px 0 0 -9.5px}
 }
+
+/* ===== SMOOTH MOVING CURSOR ===== */
+@media(pointer:fine){
+  html,body,body *{cursor:none!important}
+  .b4-cursor-ring,.b4-cursor-dot,.b4-cursor-trail{position:fixed;top:0;left:0;pointer-events:none;z-index:100000;opacity:0}
+  .b4-cursor-ring{width:24px;height:24px;margin:-12px 0 0 -12px;border:2px solid var(--p2);border-radius:50%;box-shadow:0 0 16px #a855f799;transition:width .18s ease,height .18s ease,margin .18s ease,border-color .18s ease,box-shadow .18s ease}
+  .b4-cursor-dot{width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:var(--p2);box-shadow:0 0 10px #a855f7,0 0 3px #fff9}
+  .b4-cursor-trail{width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:#a855f733;filter:blur(2px);transition:opacity .25s ease}
+  body.b4-cursor-ready .b4-cursor-ring,body.b4-cursor-ready .b4-cursor-dot,body.b4-cursor-ready .b4-cursor-trail{opacity:1}
+  body.b4-cursor-hover .b4-cursor-ring{width:34px;height:34px;margin:-17px 0 0 -17px;border-color:var(--p);box-shadow:0 0 22px #7c3aed99}
+  body.b4-cursor-hover .b4-cursor-trail{width:18px;height:18px;margin:-9px 0 0 -9px}
+  body.b4-cursor-click .b4-cursor-ring{width:17px;height:17px;margin:-8.5px 0 0 -8.5px}
+  body.b4-cursor-click .b4-cursor-trail{transform:scale(1.8)}
+}
+@media(pointer:coarse){
+  .b4-cursor-ring,.b4-cursor-dot,.b4-cursor-trail{display:none!important}
+  button:active,a:active,.clickable:active,[role="button"]:active{
+    transform:scale(.96)!important;
+    filter:brightness(1.08);
+  }
+  button,a,.clickable,[role="button"]{
+    -webkit-tap-highlight-color:transparent;
+    transition:transform .14s ease,filter .14s ease;
+  }
+}
