@@ -971,7 +971,9 @@ app.put('/api/admin/users/:id/permissions', requireAnyPermission(['MANAGE_PERMIS
   for(const p of valid) await q('INSERT INTO user_permissions(user_id,permission_id,granted_by) VALUES(?,?,?)',[targetId,p.id,req.session.userId]);
   await q('INSERT INTO security_logs(actor_user_id,action,details) VALUES(?,?,?)',[req.session.userId,'PERMISSIONS_UPDATED',JSON.stringify({target_user_id:targetId,permissions:codes})]);
   await audit(req,'PERMISSIONS_UPDATED','user',targetId,{permissions:codes});
-  res.json({ok:true,permissions:await getPermissionCodes(targetId)});
+  const effectivePermissions=await getPermissionCodes(targetId);
+  pushUserEvent(targetId,'permissions-changed',{userId:targetId,permissions:effectivePermissions});
+  res.json({ok:true,permissions:effectivePermissions});
 });
 
 app.patch('/api/admin/users/:id/role', requireAnyPermission(['MANAGE_ROLES','MANAGE_ACCOUNTS','MANAGE_ADMINS']), async (req,res)=>{
