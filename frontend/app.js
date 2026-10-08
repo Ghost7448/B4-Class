@@ -319,6 +319,21 @@ async function syncLiveData(){
     await loadData();
     const changed=before!==liveDataSignature();
     if(!changed&&!meChanged)return;
+
+    // Permission / role / account-status changes must take effect immediately.
+    // They are more important than preserving an open modal or form because
+    // the current user's visible navigation and access may have changed.
+    if(meChanged){
+      const scrollY=window.scrollY;
+      document.documentElement.classList.add('live-update');
+      render();
+      requestAnimationFrame(()=>{
+        window.scrollTo({top:scrollY,left:0,behavior:'instant'});
+        document.documentElement.classList.remove('live-update');
+      });
+      return;
+    }
+
     if($('#back')?.classList.contains('show'))return;
     if(S.view==='chat'||S.view==='teacherChat')return;
     if(S.view==='exam-run'||S.view==='exam-result'||S.view==='exam-answers'||S.view==='exam-review')return;
@@ -387,7 +402,7 @@ function ensureGlobalRealtime(){
     window.globalRealtimeStream.onerror=()=>{
       window.globalRealtimeOnline=false;
       clearInterval(window.liveFallbackTimer);
-      window.liveFallbackTimer=setInterval(()=>{if(!window.globalRealtimeOnline)syncLiveData()},15000);
+      window.liveFallbackTimer=setInterval(()=>{if(!window.globalRealtimeOnline)syncLiveData()},3000);
     };
   }catch{
     window.globalRealtimeOnline=false;
