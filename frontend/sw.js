@@ -1,4 +1,4 @@
-const CACHE='b4-v34';
+const CACHE='b4-v35';
 const FILES=['./','./index.html','./style.css','./app.js','./manifest.webmanifest','./assets/logo.svg','./assets/logo.svg'];
 
 self.addEventListener('install',function(event){
@@ -9,13 +9,11 @@ self.addEventListener('install',function(event){
   );
 });
 
-self.addEventListener('activate',function(event){
+self.addEventListener('activate',event=>{
   event.waitUntil(
-    caches.keys()
-      .then(function(keys){
-        return Promise.all(keys.filter(function(key){return key!==CACHE;}).map(function(key){return caches.delete(key);}));
-      })
-      .then(function(){return self.clients.claim();})
+    caches.keys().then(keys=>Promise.all(
+      keys.filter(key=>key!==CACHE).map(key=>caches.delete(key))
+    )).then(()=>self.clients.claim())
   );
 });
 
