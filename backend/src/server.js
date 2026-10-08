@@ -484,11 +484,11 @@ function lockedSiteHtml(message='This site is temporarily unavailable.') {
     if(checking)return;
     checking=true;
     try{
-      var r=await fetch('/api/site/status?_='+Date.now(),{credentials:'include',cache:'no-store',headers:{'Cache-Control':'no-cache'}});
+      var r=await fetch("/api/site/status?_="+Date.now(),{credentials:"include",cache:"no-store",headers:{"Cache-Control":"no-cache"}});
       if(!r.ok)return;
       var d=await r.json();
       if(!d.locked){
-        location.replace('/');
+        location.replace("/");
       }
     }catch(e){}
     finally{checking=false;}
