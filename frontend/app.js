@@ -1905,3 +1905,55 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   apply();
   new MutationObserver(apply).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['style','class']});
 })();
+
+
+/* ===== FINAL CURSOR EDGE FIX ===== */
+(function(){
+  if(!window.matchMedia || !window.matchMedia('(pointer:fine)').matches)return;
+
+  const setup=()=>{
+    const nav=document.querySelector('nav#nav');
+    if(!nav || nav.dataset.edgeDragFix==='1')return;
+    nav.dataset.edgeDragFix='1';
+
+    let dragging=false;
+    let startY=0;
+    let startScroll=0;
+
+    const isRightEdge=e=>{
+      const r=nav.getBoundingClientRect();
+      return e.clientX>=r.right-18 && e.clientX<=r.right+2 &&
+             e.clientY>=r.top && e.clientY<=r.bottom;
+    };
+
+    nav.addEventListener('pointerdown',e=>{
+      if(!isRightEdge(e))return;
+      dragging=true;
+      startY=e.clientY;
+      startScroll=nav.scrollTop;
+      nav.setPointerCapture?.(e.pointerId);
+      document.body.classList.add('b4-cursor-scrollbar-drag');
+      e.preventDefault();
+    },{passive:false});
+
+    nav.addEventListener('pointermove',e=>{
+      if(!dragging)return;
+      const max=Math.max(0,nav.scrollHeight-nav.clientHeight);
+      const track=Math.max(1,nav.clientHeight);
+      nav.scrollTop=Math.max(0,Math.min(max,startScroll+((e.clientY-startY)/track)*nav.scrollHeight));
+      e.preventDefault();
+    },{passive:false});
+
+    const stop=()=>{
+      if(!dragging)return;
+      dragging=false;
+      document.body.classList.remove('b4-cursor-scrollbar-drag');
+    };
+    nav.addEventListener('pointerup',stop,{passive:true});
+    nav.addEventListener('pointercancel',stop,{passive:true});
+    window.addEventListener('blur',stop,{passive:true});
+  };
+
+  setup();
+  new MutationObserver(setup).observe(document.body,{childList:true,subtree:true});
+})();
