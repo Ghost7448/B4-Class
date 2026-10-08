@@ -397,8 +397,7 @@ body{overflow-x:hidden}
   overflow:hidden;
 }
 .app aside nav#nav{
-  max-height:calc(100vh - 150px);
-  padding-bottom:150px;
+  max-height:calc(100vh - 150px);  padding-bottom:150px;
   scroll-padding-bottom:150px;
 }
 .app aside .side-bottom{
@@ -797,8 +796,7 @@ body{overflow-x:hidden}
   gap:16px;
   padding-bottom:15px;
   border-bottom:1px solid var(--line);
-}
-.notification-heading{
+}.notification-heading{
   display:flex;
   align-items:center;
   gap:12px;
@@ -1197,8 +1195,7 @@ to{opacity:1;transform:translateY(0)}}
 /* ===== EXAM CENTER REDESIGN ===== */
 .exam-page-shell{display:grid;gap:18px}
 .exam-page-top{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:22px;border:1px solid var(--line);border-radius:22px;background:linear-gradient(135deg,var(--s),var(--s2));box-shadow:var(--shadow)}
-.exam-page-top h2{margin:6px 0 5px;font-size:26px}
-.exam-page-top p{margin:0;max-width:650px;line-height:1.65}
+.exam-page-top h2{margin:6px 0 5px;font-size:26px}.exam-page-top p{margin:0;max-width:650px;line-height:1.65}
 .exam-run-list{gap:14px}
 .exam-run-question{padding:22px;border:1px solid var(--line);border-radius:22px;background:var(--s);box-shadow:var(--shadow);display:grid;gap:15px}
 .exam-question-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
@@ -1479,3 +1476,40 @@ to{opacity:1;transform:translateY(0)}}
 #bell .notification-bell-icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 #bell i{position:absolute;width:7px;height:7px;background:#a855f7;border:2px solid var(--s);border-radius:50%;right:8px;top:7px;display:none}
 @media(max-width:800px){#bell{width:40px;height:40px;border-radius:13px}.top i{display:none}}
+
+/* ===== B4 CURSOR + PRESS FEEDBACK ===== */
+/* Desktop: a small rounded B4 cursor with a purple center dot. */
+@media (hover:hover) and (pointer:fine){
+  html,body,*{cursor:none!important}
+  body{
+    cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'%3E%3Ccircle cx='14' cy='14' r='10' fill='none' stroke='%237c3aed' stroke-width='2'/%3E%3Ccircle cx='14' cy='14' r='2.5' fill='%23a855f7'/%3E%3C/svg%3E") 14 14, auto;
+  }
+  a,button,[role="button"],input,textarea,select,label,.btn,.quick,.person-card,.notification-row,.file-picker{
+    cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30' viewBox='0 0 30 30'%3E%3Ccircle cx='15' cy='15' r='11' fill='none' stroke='%23a855f7' stroke-width='2'/%3E%3Ccircle cx='15' cy='15' r='3' fill='%237c3aed'/%3E%3C/svg%3E") 15 15, pointer;
+  }
+}
+
+/* Press/tap feedback — works with mouse and mobile touch. */
+button,.btn,a[role="button"],[role="button"],.quick,.person-card,.notification-row,.file-picker{
+  -webkit-tap-highlight-color:transparent;
+  touch-action:manipulation;
+}
+button:active,.btn:active,a[role="button"]:active,[role="button"]:active,.quick:active,.person-card:active,.notification-row:active,.file-picker:active{
+  transform:scale(.96);
+  filter:brightness(.97);
+  transition-duration:.08s!important;
+}
+.btn:active{box-shadow:0 5px 14px #7c3aed18!important}
+.primary:active{filter:brightness(.9);box-shadow:0 5px 18px #7c3aed30!important}
+.danger:active{filter:brightness(.93)}
+.ghost:active,.close:active{background:var(--s2)}
+@media(max-width:800px){
+  button:active,.btn:active,a[role="button"]:active,[role="button"]:active,.quick:active,.person-card:active,.notification-row:active,.file-picker:active{
+    transform:scale(.97);
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  button:active,.btn:active,a[role="button"]:active,[role="button"]:active,.quick:active,.person-card:active,.notification-row:active,.file-picker:active{
+    transition:none!important;
+  }
+}
