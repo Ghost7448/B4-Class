@@ -1343,7 +1343,31 @@ function logTime(value){
   if(!Number.isFinite(d.getTime()))return String(value||'');
   return d.toLocaleString('en-US',{timeZone:'Africa/Cairo',day:'2-digit',month:'2-digit',hour:'numeric',minute:'2-digit',hour12:true}).replace(',',' •');
 }
-async function loadLogs(){const r=$('#adminRoot');try{const d=await api('/api/admin/logs');const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));const icon=x=>x.kind==='security'?'⚿':/DELETE|REMOVED|FAILED|DENIED/i.test(x.action||'')?'✕':/CREATE|ADD|ACTIV/i.test(x.action||'')?'＋':/UPDATE|EDIT|CHANGED/i.test(x.action||'')?'✦':'•';const detail=x=>{let d=x.details;try{if(typeof d==='string')d=JSON.parse(d)}catch{}if(!d||typeof d!=='object')return '';return Object.entries(d).slice(0,4).map(([k,v])=>k+': '+String(v)).join(' • ')};r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security</span></div><div class="log-list">'+(rows.map((x,i)=>'<article class="log-row" style="--i:'+i+'"><span class="log-icon">'+icon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+x.kind+'">'+x.kind+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(detail(x)?'<div class="log-detail">'+esc(detail(x))+'</div>':'')+'</div></article>').join('')||'<div class="empty">No activity yet.</div>')+'</div>'}catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}}
+function openLogDetails(index){
+  const rows=window.__b4LogRows||[],x=rows[index];
+  if(!x)return;
+  let d=x.details;
+  try{if(typeof d==='string')d=JSON.parse(d)}catch{}
+  const labels={message_id:'Message ID',message_owner:'Message owner',message_owner_user_id:'Owner User ID',message_content:'Message content',created_at:'Created at',deleted_at:'Deleted at',deleted_by:'Deleted by',deleted_by_user_id:'Executor User ID',deleted_by_role:'Executor role',delete_type:'Delete type',old_body:'Old content',new_body:'New content'};
+  const fields=[];
+  if(d&&typeof d==='object')Object.entries(d).forEach(([k,v])=>{
+    if(v===null||v===undefined||v==='')return;
+    fields.push('<div class="log-detail-field"><small>'+esc(labels[k]||k.replaceAll('_',' '))+'</small><div>'+esc(typeof v==='object'?JSON.stringify(v):String(v))+'</div></div>');
+  });
+  if(!fields.length)fields.push('<div class="empty">No additional details were recorded for this event.</div>');
+  modal('<div class="modalhead"><div><span class="eyebrow">'+esc(x.kind||'LOG')+'</span><h2>'+esc(x.action||'EVENT')+'</h2></div><button class="close" onclick="b4Close()">×</button></div><div class="log-detail-modal"><div class="log-detail-meta"><b>'+esc(x.actor_name||'System')+'</b><span>'+esc(logTime(x.created_at))+'</span><span>'+esc(x.entity_type||'system')+(x.entity_id?' #'+x.entity_id:'')+'</span></div>'+fields.join('')+'</div>');
+}
+async function loadLogs(){
+  const r=$('#adminRoot');
+  try{
+    const d=await api('/api/admin/logs');
+    const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+    window.__b4LogRows=rows;
+    const icon=x=>x.kind==='security'?'⚿':/DELETE|REMOVED|FAILED|DENIED/i.test(x.action||'')?'✕':/CREATE|ADD|ACTIV/i.test(x.action||'')?'＋':/UPDATE|EDIT|CHANGED/i.test(x.action||'')?'✦':'•';
+    const detail=x=>{let d=x.details;try{if(typeof d==='string')d=JSON.parse(d)}catch{}if(!d||typeof d!=='object')return '';const vals=[];if(d.message_content)vals.push('Message: '+String(d.message_content).slice(0,100));if(d.deleted_by)vals.push('By: '+d.deleted_by);if(d.delete_type)vals.push(d.delete_type);if(d.old_body)vals.push('Old: '+String(d.old_body).slice(0,70));if(d.new_body)vals.push('New: '+String(d.new_body).slice(0,70));return vals.join(' • ')};
+    r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Tap any event for full details</span></div><div class="log-list">'+(rows.map((x,i)=>'<article class="log-row log-row-clickable" style="--i:'+i+'" onclick="openLogDetails('+i+')"><span class="log-icon">'+icon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+x.kind+'">'+x.kind+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(detail(x)?'<div class="log-detail">'+esc(detail(x))+'</div>':'')+'</div><span class="log-open">›</span></article>').join('')||'<div class="empty">No activity yet.</div>')+'</div>';
+  }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
+}
 async function loadDevelopers(){
   const r=$('#adminRoot');
   if(!r)return;
