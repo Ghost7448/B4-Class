@@ -395,6 +395,35 @@ function ensureGlobalRealtime(){
     window.liveFallbackTimer=setInterval(syncLiveData,15000);
   }
 }
+let siteLockTimer=null;
+let siteLockTransitioning=false;
+async function checkSiteLock(){
+  if(siteLockTransitioning)return;
+  try{
+    const r=await fetch(API+'/api/site/status?_='+Date.now(),{
+      method:'GET',
+      credentials:'include',
+      cache:'no-store',
+      headers:{'Cache-Control':'no-cache'}
+    });
+    if(!r.ok)return;
+    const d=await r.json();
+    if(d.locked&&!d.isSuperAdmin){
+      siteLockTransitioning=true;
+      document.documentElement.classList.add('site-lock-transition');
+      try{window.globalRealtimeStream?.close()}catch{}
+      try{window.realtimeStream?.close()}catch{}
+      try{window.teacherRealtimeStream?.close()}catch{}
+      setTimeout(()=>window.location.reload(),100);
+    }
+  }catch{}
+}
+function startSiteLockWatcher(){
+  clearInterval(siteLockTimer);
+  checkSiteLock();
+  siteLockTimer=setInterval(checkSiteLock,2000);
+}
+
 function liveDataLoop(){
   clearInterval(window.liveDataTimer);
   clearInterval(window.liveFallbackTimer);
@@ -1737,6 +1766,7 @@ function setupMobileDockAutoHide(){
 }
 function cancelReply(){window.replyTo=null;const i=$('#chatInput');if(i){i.value='';i.placeholder='Write a message...'}close()}
 window.addEventListener('beforeunload',()=>clearInterval(window.examTimer));
+startSiteLockWatcher();
 document.addEventListener('DOMContentLoaded',async()=>{
 const params=new URLSearchParams(location.search);const requestedView=params.get('view');const requestedId=Number(params.get('id')||0);if(['dashboard','students','teachers','subjects','schedule','assignments','resources','exams','announcements','chat','teacherChat','admin','teacherCenter','settings','developers'].includes(requestedView))S.view=requestedView;
 setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=installB4;$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe();if(requestedView&&requestedId&&requestedView==='assignments')setTimeout(()=>openAssignment(requestedId),120);if(requestedView&&requestedId&&requestedView==='exams')setTimeout(()=>startExam(requestedId),120);startAssignmentCountdown()});
