@@ -1697,32 +1697,51 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
 /* ===== PREMIUM CUSTOM CURSOR ===== */
 (function(){
   if(!window.matchMedia||!window.matchMedia('(pointer:fine)').matches)return;
-  const ring=document.createElement('div'),dot=document.createElement('div');
-  ring.className='b4-cursor-ring';dot.className='b4-cursor-dot';
-  document.body.append(ring,dot);
-  let x=-100,y=-100,rx=-100,ry=-100,raf=0;
+  const ring=document.createElement('div'),dot=document.createElement('div'),trail=document.createElement('div');
+  ring.className='b4-cursor-ring';dot.className='b4-cursor-dot';trail.className='b4-cursor-trail';
+  document.body.append(ring,trail,dot);
+  let x=-100,y=-100,rx=-100,ry=-100,tx=-100,ty=-100,raf=0,inside=false;
+
+  const frame=()=>{
+    rx+=(x-rx)*.28; ry+=(y-ry)*.28;
+    tx+=(x-tx)*.12; ty+=(y-ty)*.12;
+    ring.style.transform=`translate3d(${rx}px,${ry}px,0)`;
+    dot.style.transform=`translate3d(${x}px,${y}px,0)`;
+    trail.style.transform=`translate3d(${tx}px,${ty}px,0)`;
+    raf=requestAnimationFrame(frame);
+  };
+  const enter=e=>{
+    inside=true;
+    document.body.classList.add('b4-cursor-ready');
+    x=rx=e.clientX; y=ry=e.clientY; tx=ty=e.clientX;
+  };
   const move=e=>{
     x=e.clientX;y=e.clientY;
-    document.body.classList.add('b4-cursor-ready');
-    cancelAnimationFrame(raf);
-    raf=requestAnimationFrame(()=>{
-      rx+=(x-rx)*.42;ry+=(y-ry)*.42;
-      ring.style.transform=`translate3d(${rx}px,${ry}px,0)`;
-      dot.style.transform=`translate3d(${x}px,${y}px,0)`;
-    });
+    if(!inside) enter(e);
   };
-  const refreshHover=e=>{
-    const target=e.target?.closest?.('button,a,[role="button"],input,textarea,select,label,.clickable');
-    document.body.classList.toggle('b4-cursor-hover',!!target);
+  const leave=e=>{
+    if(!e.relatedTarget){
+      inside=false;
+      document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click');
+    }
   };
+  const hover=e=>{
+    const t=e.target?.closest?.('button,a,[role="button"],input,textarea,select,label,.clickable');
+    document.body.classList.toggle('b4-cursor-hover',!!t);
+  };
+
+  document.addEventListener('pointerenter',enter,{passive:true});
   document.addEventListener('pointermove',move,{passive:true});
-  document.addEventListener('pointerover',refreshHover,{passive:true});
-  document.addEventListener('pointerout',e=>{if(e.relatedTarget)refreshHover(e);},{passive:true});
+  document.addEventListener('pointerover',hover,{passive:true});
+  document.addEventListener('pointerout',e=>{if(e.relatedTarget)hover(e);},{passive:true});
+  document.addEventListener('pointerleave',leave,{passive:true});
   window.addEventListener('blur',()=>document.body.classList.remove('b4-cursor-hover','b4-cursor-click'));
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)document.body.classList.remove('b4-cursor-click')});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click')});
   document.addEventListener('pointerdown',()=>{
     document.body.classList.add('b4-cursor-click');
     clearTimeout(window.__b4CursorClick);
-    window.__b4CursorClick=setTimeout(()=>document.body.classList.remove('b4-cursor-click'),180);
+    window.__b4CursorClick=setTimeout(()=>document.body.classList.remove('b4-cursor-click'),220);
   },{passive:true});
+  frame();
 })();
+
