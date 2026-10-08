@@ -2099,3 +2099,10 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
     visibility:visible;
   }
 }
+
+/* ===== REMOVE LIGHT WHITE GLOW FROM DARK MODE ===== */
+[data-theme="dark"] body,
+body.dark,
+.dark body{
+  background:var(--bg)!important;
+}
