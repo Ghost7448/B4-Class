@@ -1697,75 +1697,103 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
 /* ===== PREMIUM CUSTOM CURSOR ===== */
 (function(){
   if(!window.matchMedia||!window.matchMedia('(pointer:fine)').matches)return;
-  const ring=document.createElement('div'),dot=document.createElement('div'),trail=document.createElement('div');
-  ring.className='b4-cursor-ring';dot.className='b4-cursor-dot';trail.className='b4-cursor-trail';
+
+  const ring=document.createElement('div');
+  const dot=document.createElement('div');
+  const trail=document.createElement('div');
+  ring.className='b4-cursor-ring';
+  dot.className='b4-cursor-dot';
+  trail.className='b4-cursor-trail';
   document.body.append(ring,trail,dot);
-  let x=-100,y=-100,rx=-100,ry=-100,tx=-100,ty=-100,raf=0,inside=false;
+
+  let x=-100,y=-100,rx=-100,ry=-100,tx=-100,ty=-100;
+  let inside=false,raf=0,scrollTimer=0;
+
+  const setPos=(el,px,py)=>{
+    el.style.transform=`translate3d(${px}px,${py}px,0)`;
+  };
 
   const frame=()=>{
-    rx+=(x-rx)*.28; ry+=(y-ry)*.28;
-    tx+=(x-tx)*.12; ty+=(y-ty)*.12;
-    ring.style.transform=`translate3d(${rx}px,${ry}px,0)`;
-    dot.style.transform=`translate3d(${x}px,${y}px,0)`;
-    trail.style.transform=`translate3d(${tx}px,${ty}px,0)`;
+    rx+=(x-rx)*.28;
+    ry+=(y-ry)*.28;
+    tx+=(x-tx)*.12;
+    ty+=(y-ty)*.12;
+
+    setPos(ring,rx,ry);
+    setPos(dot,x,y);
+    setPos(trail,tx,ty);
     raf=requestAnimationFrame(frame);
   };
+
+  const isScrollbar=e=>{
+    const el=document.elementFromPoint(e.clientX,e.clientY);
+    if(!el)return false;
+    let n=el;
+    while(n&&n!==document.body){
+      const r=n.getBoundingClientRect();
+      if(n.scrollHeight>n.clientHeight+2 && e.clientX>=r.right-10 && e.clientX<=r.right+2)return true;
+      if(n.scrollWidth>n.clientWidth+2 && e.clientY>=r.bottom-10 && e.clientY<=r.bottom+2)return true;
+      n=n.parentElement;
+    }
+    return false;
+  };
+
+  const update=e=>{
+    x=e.clientX;
+    y=e.clientY;
+    if(!inside){
+      inside=true;
+      rx=tx=x;
+      ry=ty=y;
+      document.body.classList.add('b4-cursor-ready');
+    }
+
+    const target=e.target?.closest?.('button,a,[role="button"],input,textarea,select,label,.clickable');
+    const overScrollbar=isScrollbar(e);
+
+    /* Scrollbar behaves like a normal interactive/hover target. */
+    document.body.classList.toggle('b4-cursor-hover',!!target||overScrollbar);
+  };
+
   const enter=e=>{
     inside=true;
+    x=rx=tx=e.clientX;
+    y=ry=ty=e.clientY;
     document.body.classList.add('b4-cursor-ready');
-    x=rx=e.clientX; y=ry=e.clientY; tx=ty=e.clientX;
+    update(e);
   };
-  const move=e=>{
-    x=e.clientX;y=e.clientY;
-    if(!inside) enter(e);
-    const el=document.elementFromPoint(e.clientX,e.clientY);
-    let onScroll=false;
-    if(el){
-      let n=el;
-      while(n&&n!==document.body){
-        const r=n.getBoundingClientRect();
-        const hasV=n.scrollHeight>n.clientHeight+2;
-        const hasH=n.scrollWidth>n.clientWidth+2;
-        if((hasV&&e.clientX>=r.right-9&&e.clientX<=r.right+1) ||
-           (hasH&&e.clientY>=r.bottom-9&&e.clientY<=r.bottom+1)){
-          onScroll=true;
-          break;
-        }
-        n=n.parentElement;
-      }
-    }
-    document.body.classList.toggle('b4-cursor-scrollbar',onScroll);
-  };
+
   const leave=e=>{
     if(!e.relatedTarget){
       inside=false;
-      document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click');
+      document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
     }
-  };
-  const hover=e=>{
-    const t=e.target?.closest?.('button,a,[role="button"],input,textarea,select,label,.clickable');
-    document.body.classList.toggle('b4-cursor-hover',!!t);
   };
 
   document.addEventListener('pointerenter',enter,{passive:true});
-  document.addEventListener('pointermove',move,{passive:true});
-  document.addEventListener('pointerover',hover,{passive:true});
-  document.addEventListener('pointerout',e=>{if(e.relatedTarget)hover(e);},{passive:true});
+  document.addEventListener('pointermove',update,{passive:true});
   document.addEventListener('pointerleave',leave,{passive:true});
-  window.addEventListener('blur',()=>document.body.classList.remove('b4-cursor-hover','b4-cursor-click','b4-cursor-scrollbar'));
-  document.addEventListener('pointerdown',e=>{
-    if(document.body.classList.contains('b4-cursor-scrollbar')){
-      document.body.classList.add('b4-cursor-scroll-drag');
-      clearTimeout(window.__b4CursorScrollDrag);
-      window.__b4CursorScrollDrag=setTimeout(()=>document.body.classList.remove('b4-cursor-scroll-drag'),260);
-    }
+
+  /* Wheel scrolling changes the cursor into a vertical scrolling shape. */
+  document.addEventListener('wheel',()=>{
+    document.body.classList.add('b4-cursor-scroll');
+    clearTimeout(scrollTimer);
+    scrollTimer=setTimeout(()=>document.body.classList.remove('b4-cursor-scroll'),480);
   },{passive:true});
-  document.addEventListener('visibilitychange',()=>{if(document.hidden)document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scrollbar','b4-cursor-scroll-drag')});
+
   document.addEventListener('pointerdown',()=>{
     document.body.classList.add('b4-cursor-click');
     clearTimeout(window.__b4CursorClick);
     window.__b4CursorClick=setTimeout(()=>document.body.classList.remove('b4-cursor-click'),220);
   },{passive:true});
+
+  window.addEventListener('blur',()=>{
+    document.body.classList.remove('b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+  });
+
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+  });
+
   frame();
 })();
-
