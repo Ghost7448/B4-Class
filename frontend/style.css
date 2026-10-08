@@ -2106,3 +2106,13 @@ body.dark,
 .dark body{
   background:var(--bg)!important;
 }
+
+/* ===== PURPLE TEXT SELECTION ===== */
+::selection{
+  background:#7c3aed!important;
+  color:#fff!important;
+}
+::-moz-selection{
+  background:#7c3aed!important;
+  color:#fff!important;
+}
