@@ -2116,3 +2116,15 @@ body.dark,
   background:#7c3aed!important;
   color:#fff!important;
 }
+
+
+/* ===== DETAILED LOG VIEWER ===== */
+.log-row-clickable{cursor:pointer;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease}
+.log-row-clickable:hover{transform:translateY(-1px);border-color:#a855f755;box-shadow:0 0 22px #7c3aed18}
+.log-open{font-size:26px;color:#c084fc;opacity:.7;align-self:center}
+.log-detail-modal{display:grid;gap:12px;max-height:min(70vh,620px);overflow:auto;padding-right:4px}
+.log-detail-meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+.log-detail-meta span,.log-detail-meta b{padding:7px 10px;border-radius:10px;background:#7c3aed12;border:1px solid #a855f733}
+.log-detail-field{padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.log-detail-field small{display:block;color:#c084fc;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+.log-detail-field div{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55}
