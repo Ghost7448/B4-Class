@@ -2096,3 +2096,132 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   window.addEventListener('focus',force,{passive:true});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)force()},{passive:true});
 })();
+
+
+/* ===== B4 FULL CUSTOM PICKERS: CALENDAR, TIME, SELECTS ===== */
+(function(){
+  const $one=(root,sel)=>root.querySelector(sel);
+  const pad=n=>String(n).padStart(2,'0');
+  const isRTL=()=>document.documentElement.dir==='rtl'||document.body.classList.contains('ar');
+  const theme=()=>document.documentElement.dataset.theme||document.body.dataset.theme||(document.documentElement.classList.contains('dark')||document.body.classList.contains('dark')?'dark':'light');
+  const monthNames=()=>new Intl.DateTimeFormat(S.lang==='ar'?'ar-EG':'en-US',{month:'long'}); 
+  const dateLabel=(iso,withTime)=>{
+    if(!iso)return S.lang==='ar'?'اختار التاريخ':'Choose date';
+    const d=new Date(iso.length===10?iso+'T12:00:00':iso);
+    if(Number.isNaN(d.getTime()))return iso;
+    const date=new Intl.DateTimeFormat(S.lang==='ar'?'ar-EG':'en-GB',{day:'2-digit',month:'short',year:'numeric'}).format(d);
+    return withTime?date+' · '+pad(d.getHours())+':'+pad(d.getMinutes()):date;
+  };
+  const timeLabel=iso=>{
+    if(!iso)return S.lang==='ar'?'اختار الوقت':'Choose time';
+    const p=iso.split(':');return (p[0]||'00')+':'+(p[1]||'00');
+  };
+  function emit(input){
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+  function removePopup(){document.querySelectorAll('.b4-picker-popover,.b4-select-menu').forEach(x=>x.remove());document.querySelectorAll('.b4-picker-open,.b4-select-open').forEach(x=>x.classList.remove('b4-picker-open','b4-select-open'));}
+  function positionPopup(pop,anchor){
+    const r=anchor.getBoundingClientRect(),gap=8;
+    pop.style.visibility='hidden';pop.style.display='block';
+    const w=Math.min(Math.max(pop.offsetWidth,260),window.innerWidth-24);
+    pop.style.width=w+'px';
+    const h=pop.offsetHeight;
+    let left=Math.max(12,Math.min(window.innerWidth-w-12,isRTL()?r.right-w:r.left));
+    let top=r.bottom+gap;
+    if(top+h>window.innerHeight-12&&r.top-h-gap>12)top=r.top-h-gap;
+    top=Math.max(12,Math.min(top,window.innerHeight-h-12));
+    pop.style.left=left+'px';pop.style.top=top+'px';pop.style.visibility='visible';
+  }
+  function enhanceDate(input){
+    if(input.dataset.b4Picker==='1')return;
+    const type=input.type;
+    if(!['date','datetime-local','time'].includes(type))return;
+    input.dataset.b4Picker='1';input.dataset.b4NativeType=type;
+    const wrap=document.createElement('div');wrap.className='b4-date-wrap';wrap.dataset.kind=type;
+    input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);
+    input.classList.add('b4-date-source');
+    input.setAttribute('aria-hidden','true');input.tabIndex=-1;
+    const button=document.createElement('button');button.type='button';button.className='b4-date-trigger';button.setAttribute('aria-haspopup','dialog');
+    button.innerHTML='<span class="b4-date-icon" aria-hidden="true">'+(type==='time'?'◷':'▦')+'</span><span class="b4-date-value"></span><span class="b4-date-chevron">⌄</span>';
+    wrap.appendChild(button);
+    const valueNode=button.querySelector('.b4-date-value');
+    const refresh=()=>{valueNode.textContent=type==='time'?timeLabel(input.value):dateLabel(input.value,type==='datetime-local');button.classList.toggle('is-empty',!input.value);button.setAttribute('aria-label',valueNode.textContent)};
+    refresh();
+    input.addEventListener('change',refresh);
+    const close=()=>{document.querySelectorAll('.b4-picker-popover').forEach(x=>x.remove());button.classList.remove('b4-picker-open')};
+    button.addEventListener('click',()=>{
+      const existing=wrap.querySelector('.b4-picker-popover');
+      if(existing){close();return}
+      removePopup();button.classList.add('b4-picker-open');
+      const current=input.value||'';
+      let date=current?(type==='time'?new Date():new Date(current.length===10?current+'T12:00:00':current)):new Date();
+      if(Number.isNaN(date.getTime()))date=new Date();
+      let year=date.getFullYear(),month=date.getMonth(),selectedDate=current?(type==='time'?'':current.slice(0,10)):'';
+      let hour=current&&type!=='date'?Number((type==='time'?current:current.slice(11,16)).slice(0,2)):date.getHours();
+      let minute=current&&type!=='date'?Number((type==='time'?current:current.slice(11,16)).slice(3,5)):Math.ceil(date.getMinutes()/5)*5%60;
+      const pop=document.createElement('div');pop.className='b4-picker-popover';pop.setAttribute('role','dialog');pop.setAttribute('aria-label',type==='time'?'Time picker':'Date and time picker');
+      const render=()=>{
+        const first=new Date(year,month,1),start=first.getDay(),days=new Date(year,month+1,0).getDate();
+        const week=S.lang==='ar'?['ح','ن','ث','ر','خ','ج','س']:['Su','Mo','Tu','We','Th','Fr','Sa'];
+        const title=new Intl.DateTimeFormat(S.lang==='ar'?'ar-EG':'en-US',{month:'long',year:'numeric'}).format(first);
+        const calendar=type==='time'?'':('<div class="b4-cal-head"><button type="button" class="b4-cal-nav" data-month="-1" aria-label="Previous month">‹</button><b>'+title+'</b><button type="button" class="b4-cal-nav" data-month="1" aria-label="Next month">›</button></div><div class="b4-cal-week">'+week.map(x=>'<span>'+x+'</span>').join('')+'</div><div class="b4-cal-days">'+Array.from({length:start},()=>'<span class="b4-cal-blank"></span>').join('')+Array.from({length:days},(_,i)=>{const day=i+1,iso=year+'-'+pad(month+1)+'-'+pad(day);return '<button type="button" class="b4-cal-day'+(iso===selectedDate?' selected':'')+(iso===new Date().getFullYear()+'-'+pad(new Date().getMonth()+1)+'-'+pad(new Date().getDate())?' today':'')+'" data-day="'+iso+'">'+day+'</button>'}).join('')+'</div>');
+        const time=(type==='date'?'':'<div class="b4-time-block"><div class="b4-time-title">'+(S.lang==='ar'?'الوقت':'Time')+'</div><div class="b4-time-controls"><div class="b4-time-unit"><button type="button" data-time="hour" data-step="1" aria-label="Increase hour">⌃</button><input aria-label="Hour" class="b4-time-hour" type="number" min="0" max="23" value="'+pad(hour)+'"><button type="button" data-time="hour" data-step="-1" aria-label="Decrease hour">⌄</button></div><span class="b4-time-colon">:</span><div class="b4-time-unit"><button type="button" data-time="minute" data-step="5" aria-label="Increase minute">⌃</button><input aria-label="Minute" class="b4-time-minute" type="number" min="0" max="59" step="1" value="'+pad(minute)+'"><button type="button" data-time="minute" data-step="-5" aria-label="Decrease minute">⌄</button></div></div></div>');
+        pop.innerHTML=calendar+time+'<div class="b4-picker-actions"><button type="button" class="b4-picker-clear">'+(S.lang==='ar'?'مسح':'Clear')+'</button><span></span><button type="button" class="b4-picker-today">'+(S.lang==='ar'?'الآن':'Now')+'</button><button type="button" class="b4-picker-done">'+(S.lang==='ar'?'تم':'Done')+'</button></div>';
+        pop.querySelectorAll('[data-month]').forEach(b=>b.addEventListener('click',()=>{month+=Number(b.dataset.month);if(month<0){month=11;year--}if(month>11){month=0;year++}render();positionPopup(pop,button)}));
+        pop.querySelectorAll('[data-day]').forEach(b=>b.addEventListener('click',()=>{selectedDate=b.dataset.day;if(type==='date'){input.value=selectedDate;emit(input);close()}else{pop.querySelectorAll('[data-day]').forEach(x=>x.classList.toggle('selected',x===b))}}));
+        pop.querySelectorAll('[data-time]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.time,step=Number(b.dataset.step);if(k==='hour')hour=(hour+step+24)%24;else minute=(minute+step+60)%60;render();positionPopup(pop,button)}));
+        pop.querySelector('.b4-time-hour')?.addEventListener('change',e=>{hour=Math.max(0,Math.min(23,Number(e.target.value)||0));e.target.value=pad(hour)});
+        pop.querySelector('.b4-time-minute')?.addEventListener('change',e=>{minute=Math.max(0,Math.min(59,Number(e.target.value)||0));e.target.value=pad(minute)});
+        pop.querySelector('.b4-picker-clear').addEventListener('click',()=>{input.value='';emit(input);close()});
+        pop.querySelector('.b4-picker-today').addEventListener('click',()=>{const now=new Date();year=now.getFullYear();month=now.getMonth();selectedDate=year+'-'+pad(month+1)+'-'+pad(now.getDate());hour=now.getHours();minute=now.getMinutes();if(type==='date'){input.value=selectedDate;emit(input);close()}else{render();positionPopup(pop,button)}});
+        pop.querySelector('.b4-picker-done').addEventListener('click',()=>{
+          if(type==='time')input.value=pad(hour)+':'+pad(minute);
+          else if(type==='datetime-local')input.value=(selectedDate||year+'-'+pad(month+1)+'-'+pad(date.getDate()))+'T'+pad(hour)+':'+pad(minute);
+          emit(input);close();
+        });
+      };
+      document.body.appendChild(pop);render();positionPopup(pop,button);
+    });
+    input.addEventListener('input',refresh);
+  }
+  function enhanceSelect(select){
+    if(select.dataset.b4Select==='1'||select.multiple||select.size>1)return;
+    select.dataset.b4Select='1';
+    const wrap=document.createElement('div');wrap.className='b4-select-wrap';
+    select.parentNode.insertBefore(wrap,select);wrap.appendChild(select);select.classList.add('b4-select-source');
+    const button=document.createElement('button');button.type='button';button.className='b4-select-trigger';button.setAttribute('aria-haspopup','listbox');
+    button.innerHTML='<span class="b4-select-label"></span><span class="b4-select-chevron">⌄</span>';wrap.appendChild(button);
+    const label=button.querySelector('.b4-select-label');
+    const refresh=()=>{const o=select.options[select.selectedIndex];label.textContent=o?o.textContent.trim():(S.lang==='ar'?'اختار':'Choose');button.classList.toggle('is-empty',!select.value);button.disabled=select.disabled;};
+    refresh();select.addEventListener('change',refresh);
+    button.addEventListener('click',()=>{
+      const old=wrap.querySelector('.b4-select-menu');if(old){removePopup();return}
+      removePopup();
+      const menu=document.createElement('div');menu.className='b4-select-menu';menu.setAttribute('role','listbox');
+      const build=()=>{
+        menu.innerHTML='';
+        Array.from(select.options).forEach((o,i)=>{
+          if(o.hidden)return;
+          const opt=document.createElement('button');opt.type='button';opt.className='b4-select-option'+(o.selected?' selected':'')+(o.disabled?' disabled':'');opt.textContent=o.textContent.trim();opt.disabled=o.disabled;opt.setAttribute('role','option');opt.setAttribute('aria-selected',o.selected?'true':'false');
+          opt.addEventListener('click',()=>{select.selectedIndex=i;emit(select);removePopup();button.focus()});menu.appendChild(opt);
+        });
+      };
+      build();document.body.appendChild(menu);menu.classList.add('b4-select-menu');positionPopup(menu,button);button.classList.add('b4-select-open');
+      menu.addEventListener('keydown',e=>{if(e.key==='Escape'){removePopup();button.focus()}});
+    });
+  }
+  function enhanceAll(root=document){
+    root.querySelectorAll?.('input[type="date"],input[type="datetime-local"],input[type="time"]').forEach(enhanceDate);
+    root.querySelectorAll?.('select').forEach(enhanceSelect);
+  }
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.b4-picker-popover,.b4-date-wrap,.b4-select-menu,.b4-select-wrap'))removePopup();
+  });
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')removePopup()});
+  window.addEventListener('resize',()=>{document.querySelectorAll('.b4-picker-popover,.b4-select-menu').forEach(pop=>{const anchor=document.querySelector('.b4-picker-open,.b4-select-open');if(anchor)positionPopup(pop,anchor)})});
+  window.addEventListener('scroll',()=>{document.querySelectorAll('.b4-picker-popover,.b4-select-menu').forEach(pop=>{const anchor=document.querySelector('.b4-picker-open,.b4-select-open');if(anchor)positionPopup(pop,anchor)})},{passive:true,capture:true});
+  enhanceAll();
+  new MutationObserver(records=>records.forEach(r=>r.addedNodes.forEach(n=>{if(n.nodeType===1){if(n.matches?.('input[type="date"],input[type="datetime-local"],input[type="time"],select'))enhanceAll(n.parentNode||document);else enhanceAll(n)}}))).observe(document.body,{childList:true,subtree:true});
+  window.B4RefreshCustomControls=enhanceAll;
+})();
