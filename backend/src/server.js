@@ -493,6 +493,25 @@ const siteLockGuard=async(req,res,next)=>{
     return res.status(503).send(lockedSiteHtml(rows[0].lock_message));
   }catch(e){console.error('Site lock check failed:',e.message);return next();}
 };
+app.get('/api/site/status', async(req,res)=>{
+  try{
+    const [rows]=await q('SELECT is_locked,lock_message FROM site_settings WHERE id=1 LIMIT 1');
+    const site=rows[0]||{is_locked:0,lock_message:''};
+    res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.json({
+      locked:Number(site.is_locked)===1,
+      message:site.lock_message||'',
+      isSuperAdmin:!!(req.session?.userId && await (async()=>{
+        const [u]=await q('SELECT is_super_admin,status FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+        return u[0]&&u[0].status==='ACTIVE'&&Number(u[0].is_super_admin)===1;
+      })())
+    });
+  }catch(e){
+    console.error('Site status check failed:',e.message);
+    res.status(500).json({locked:false,message:''});
+  }
+});
+
 app.use(siteLockGuard);
 
 // Push a single lightweight "data changed" event after successful write requests.
