@@ -1939,3 +1939,55 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
     cursor:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=") 0 0, auto!important;
   }
 }
+
+
+/* ===== KILL ALL NATIVE SCROLLBARS ===== */
+/* Do not let Chromium/Windows create a native scrollbar hit-area.
+   Scrolling still works normally with wheel/touch/keyboard. */
+@media(pointer:fine){
+  html,
+  body,
+  *,
+  *::before,
+  *::after{
+    scrollbar-width:none!important;
+    -ms-overflow-style:none!important;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  *::-webkit-scrollbar{
+    width:0!important;
+    height:0!important;
+    display:none!important;
+    background:transparent!important;
+  }
+
+  html::-webkit-scrollbar-thumb,
+  body::-webkit-scrollbar-thumb,
+  *::-webkit-scrollbar-thumb,
+  html::-webkit-scrollbar-track,
+  body::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-track{
+    width:0!important;
+    height:0!important;
+    display:none!important;
+    background:transparent!important;
+    border:0!important;
+  }
+
+  /* The custom purple nav indicator is decoration only. */
+  .b4-custom-scrollbar,
+  .b4-custom-scrollbar *,
+  .b4-custom-scrollbar-thumb{
+    pointer-events:none!important;
+  }
+
+  /* Keep the custom pointer above every page element. */
+  .b4-cursor-ring,
+  .b4-cursor-dot,
+  .b4-cursor-trail{
+    z-index:2147483647!important;
+    pointer-events:none!important;
+  }
+}
