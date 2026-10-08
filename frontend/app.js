@@ -1893,3 +1893,15 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   document.documentElement.style.cursor='none';
   document.body.style.cursor='none';
 })();
+
+/* ===== TRANSPARENT NATIVE POINTER FALLBACK ===== */
+(function(){
+  if(!window.matchMedia||!window.matchMedia('(pointer:fine)').matches)return;
+  const transparentCursor="url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1' height='1' viewBox='0 0 1 1'%3E%3Crect width='1' height='1' fill='transparent'/%3E%3C/svg%3E\") 0 0, none";
+  const apply=()=>{
+    document.documentElement.style.setProperty('cursor',transparentCursor,'important');
+    document.body.style.setProperty('cursor',transparentCursor,'important');
+  };
+  apply();
+  new MutationObserver(apply).observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeFilter:['style','class']});
+})();
