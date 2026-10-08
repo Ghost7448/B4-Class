@@ -2084,3 +2084,18 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
   .app::before,.app::after{opacity:.08;filter:blur(58px)}
   main::before,main::after{opacity:.2}
 }
+
+/* ===== CURSOR HIDE OUTSIDE PAGE ===== */
+@media(pointer:fine){
+  body.b4-cursor-out .b4-cursor-ring,
+  body.b4-cursor-out .b4-cursor-dot,
+  body.b4-cursor-out .b4-cursor-trail{
+    opacity:0!important;
+    visibility:hidden!important;
+  }
+  body.b4-cursor-ready:not(.b4-cursor-out) .b4-cursor-ring,
+  body.b4-cursor-ready:not(.b4-cursor-out) .b4-cursor-dot,
+  body.b4-cursor-ready:not(.b4-cursor-out) .b4-cursor-trail{
+    visibility:visible;
+  }
+}
