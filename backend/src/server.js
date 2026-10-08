@@ -1493,6 +1493,20 @@ app.get('/api/resources/files/:id', requireAuth, async(req,res)=>{
   res.setHeader('Content-Disposition','inline; filename*=UTF-8\'\''+encodeURIComponent(rows[0].filename));
   res.send(rows[0].data);
 });
+app.delete('/api/admin/resources/:id/file', requirePermission('MANAGE_RESOURCES'), async(req,res)=>{
+  const id=Number(req.params.id);
+  if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid resource id'});
+  try{
+    await assertTeacherOwner(req,'resources',id);
+    const [resources]=await q("SELECT id,url FROM resources WHERE id=? AND class_name='B4' LIMIT 1",[id]);
+    if(!resources[0])return res.status(404).json({error:'Resource not found'});
+    const [removed]=await q('DELETE FROM resource_files WHERE resource_id=?',[id]);
+    await q("UPDATE resources SET resource_type=CASE WHEN COALESCE(url,'')<>'' THEN 'LINK' ELSE 'NOTE' END,file_url=NULL WHERE id=? AND class_name='B4'",[id]);
+    await audit(req,'RESOURCE_FILE_DELETED','resource',id,{removed_files:removed.affectedRows});
+    res.json({ok:true});
+  }catch(e){res.status(e.statusCode||500).json({error:e.message||'Could not remove resource file'});}
+});
+
 app.post('/api/admin/resources/:id/pdf', requirePermission('MANAGE_RESOURCES'), pdfUpload.single('file'), async(req,res)=>{
   const id=Number(req.params.id);
   if(!Number.isSafeInteger(id)||!req.file) return res.status(400).json({error:'Valid resource id and PDF file are required'});
