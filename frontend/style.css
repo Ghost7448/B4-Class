@@ -1991,3 +1991,73 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
     pointer-events:none!important;
   }
 }
+
+
+/* ===== SUBTLE AMBIENT BACKGROUND ===== */
+@media (prefers-reduced-motion:no-preference){
+  body{
+    position:relative;
+    isolation:isolate;
+    overflow-x:hidden;
+  }
+
+  body::before,
+  body::after{
+    content:"";
+    position:fixed;
+    width:42vw;
+    height:42vw;
+    max-width:560px;
+    max-height:560px;
+    min-width:260px;
+    min-height:260px;
+    border-radius:50%;
+    pointer-events:none;
+    z-index:-1;
+    filter:blur(70px);
+    opacity:.16;
+    will-change:transform;
+  }
+
+  body::before{
+    left:-13vw;
+    top:8vh;
+    background:radial-gradient(circle,var(--p2) 0%,transparent 68%);
+    animation:b4AmbientOne 18s ease-in-out infinite alternate;
+  }
+
+  body::after{
+    right:-14vw;
+    bottom:2vh;
+    background:radial-gradient(circle,var(--p) 0%,transparent 68%);
+    animation:b4AmbientTwo 22s ease-in-out infinite alternate;
+  }
+
+  @keyframes b4AmbientOne{
+    0%{transform:translate3d(0,0,0) scale(1)}
+    50%{transform:translate3d(7vw,5vh,0) scale(1.06)}
+    100%{transform:translate3d(2vw,11vh,0) scale(.96)}
+  }
+
+  @keyframes b4AmbientTwo{
+    0%{transform:translate3d(0,0,0) scale(1)}
+    50%{transform:translate3d(-6vw,-5vh,0) scale(1.05)}
+    100%{transform:translate3d(-2vw,-10vh,0) scale(.97)}
+  }
+}
+
+/* Keep the effect extra subtle on small screens. */
+@media (max-width:800px) and (prefers-reduced-motion:no-preference){
+  body::before,
+  body::after{
+    width:70vw;
+    height:70vw;
+    opacity:.10;
+    filter:blur(55px);
+  }
+}
+
+@media (prefers-reduced-motion:reduce){
+  body::before,
+  body::after{display:none!important}
+}
