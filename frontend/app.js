@@ -1879,3 +1879,17 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   init();
   new MutationObserver(init).observe(document.body,{childList:true,subtree:true});
 })();
+
+/* ===== FORCE NATIVE POINTER OFF ===== */
+(function(){
+  if(!window.matchMedia || !window.matchMedia('(pointer:fine)').matches)return;
+  const style=document.createElement('style');
+  style.id='b4-force-no-native-pointer';
+  style.textContent=`
+    html,html *,body,body *{cursor:none!important}
+    ::-webkit-scrollbar,::-webkit-scrollbar-thumb,::-webkit-scrollbar-track{cursor:none!important}
+  `;
+  document.head.appendChild(style);
+  document.documentElement.style.cursor='none';
+  document.body.style.cursor='none';
+})();
