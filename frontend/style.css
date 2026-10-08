@@ -2116,3 +2116,14 @@ body.dark,
   background:#7c3aed!important;
   color:#fff!important;
 }
+
+/* ===== GLOWING PURPLE TEXT ===== */
+.glow-purple-text{
+  color:#c084fc!important;
+  text-shadow:0 0 6px #a855f766,0 0 14px #7c3aed55;
+  animation:b4PurpleTextGlow 2.8s ease-in-out infinite alternate;
+}
+@keyframes b4PurpleTextGlow{
+  from{text-shadow:0 0 5px #a855f755,0 0 10px #7c3aed44}
+  to{text-shadow:0 0 8px #c084fc99,0 0 20px #7c3aed66}
+}
