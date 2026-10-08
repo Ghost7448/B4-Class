@@ -544,10 +544,15 @@ app.get('/api/live/stream',requireAuth,async(req,res)=>{
   res.flushHeaders?.();
   const client={res,userId:req.session.userId};
   globalStreams.add(client);
-  res.write('event: ready\ndata: {"ok":true}\n\n');
-  req.on('close',()=>globalStreams.delete(client));
+  const heartbeat=setInterval(()=>{
+    try{res.write(': heartbeat\\n\\n')}catch{}
+  },20000);
+  res.write('event: ready\\ndata: {"ok":true}\\n\\n');
+  req.on('close',()=>{
+    clearInterval(heartbeat);
+    globalStreams.delete(client);
+  });
 });
-
 app.get('/api/health', async (req, res) => {
   try {
     await q('SELECT 1');
