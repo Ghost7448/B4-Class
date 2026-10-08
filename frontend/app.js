@@ -360,7 +360,8 @@ function ensureGlobalRealtime(){
       window.globalRealtimeOnline=true;
       clearInterval(window.liveFallbackTimer);
     });
-    window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());\n    window.globalRealtimeStream.addEventListener('data-changed',()=>syncLogsLive());
+    window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
+    window.globalRealtimeStream.addEventListener('data-changed',()=>syncLogsLive());
     window.globalRealtimeStream.addEventListener('notification',(event)=>{
       try{
         const n=JSON.parse(event.data||'{}');
