@@ -1707,7 +1707,30 @@ function examAnswersLoop(id){
       }
     }catch{}
   };
-  window.examAnswersTimer=setInterval(sync,3000);
+  let missingAttemptNotified=false;
+  const check=async()=>{
+    try{
+      await sync();
+    }catch{}
+  };
+  // The answers endpoint returns 404 when this student has no submitted attempt.
+  // Stop polling in that case instead of spamming the console every 3 seconds.
+  const originalApi=api;
+  window.examAnswersTimer=setInterval(async()=>{
+    if(S.view!=='exam-answers'||Number(S.examAnswers?.examId)!==Number(id)){clearInterval(window.examAnswersTimer);return}
+    try{
+      const d=await originalApi('/api/exams/'+id+'/answers?_='+Date.now(),{cache:'no-store'});
+      const before=JSON.stringify(S.examAnswers?.questions||[]);
+      const after=JSON.stringify(d.questions||[]);
+      if(before!==after||Number(S.examAnswers?.score)!==Number(d.score)){S.examAnswers={...d,examId:id};render()}
+    }catch(e){
+      if(/404|No exam submission yet/i.test(String(e?.message||''))){
+        clearInterval(window.examAnswersTimer);
+        window.examAnswersTimer=null;
+        if(!missingAttemptNotified){missingAttemptNotified=true;toast('No submitted exam answers are available yet.')}
+      }
+    }
+  },3000);
 }
 function examResultV(){
   const r=S.examResult||{};
