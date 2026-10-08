@@ -2127,3 +2127,18 @@ body.dark,
   from{text-shadow:0 0 5px #a855f755,0 0 10px #7c3aed44}
   to{text-shadow:0 0 8px #c084fc99,0 0 20px #7c3aed66}
 }
+
+/* ===== DASHBOARD HERO GLOWING PURPLE TEXT ===== */
+.hero h1{
+  color:#d8b4fe!important;
+  text-shadow:0 0 7px #c084fcaa,0 0 18px #a855f777,0 0 32px #7c3aed44;
+  animation:b4DashboardTitleGlow 2.8s ease-in-out infinite alternate;
+}
+.hero .eyebrow{
+  color:#c084fc!important;
+  text-shadow:0 0 7px #a855f799,0 0 16px #7c3aed55;
+}
+@keyframes b4DashboardTitleGlow{
+  from{text-shadow:0 0 6px #c084fc88,0 0 15px #a855f755,0 0 26px #7c3aed33}
+  to{text-shadow:0 0 9px #e9d5ffaa,0 0 22px #a855f799,0 0 38px #7c3aed55}
+}
