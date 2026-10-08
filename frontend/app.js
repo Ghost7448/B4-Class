@@ -1755,3 +1755,18 @@ window.addEventListener('beforeunload',()=>clearInterval(window.examTimer));
 document.addEventListener('DOMContentLoaded',async()=>{
 const params=new URLSearchParams(location.search);const requestedView=params.get('view');const requestedId=Number(params.get('id')||0);if(['dashboard','students','teachers','subjects','schedule','assignments','resources','exams','announcements','chat','teacherChat','admin','teacherCenter','settings','developers'].includes(requestedView))S.view=requestedView;
 setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=installB4;$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe();if(requestedView&&requestedId&&requestedView==='assignments')setTimeout(()=>openAssignment(requestedId),120);if(requestedView&&requestedId&&requestedView==='exams')setTimeout(()=>startExam(requestedId),120);startAssignmentCountdown()});
+
+
+/* ===== PREMIUM PRESS RIPPLE ===== */
+document.addEventListener('pointerdown',e=>{
+  const el=e.target.closest('button,a,.btn,[role="button"]');
+  if(!el)return;
+  const rect=el.getBoundingClientRect();
+  el.style.setProperty('--press-x',(e.clientX-rect.left)+'px');
+  el.style.setProperty('--press-y',(e.clientY-rect.top)+'px');
+  el.classList.remove('press-ripple');
+  void el.offsetWidth;
+  el.classList.add('press-ripple');
+  clearTimeout(el._pressRippleTimer);
+  el._pressRippleTimer=setTimeout(()=>el.classList.remove('press-ripple'),620);
+},{passive:true});
