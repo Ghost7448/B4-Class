@@ -1898,3 +1898,44 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
     margin:-9px 0 0 -9px!important;
   }
 }
+
+
+/* ===== HARD TRANSPARENT POINTER FIX V2 ===== */
+@media(pointer:fine){
+  /* Real 1x1 transparent PNG cursor. More reliable than cursor:none
+     on Chromium/Windows scrollbar rendering. */
+  html,
+  html *,
+  body,
+  body *,
+  nav#nav,
+  nav#nav *{
+    cursor:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=") 0 0, auto!important;
+  }
+
+  /* Never let the browser create an interactive native scrollbar here. */
+  nav#nav{
+    scrollbar-width:none!important;
+    -ms-overflow-style:none!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+  }
+
+  nav#nav::-webkit-scrollbar,
+  nav#nav::-webkit-scrollbar-thumb,
+  nav#nav::-webkit-scrollbar-track{
+    width:0!important;
+    height:0!important;
+    display:none!important;
+    background:transparent!important;
+    cursor:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=") 0 0, auto!important;
+  }
+
+  /* The purple scrollbar is decoration only; pointer stays owned by nav. */
+  .b4-custom-scrollbar,
+  .b4-custom-scrollbar *,
+  .b4-custom-scrollbar-thumb{
+    pointer-events:none!important;
+    cursor:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=") 0 0, auto!important;
+  }
+}
