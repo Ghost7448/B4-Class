@@ -2157,7 +2157,7 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
       const current=input.value||'';
       let date=current?(type==='time'?new Date():new Date(current.length===10?current+'T12:00:00':current)):new Date();
       if(Number.isNaN(date.getTime()))date=new Date();
-      let year=date.getFullYear(),month=date.getMonth(),selectedDate=current?(type==='time'?'':current.slice(0,10)):'';
+      let year=date.getFullYear(),month=date.getMonth(),selectedDate=current?(type==='time'?'':current.slice(0,10)):(type==='datetime-local'?date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate()):'');
       let hour=current&&type!=='date'?Number((type==='time'?current:current.slice(11,16)).slice(0,2)):date.getHours();
       let minute=current&&type!=='date'?Number((type==='time'?current:current.slice(11,16)).slice(3,5)):Math.ceil(date.getMinutes()/5)*5%60;
       const pop=document.createElement('div');pop.className='b4-picker-popover';pop.setAttribute('role','dialog');pop.setAttribute('aria-label',type==='time'?'Time picker':'Date and time picker');
@@ -2193,7 +2193,7 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
     const button=document.createElement('button');button.type='button';button.className='b4-select-trigger';button.setAttribute('aria-haspopup','listbox');
     button.innerHTML='<span class="b4-select-label"></span><span class="b4-select-chevron">⌄</span>';wrap.appendChild(button);
     const label=button.querySelector('.b4-select-label');
-    const refresh=()=>{const o=select.options[select.selectedIndex];label.textContent=o?o.textContent.trim():(S.lang==='ar'?'اختار':'Choose');button.classList.toggle('is-empty',!select.value);button.disabled=select.disabled;};
+    const refresh=()=>{const o=select.options[select.selectedIndex];label.textContent=o?o.textContent.trim():(S.lang==='ar'?'اختار':'Choose');button.classList.toggle('is-empty',!select.value);button.disabled=select.disabled;wrap.hidden=select.hidden;};
     refresh();select.addEventListener('change',refresh);
     button.addEventListener('click',()=>{
       const old=wrap.querySelector('.b4-select-menu');if(old){removePopup();return}
@@ -2222,6 +2222,6 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   window.addEventListener('resize',()=>{document.querySelectorAll('.b4-picker-popover,.b4-select-menu').forEach(pop=>{const anchor=document.querySelector('.b4-picker-open,.b4-select-open');if(anchor)positionPopup(pop,anchor)})});
   window.addEventListener('scroll',()=>{document.querySelectorAll('.b4-picker-popover,.b4-select-menu').forEach(pop=>{const anchor=document.querySelector('.b4-picker-open,.b4-select-open');if(anchor)positionPopup(pop,anchor)})},{passive:true,capture:true});
   enhanceAll();
-  new MutationObserver(records=>records.forEach(r=>r.addedNodes.forEach(n=>{if(n.nodeType===1){if(n.matches?.('input[type="date"],input[type="datetime-local"],input[type="time"],select'))enhanceAll(n.parentNode||document);else enhanceAll(n)}}))).observe(document.body,{childList:true,subtree:true});
+  new MutationObserver(records=>records.forEach(r=>{if(r.type==='attributes'&&r.target.matches?.('select[data-b4-select="1"]')){const w=r.target.closest('.b4-select-wrap');if(w){w.hidden=r.target.hidden;const b=w.querySelector('.b4-select-trigger');if(b)b.disabled=r.target.disabled;}return}r.addedNodes.forEach(n=>{if(n.nodeType===1){if(n.matches?.('input[type="date"],input[type="datetime-local"],input[type="time"],select'))enhanceAll(n.parentNode||document);else enhanceAll(n)}})})).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','disabled']});
   window.B4RefreshCustomControls=enhanceAll;
 })();
