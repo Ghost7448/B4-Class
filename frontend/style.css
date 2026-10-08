@@ -2350,3 +2350,16 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
 .b4-time-unit button span{display:block;line-height:1;transform:scaleX(1.15)}
 .b4-time-unit button:hover{background:linear-gradient(135deg,#7c3aed,#a855f7)!important;color:#fff!important;transform:scale(1.035)}
 .b4-time-unit button:active{transform:scale(.96)}
+
+
+/* B4 branded number steppers (e.g. exam time limit) */
+.b4-number-wrap{position:relative;display:block;width:100%;min-width:0}
+.b4-number-source{padding-right:49px!important;-moz-appearance:textfield}
+.b4-number-source::-webkit-inner-spin-button,.b4-number-source::-webkit-outer-spin-button{-webkit-appearance:none!important;appearance:none!important;margin:0!important}
+.b4-number-controls{position:absolute;right:5px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:3px;padding:2px;border-left:1px solid var(--line);padding-left:5px}
+.ar .b4-number-controls,[dir="rtl"] .b4-number-controls{right:auto;left:5px;border-left:0;border-right:1px solid var(--line);padding-left:2px;padding-right:5px}
+.b4-number-step{display:grid!important;place-items:center!important;width:26px!important;height:17px!important;min-height:0!important;padding:0!important;border:1px solid transparent!important;border-radius:5px!important;background:var(--s2)!important;color:#a855f7!important;cursor:pointer!important;box-shadow:none!important;transition:background .15s,color .15s,border-color .15s,transform .15s!important}
+.b4-number-step svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.b4-number-step:hover:not(:disabled){background:linear-gradient(135deg,#7c3aed,#a855f7)!important;color:#fff!important;border-color:#a855f766!important}
+.b4-number-step:active:not(:disabled){transform:scale(.92)}
+.b4-number-step:disabled{opacity:.28;cursor:not-allowed!important}
