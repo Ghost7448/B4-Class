@@ -1763,16 +1763,16 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
     inside=true;
     x=rx=tx=e.clientX;
     y=ry=ty=e.clientY;
+    document.body.classList.remove('b4-cursor-out');
     document.body.classList.add('b4-cursor-ready');
     update(e);
   };
 
   const leave=e=>{
-    if(!e.relatedTarget){
-      inside=false;
-      document.documentElement.classList.remove('b4-no-native-cursor');
-      document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
-    }
+    inside=false;
+    document.documentElement.classList.remove('b4-no-native-cursor');
+    document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+    document.body.classList.add('b4-cursor-out');
   };
 
   document.addEventListener('pointerenter',enter,{passive:true});
@@ -1793,13 +1793,18 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   },{passive:true});
 
   window.addEventListener('blur',()=>{
-    document.body.classList.remove('b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+    inside=false;
+    document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+    document.body.classList.add('b4-cursor-out');
   });
 
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden){
       document.documentElement.classList.remove('b4-no-native-cursor');
       document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+      document.body.classList.add('b4-cursor-out');
+    }else{
+      document.body.classList.add('b4-cursor-out');
     }
   });
 
