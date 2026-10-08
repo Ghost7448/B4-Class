@@ -1341,31 +1341,55 @@ async function grantAdmin(e){e.preventDefault();const id=Number($('#adminUser').
 function logTime(value){
   const d=new Date(value);
   if(!Number.isFinite(d.getTime()))return String(value||'');
-  return d.toLocaleString('en-US',{timeZone:'Africa/Cairo',day:'2-digit',month:'2-digit',hour:'numeric',minute:'2-digit',hour12:true}).replace(',',' •');
+  return d.toLocaleString('en-US',{timeZone:'Africa/Cairo',day:'2-digit',month:'2-digit',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).replace(',',' •');
+}
+function parseLogDetails(value){
+  if(value&&typeof value==='object')return value;
+  try{const d=JSON.parse(value||'null');return d&&typeof d==='object'?d:{message:String(value||'')};}catch{return value?{message:String(value)}:{}}
+}
+function logIcon(x){
+  return x.kind==='security'?'⚿':/DELETE|REMOVED|FAILED|DENIED/i.test(x.action||'')?'✕':/CREATE|ADD|ACTIV/i.test(x.action||'')?'＋':/UPDATE|EDIT|CHANGED/i.test(x.action||'')?'✦':'•';
+}
+function logKey(x){return String(x.kind||'activity')+':'+String(x.id||'')}
+function logRowHTML(x){
+  const details=parseLogDetails(x.details);
+  const summary=details.message_content?String(details.message_content).slice(0,120):details.message?String(details.message).slice(0,120):'';
+  return '<article class="log-row log-row-clickable" data-log-key="'+esc(logKey(x))+'" onclick="openLogDetailsByKey(\''+esc(logKey(x))+'\')"><span class="log-icon">'+logIcon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+esc(x.kind||'activity')+'">'+esc(x.kind||'activity')+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(summary?'<div class="log-detail">'+esc(summary)+'</div>':'')+'</div><span class="log-open">›</span></article>';
+}
+function openLogDetailsByKey(key){
+  const x=(window.__b4LogRows||[]).find(v=>logKey(v)===String(key));
+  if(!x)return;
+  const d=parseLogDetails(x.details);
+  const isDeleted=/MESSAGE_DELETED/i.test(x.action||'')&&d.message_content!==undefined;
+  const field=(label,value)=>'<div class="log-detail-field"><small>'+esc(label)+'</small><b>'+esc(value===null||value===undefined||value===''?'—':String(value))+'</b></div>';
+  const ownerName=d.message_owner_name??d.message_owner??'Unknown';
+  const ownerId=d.message_owner_id??d.message_owner_user_id??'—';
+  const messageDate=d.message_created_at??d.created_at;
+  const deletedBy=d.deleted_by_name??d.deleted_by??x.actor_name??'Unknown';
+  const deletedById=d.deleted_by_id??d.deleted_by_user_id??x.actor_user_id??'—';
+  const deletionType=d.deletion_type??d.delete_type??'—';
+  let body='<div class="log-detail-grid">'+field('Action',x.action)+field('Log actor',x.actor_name||'System')+field('Date',logTime(x.created_at));
+  if(isDeleted){
+    body+=field('Message owner',ownerName)+field('Message owner ID',ownerId)+field('Message date',messageDate?logTime(messageDate):'—')+field('Deleted by',deletedBy)+field('Deleted by ID',deletedById)+field('Deletion type',deletionType)+'<div class="log-detail-content"><small>Message content</small><div>'+esc(d.message_content||'')+'</div></div>';
+  }
+  const hidden=['message_owner_name','message_owner','message_owner_id','message_owner_user_id','message_created_at','created_at','deleted_by_name','deleted_by','deleted_by_id','deleted_by_user_id','deletion_type','delete_type','message_content','message'];
+  const extra=Object.entries(d).filter(([k])=>!hidden.includes(k));
+  if(extra.length)body+='<div class="log-detail-content"><small>Additional details</small><div>'+extra.map(([k,v])=>'<b>'+esc(k.replaceAll('_',' '))+'</b>: '+esc(typeof v==='object'?JSON.stringify(v):String(v))).join('<br>')+'</div></div>';
+  body+='</div>';
+  modal('<div class="modalhead"><div><span class="eyebrow">LOG DETAILS</span><h2>'+esc(x.action||'EVENT')+'</h2></div><button class="close" onclick="b4Close()">×</button></div>'+body);
 }
 function openLogDetails(index){
   const rows=window.__b4LogRows||[],x=rows[index];
-  if(!x)return;
-  let d=x.details;
-  try{if(typeof d==='string')d=JSON.parse(d)}catch{}
-  const labels={message_id:'Message ID',message_owner:'Message owner',message_owner_user_id:'Owner User ID',message_content:'Message content',created_at:'Created at',deleted_at:'Deleted at',deleted_by:'Deleted by',deleted_by_user_id:'Executor User ID',deleted_by_role:'Executor role',delete_type:'Delete type',old_body:'Old content',new_body:'New content'};
-  const fields=[];
-  if(d&&typeof d==='object')Object.entries(d).forEach(([k,v])=>{
-    if(v===null||v===undefined||v==='')return;
-    fields.push('<div class="log-detail-field"><small>'+esc(labels[k]||k.replaceAll('_',' '))+'</small><div>'+esc(typeof v==='object'?JSON.stringify(v):String(v))+'</div></div>');
-  });
-  if(!fields.length)fields.push('<div class="empty">No additional details were recorded for this event.</div>');
-  modal('<div class="modalhead"><div><span class="eyebrow">'+esc(x.kind||'LOG')+'</span><h2>'+esc(x.action||'EVENT')+'</h2></div><button class="close" onclick="b4Close()">×</button></div><div class="log-detail-modal"><div class="log-detail-meta"><b>'+esc(x.actor_name||'System')+'</b><span>'+esc(logTime(x.created_at))+'</span><span>'+esc(x.entity_type||'system')+(x.entity_id?' #'+x.entity_id:'')+'</span></div>'+fields.join('')+'</div>');
+  if(x)openLogDetailsByKey(logKey(x));
 }
 async function loadLogs(){
   const r=$('#adminRoot');
+  if(!r)return;
   try{
     const d=await api('/api/admin/logs');
     const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
     window.__b4LogRows=rows;
-    const icon=x=>x.kind==='security'?'⚿':/DELETE|REMOVED|FAILED|DENIED/i.test(x.action||'')?'✕':/CREATE|ADD|ACTIV/i.test(x.action||'')?'＋':/UPDATE|EDIT|CHANGED/i.test(x.action||'')?'✦':'•';
-    const detail=x=>{let d=x.details;try{if(typeof d==='string')d=JSON.parse(d)}catch{}if(!d||typeof d!=='object')return '';const vals=[];if(d.message_content)vals.push('Message: '+String(d.message_content).slice(0,100));if(d.deleted_by)vals.push('By: '+d.deleted_by);if(d.delete_type)vals.push(d.delete_type);if(d.old_body)vals.push('Old: '+String(d.old_body).slice(0,70));if(d.new_body)vals.push('New: '+String(d.new_body).slice(0,70));return vals.join(' • ')};
-    r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Tap any event for full details</span></div><div class="log-list">'+(rows.map((x,i)=>'<article class="log-row log-row-clickable" style="--i:'+i+'" onclick="openLogDetails('+i+')"><span class="log-icon">'+icon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+x.kind+'">'+x.kind+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(detail(x)?'<div class="log-detail">'+esc(detail(x))+'</div>':'')+'</div><span class="log-open">›</span></article>').join('')||'<div class="empty">No activity yet.</div>')+'</div>';
+    r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Tap any event for full details</span></div><div class="log-list">'+(rows.map(logRowHTML).join('')||'<div class="empty">No activity yet.</div>')+'</div>';
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
 async function loadDevelopers(){
