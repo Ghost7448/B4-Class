@@ -1751,6 +1751,10 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
     const target=e.target?.closest?.('button,a,[role="button"],input,textarea,select,label,.clickable');
     const overScrollbar=isScrollbar(e);
 
+    /* Native scrollbar cursors cannot always be styled by ::-webkit-scrollbar,
+       so keep the document in cursor:none mode while the pointer is over it. */
+    document.documentElement.classList.toggle('b4-no-native-cursor',overScrollbar);
+
     /* Scrollbar behaves like a normal interactive/hover target. */
     document.body.classList.toggle('b4-cursor-hover',!!target||overScrollbar);
   };
@@ -1766,6 +1770,7 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   const leave=e=>{
     if(!e.relatedTarget){
       inside=false;
+      document.documentElement.classList.remove('b4-no-native-cursor');
       document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
     }
   };
@@ -1792,7 +1797,10 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   });
 
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden)document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+    if(document.hidden){
+      document.documentElement.classList.remove('b4-no-native-cursor');
+      document.body.classList.remove('b4-cursor-ready','b4-cursor-hover','b4-cursor-click','b4-cursor-scroll');
+    }
   });
 
   frame();
