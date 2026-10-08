@@ -1691,30 +1691,68 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
   }
 }
 
-/* ===== SCROLLBAR CURSOR INTERACTION ===== */
+
+/* ===== CURSOR + SCROLL POLISH ===== */
 @media(pointer:fine){
-  body.b4-cursor-scrollbar .b4-cursor-ring{
-    width:9px!important;
+  html,html *,body,body *{cursor:none!important}
+  html::-webkit-scrollbar,body::-webkit-scrollbar,
+  *::-webkit-scrollbar,
+  *::-webkit-scrollbar-thumb,
+  *::-webkit-scrollbar-track{cursor:none!important}
+
+  .b4-cursor-ring,.b4-cursor-dot,.b4-cursor-trail{
+    position:fixed!important;
+    top:0!important;
+    left:0!important;
+    pointer-events:none!important;
+    z-index:999999!important;
+    will-change:transform!important;
+  }
+
+  body.b4-cursor-scroll .b4-cursor-ring{
+    width:10px!important;
+    height:38px!important;
+    margin:-19px 0 0 -5px!important;
+    border-radius:999px!important;
+    border-width:0!important;
+    background:var(--p2)!important;
+    box-shadow:0 0 16px #a855f7cc,0 0 4px #fff9!important;
+  }
+
+  body.b4-cursor-scroll .b4-cursor-trail{
+    width:18px!important;
+    height:48px!important;
+    margin:-24px 0 0 -9px!important;
+    border-radius:999px!important;
+    background:#a855f733!important;
+    filter:blur(3px)!important;
+    opacity:1!important;
+  }
+
+  body.b4-cursor-scroll .b4-cursor-dot{
+    width:4px!important;
+    height:4px!important;
+    margin:-2px 0 0 -2px!important;
+    background:#fff!important;
+  }
+
+  /* Scrollbar uses the same normal hover/press behavior, not a special cursor. */
+  body.b4-cursor-hover .b4-cursor-ring{
+    width:34px!important;
     height:34px!important;
-    margin:-17px 0 0 -4.5px!important;
-    border-radius:8px!important;
-    border:0!important;
-    background:var(--p2);
-    box-shadow:0 0 12px #a855f7cc,0 0 3px #fff9;
+    margin:-17px 0 0 -17px!important;
   }
-  body.b4-cursor-scrollbar .b4-cursor-dot{
-    width:3px!important;
-    height:3px!important;
-    margin:-1.5px 0 0 -1.5px!important;
-    background:#fff;
-    box-shadow:0 0 7px #fff;
+
+  body.b4-cursor-scroll.b4-cursor-hover .b4-cursor-ring{
+    width:34px!important;
+    height:34px!important;
+    margin:-17px 0 0 -17px!important;
+    border-width:2px!important;
+    border-color:var(--p)!important;
+    background:transparent!important;
   }
-  body.b4-cursor-scrollbar .b4-cursor-trail{opacity:.35!important}
-  body.b4-cursor-scroll-drag .b4-cursor-ring{
-    width:11px!important;
-    height:44px!important;
-    margin:-22px 0 0 -5.5px!important;
-    background:var(--p)!important;
-    box-shadow:0 0 18px #7c3aeddd,0 0 5px #fff!important;
-  }
+}
+
+@media(pointer:coarse){
+  .b4-cursor-ring,.b4-cursor-dot,.b4-cursor-trail{display:none!important}
 }
