@@ -1218,11 +1218,14 @@ app.post('/api/admin/exams/:examId/submissions/:attemptId/unlock',requirePermiss
   const [grader]=await q('SELECT role,is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);
   if(grader[0]?.role!=='TEACHER'&&Number(grader[0]?.is_super_admin)!==1)return res.status(403).json({error:'Only Teachers can unlock exams'});
   try{await assertTeacherOwner(req,'exams',examId)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}
-  const [rows]=await q("SELECT id,status FROM exam_attempts WHERE id=? AND exam_id=? LIMIT 1",[attemptId,examId]);
+  const [rows]=await q("SELECT id,user_id,status FROM exam_attempts WHERE id=? AND exam_id=? LIMIT 1",[attemptId,examId]);
   if(!rows[0])return res.status(404).json({error:'Submission not found'});
   if(rows[0].status!=='LOCKED')return res.status(400).json({error:'This attempt is not locked'});
-  await q("UPDATE exam_attempts SET status='STARTED' WHERE id=? AND exam_id=? AND status='LOCKED'",[attemptId,examId]);
-  await audit(req,'EXAM_UNLOCKED','exam',examId,{attemptId});
+  const [updated]=await q("UPDATE exam_attempts SET status='STARTED' WHERE id=? AND exam_id=? AND status='LOCKED'",[attemptId,examId]);
+  if(!Number(updated?.affectedRows||0))return res.status(409).json({error:'This attempt is no longer locked'});
+  await audit(req,'EXAM_UNLOCKED','exam',examId,{attemptId,userId:rows[0].user_id});
+  pushGlobalEvent('data-changed',{path:'/api/admin/exams/'+examId+'/submissions/'+attemptId+'/unlock',method:'POST',examId,attemptId,userId:rows[0].user_id});
+  pushUserEvent(rows[0].user_id,'exam-unlocked',{examId,attemptId,status:'STARTED'});
   res.json({ok:true,status:'STARTED'});
 });
 
