@@ -1,5 +1,5 @@
-const CACHE='b4-v40';
-const FILES=['./','./index.html','./style.css','./app.js','./manifest.webmanifest','./assets/logo.svg','./assets/logo.svg'];
+const CACHE='b4-v41';
+const FILES=['./','./index.html','./style.css','./app.js','./manifest.webmanifest','./assets/logo.svg'];
 
 self.addEventListener('install',function(event){
   event.waitUntil(
