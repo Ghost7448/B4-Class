@@ -2123,7 +2123,7 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
   function removePopup(){document.querySelectorAll('.b4-picker-popover,.b4-select-menu').forEach(x=>x.remove());document.querySelectorAll('.b4-picker-open,.b4-select-open').forEach(x=>x.classList.remove('b4-picker-open','b4-select-open'));}
   function positionPopup(pop,anchor){
     const r=anchor.getBoundingClientRect(),gap=8;
-    pop.style.visibility='hidden';pop.style.display='block';
+    pop.style.visibility='hidden';pop.style.removeProperty('display');
     const w=Math.min(Math.max(pop.offsetWidth,260),window.innerWidth-24);
     pop.style.width=w+'px';
     const h=pop.offsetHeight;
@@ -2151,8 +2151,8 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
     input.addEventListener('change',refresh);
     const close=()=>{document.querySelectorAll('.b4-picker-popover').forEach(x=>x.remove());button.classList.remove('b4-picker-open')};
     button.addEventListener('click',()=>{
-      const existing=wrap.querySelector('.b4-picker-popover');
-      if(existing){close();return}
+      const existing=document.querySelector('.b4-picker-popover');
+      if(existing&&button.classList.contains('b4-picker-open')){close();return}
       removePopup();button.classList.add('b4-picker-open');
       const current=input.value||'';
       let date=current?(type==='time'?new Date():new Date(current.length===10?current+'T12:00:00':current)):new Date();
@@ -2196,7 +2196,7 @@ setupMobileDockAutoHide();document.documentElement.dataset.theme=S.theme;documen
     const refresh=()=>{const o=select.options[select.selectedIndex];label.textContent=o?o.textContent.trim():(S.lang==='ar'?'اختار':'Choose');button.classList.toggle('is-empty',!select.value);button.disabled=select.disabled;wrap.hidden=select.hidden;};
     refresh();select.addEventListener('change',refresh);
     button.addEventListener('click',()=>{
-      const old=wrap.querySelector('.b4-select-menu');if(old){removePopup();return}
+      const old=document.querySelector('.b4-select-menu');if(old&&button.classList.contains('b4-select-open')){removePopup();return}
       removePopup();
       const menu=document.createElement('div');menu.className='b4-select-menu';menu.setAttribute('role','listbox');
       const build=()=>{
