@@ -1574,3 +1574,22 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
   .app aside .side-bottom{margin:8px 0 0!important}
   .side-bottom button{padding:9px 10px!important;font-size:11px!important}
 }
+
+/* ===== MOBILE SIDEBAR LARGE ORIGINAL SCALE ===== */
+@media(max-width:800px){
+  .app aside{width:265px!important;padding:18px!important}
+  .brand{padding:6px 5px 18px!important;gap:11px!important}
+  .brand img{width:45px!important;height:45px!important}
+  .brand b{font-size:18px!important}
+  .brand small{font-size:10px!important}
+  .live{padding:13px!important;margin-bottom:15px!important}
+  .live i{width:10px!important;height:10px!important}
+  .live b{font-size:10px!important}
+  .live small{font-size:10px!important}
+  nav#nav{gap:5px!important}
+  #nav button{padding:12px 12px!important;font-size:13px!important;gap:12px!important;min-height:40px!important}
+  #nav button svg{width:19px!important;height:19px!important;flex:0 0 19px!important}
+  .nav-group{padding:11px 7px 5px!important;font-size:9px!important}
+  .app aside .side-bottom{margin:10px 0 0!important;gap:8px!important}
+  .side-bottom button{padding:10px 11px!important;font-size:12px!important;min-height:42px!important}
+}
