@@ -1184,7 +1184,25 @@ app.delete('/api/admin/exams/:id',requirePermission('MANAGE_EXAMS'),async(req,re
 app.patch('/api/admin/announcements/:id',requirePermission('MANAGE_ANNOUNCEMENTS'),async(req,res)=>{const id=Number(req.params.id),{title,body,category='General'}=req.body||{};const [r]=await q("UPDATE announcements SET title=?,body=?,category=? WHERE id=? AND class_name='B4'",[String(title||'').trim(),String(body||'').trim(),String(category||'General').trim(),id]);if(!r.affectedRows)return res.status(404).json({error:'Announcement not found'});await audit(req,'ANNOUNCEMENT_UPDATED','announcement',id);res.json({ok:true});});
 app.delete('/api/admin/announcements/:id',requirePermission('MANAGE_ANNOUNCEMENTS'),async(req,res)=>{const id=Number(req.params.id),[r]=await q("DELETE FROM announcements WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Announcement not found'});await audit(req,'ANNOUNCEMENT_DELETED','announcement',id);res.json({ok:true});});
 app.put('/api/admin/schedule',requirePermission('MANAGE_SCHEDULE'),async(req,res)=>{const rows=Array.isArray(req.body?.schedule)?req.body.schedule:[],conn=await pool.getConnection();try{await conn.beginTransaction();await conn.execute("DELETE FROM schedule WHERE class_name='B4'");for(const [i,row] of rows.entries())await conn.execute("INSERT INTO schedule(class_name,day_order,day_name,p1,p2,p3,p4) VALUES('B4',?,?,?,?,?,?)",[i+1,String(row.day_name||'Day '+(i+1)),String(row.p1||''),String(row.p2||''),String(row.p3||''),String(row.p4||'')]);await conn.commit();await audit(req,'SCHEDULE_UPDATED','schedule',null,{rows:rows.length});res.json({ok:true});}catch(e){await conn.rollback();res.status(400).json({error:e.message})}finally{conn.release()}});
-app.get('/api/admin/logs',requirePermission('VIEW_LOGS'),async(req,res)=>{const [activity]=await q('SELECT l.id,l.action,l.entity_type,l.entity_id,l.details,l.created_at,u.display_name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_user_id ORDER BY l.created_at DESC LIMIT 500');const [security]=await q('SELECT l.id,l.action,l.details,l.created_at,u.display_name actor_name FROM security_logs l LEFT JOIN users u ON u.id=l.actor_user_id ORDER BY l.created_at DESC LIMIT 500');res.json({activity,security});});
+app.get('/api/admin/logs',requirePermission('VIEW_LOGS'),async(req,res)=>{
+  const [activity]=await q('SELECT l.id,l.action,l.entity_type,l.entity_id,l.details,l.actor_user_id,l.created_at,u.display_name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_user_id ORDER BY l.created_at DESC LIMIT 500');
+  const [security]=await q('SELECT l.id,l.action,l.details,l.created_at,u.display_name actor_name FROM security_logs l LEFT JOIN users u ON u.id=l.actor_user_id ORDER BY l.created_at DESC LIMIT 500');
+  for(const log of activity){
+    if(!/MESSAGE_DELETED/i.test(String(log.action||''))||!log.entity_id)continue;
+    let d={};
+    try{d=typeof log.details==='string'?JSON.parse(log.details||'{}'):(log.details||{})}catch{}
+    if(d.message_content!==undefined)continue;
+    try{
+      const table=log.entity_type==='teacher_chat'?'b4_teacher_messages':log.entity_type==='chat_message'?'chat_messages':null;
+      if(!table)continue;
+      const [m]=await q(`SELECT m.user_id,m.body,m.created_at,u.display_name owner_name FROM ${table} m LEFT JOIN users u ON u.id=m.user_id WHERE m.id=? LIMIT 1`,[log.entity_id]);
+      if(m[0]){
+        log.details=JSON.stringify({...d,message_owner_name:m[0].owner_name||null,message_owner_id:m[0].user_id,message_content:m[0].body,message_created_at:m[0].created_at,deleted_by_name:log.actor_name||null,deleted_by_id:log.actor_user_id||null,deletion_type:Number(m[0].user_id)===Number(log.actor_user_id)?'Message owner':'Admin'});
+      }
+    }catch{}
+  }
+  res.json({activity,security});
+});
 app.get('/api/exams/:id/edit',requirePermission('MANAGE_EXAMS'),async(req,res)=>{const id=Number(req.params.id);try{await assertTeacherOwner(req,'exams',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const [rows]=await q("SELECT id,title,description,subject_id,starts_at,ends_at,duration_minutes,status,created_by FROM exams WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!rows[0])return res.status(404).json({error:'Exam not found'});const [questions]=await q('SELECT id,question_text,question_type,options_json,correct_answer,points,sort_order FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[id]);res.json({exam:rows[0],questions:questions.map(x=>({...x,options_json:typeof x.options_json==='string'?(JSON.parse(x.options_json||'[]')):(x.options_json||[])}))});});
 app.post('/api/admin/exams/:examId/submissions/:attemptId/unlock',requirePermission('MANAGE_EXAMS'),async(req,res)=>{
   const examId=Number(req.params.examId),attemptId=Number(req.params.attemptId);
