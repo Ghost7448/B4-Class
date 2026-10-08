@@ -1425,7 +1425,7 @@ async function loadLogs(){
   if(!r)return;
   try{
     const d=await api('/api/admin/logs');
-    const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0);
+    const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
     window.__b4LogRows=rows;
     r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Every historical log is clickable</span></div><div class="log-list">'+(rows.map(logRowHTML).join('')||'<div class="empty">No activity yet.</div>')+'</div>';
   }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
