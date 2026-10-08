@@ -1690,3 +1690,31 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
     margin-top:8px!important;
   }
 }
+
+/* ===== SCROLLBAR CURSOR INTERACTION ===== */
+@media(pointer:fine){
+  body.b4-cursor-scrollbar .b4-cursor-ring{
+    width:9px!important;
+    height:34px!important;
+    margin:-17px 0 0 -4.5px!important;
+    border-radius:8px!important;
+    border:0!important;
+    background:var(--p2);
+    box-shadow:0 0 12px #a855f7cc,0 0 3px #fff9;
+  }
+  body.b4-cursor-scrollbar .b4-cursor-dot{
+    width:3px!important;
+    height:3px!important;
+    margin:-1.5px 0 0 -1.5px!important;
+    background:#fff;
+    box-shadow:0 0 7px #fff;
+  }
+  body.b4-cursor-scrollbar .b4-cursor-trail{opacity:.35!important}
+  body.b4-cursor-scroll-drag .b4-cursor-ring{
+    width:11px!important;
+    height:44px!important;
+    margin:-22px 0 0 -5.5px!important;
+    background:var(--p)!important;
+    box-shadow:0 0 18px #7c3aeddd,0 0 5px #fff!important;
+  }
+}
