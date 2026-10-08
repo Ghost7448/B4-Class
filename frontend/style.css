@@ -1479,3 +1479,19 @@ to{opacity:1;transform:translateY(0)}}
 #bell .notification-bell-icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 #bell i{position:absolute;width:7px;height:7px;background:#a855f7;border:2px solid var(--s);border-radius:50%;right:8px;top:7px;display:none}
 @media(max-width:800px){#bell{width:40px;height:40px;border-radius:13px}.top i{display:none}}
+
+
+/* ===== SMALL SCREEN MOBILE SIDEBAR ===== */
+@media(max-width:800px){
+  .app aside{
+    height:100dvh!important;
+    min-height:100dvh!important;
+    bottom:0!important;
+    max-height:100dvh!important;
+  }
+  .app aside #nav{
+    max-height:calc(100dvh - 190px)!important;
+    overflow-y:auto!important;
+  }
+  .side-bottom{bottom:max(9px,env(safe-area-inset-bottom))!important}
+}
