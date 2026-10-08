@@ -192,11 +192,14 @@ function subjectV(){const s=S.subjects.find(x=>Number(x.id)===Number(S.subjectId
 function scheduleV(){return title(t('schedule'),'B4 schedule.',can('MANAGE_SCHEDULE')?'<button class="btn primary" onclick="scheduleEdit()">Edit schedule</button>':'')+'<div class="card tablewrap"><table class="table"><thead><tr><th>DAY</th><th>P1</th><th>P2</th><th>P3</th><th>P4</th></tr></thead><tbody>'+S.schedule.map(r=>'<tr><td><b>'+esc(r.day_name)+'</b></td><td>'+esc(r.p1||'—')+'</td><td>'+esc(r.p2||'—')+'</td><td>'+esc(r.p3||'—')+'</td><td>'+esc(r.p4||'—')+'</td></tr>').join('')+'</tbody></table></div>'}
 function assignmentTime(a){const due=Number(a?.assignment_due_ms),start=Number(a?.assignment_start_ms);if(!Number.isFinite(due)||due<=0)return {label:'No deadline',tone:'green',pct:100};const now=siteNowMs(),left=due-now;if(left<=0)return {label:'Deadline passed',tone:'red',pct:0};if(!Number.isFinite(start)||start>=due)return {label:'Time left '+Math.ceil(left/1000)+'s',tone:'green',pct:100};const total=due-start;const pct=Math.min(100,Math.max(0,(left/total)*100));const minutes=left/60000;const tone=minutes<=10?'red':minutes<=30?'yellow':'green';const d=Math.floor(left/86400000),h=Math.floor(left%86400000/3600000),m=Math.floor(left%3600000/60000),ss=Math.floor(left%60000/1000);return {label:d>0?d+'d '+h+'h '+m+'m':h>0?h+'h '+m+'m '+String(ss).padStart(2,'0')+'s':m>0?m+'m '+String(ss).padStart(2,'0')+'s':String(ss)+'s',tone,pct}}
 function examTime(e){
-  const end=Number(e?.end_ms),start=Number(e?.exam_start_ms);
+  const endValue=e?.end_ms;
+  const startValue=e?.exam_start_ms;
+  const end=(endValue===null||endValue===undefined||endValue==='')?NaN:Number(endValue);
+  const start=(startValue===null||startValue===undefined||startValue==='')?NaN:Number(startValue);
   const now=siteNowMs();
   const fmt=ms=>{const total=Math.max(0,Math.floor(ms/1000)),d=Math.floor(total/86400),h=Math.floor(total%86400/3600),m=Math.floor(total%3600/60),s=total%60;return d>0?d+'d '+h+'h '+m+'m':h>0?h+'h '+m+'m '+String(s).padStart(2,'0')+'s':m>0?m+'m '+String(s).padStart(2,'0')+'s':s+'s'};
   if(Number.isFinite(end)){const left=end-now;if(left<=0)return {label:'Exam closed',tone:'red',pct:0};if(!Number.isFinite(start)||start>=end)return {label:'Time left '+fmt(left),tone:'green',pct:100};const total=end-start;const pct=Math.min(100,Math.max(0,(left/total)*100));const tone=left<=10*60000?'red':left<=30*60000?'yellow':'green';return {label:'Time left '+fmt(left),tone,pct}}
-  return {label:'No deadline',tone:'green',pct:100};
+  return {label:'No Deadline',tone:'green',pct:100};
 }
 function updateExamCountdowns(){document.querySelectorAll('[data-exam-id]').forEach(el=>{const e=S.exams.find(x=>Number(x.id)===Number(el.dataset.examId));if(!e)return;const tm=examTime(e);el.textContent=tm.label;el.className='countdown '+tm.tone;const bar=document.querySelector('[data-exam-bar="'+e.id+'"]');if(bar){bar.className=tm.tone;bar.style.width=tm.pct+'%'}const open=el.closest('.card')?.querySelector('[data-exam-open]');if(open){const closed=tm.label==='Exam closed';open.disabled=closed;open.classList.toggle('disabled',closed);open.title=tm.label}}
 )}
@@ -377,6 +380,19 @@ function ensureGlobalRealtime(){
     });
     window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
     window.globalRealtimeStream.addEventListener('permissions-changed',()=>syncLiveData());
+    window.globalRealtimeStream.addEventListener('exam-unlocked',async(event)=>{
+      try{
+        const data=JSON.parse(event.data||'{}');
+        await syncLiveData();
+        const examId=Number(data.examId||0);
+        if(examId&&S.view==='exam-locked'&&S.examRun?.id===examId){
+          toast('🔓 Exam unlocked — opening now…');
+          await startExam(examId);
+        }else if(examId){
+          toast('🔓 Your exam has been unlocked');
+        }
+      }catch{}
+    });
     window.globalRealtimeStream.addEventListener('notification',(event)=>{
       try{
         const n=JSON.parse(event.data||'{}');
