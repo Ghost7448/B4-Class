@@ -1558,3 +1558,19 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
   0%{opacity:.8;transform:translate(-50%,-50%) scale(.2)}
   100%{opacity:0;transform:translate(-50%,-50%) scale(1.7)}
 }
+
+/* ===== RESTORE MOBILE SIDEBAR SIZE ===== */
+@media(max-width:800px){
+  .app aside{width:265px!important;padding:18px!important}
+  .brand{padding:6px 5px 18px!important;gap:11px!important}
+  .brand img{width:45px!important;height:45px!important}
+  .brand b{font-size:18px!important}
+  .brand small{font-size:10px!important}
+  .live{padding:12px!important;margin-bottom:14px!important}
+  nav#nav{gap:4px!important}
+  #nav button{padding:11px 12px!important;font-size:11px!important;gap:11px!important;min-height:0!important}
+  #nav button svg{width:18px!important;height:18px!important}
+  .nav-group{padding:10px 7px 4px!important;font-size:9px!important}
+  .app aside .side-bottom{margin:8px 0 0!important}
+  .side-bottom button{padding:9px 10px!important;font-size:11px!important}
+}
