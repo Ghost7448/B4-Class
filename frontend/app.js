@@ -360,7 +360,7 @@ function ensureGlobalRealtime(){
       window.globalRealtimeOnline=true;
       clearInterval(window.liveFallbackTimer);
     });
-    window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
+    window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());\n    window.globalRealtimeStream.addEventListener('data-changed',()=>syncLogsLive());
     window.globalRealtimeStream.addEventListener('notification',(event)=>{
       try{
         const n=JSON.parse(event.data||'{}');
@@ -1343,7 +1343,85 @@ function logTime(value){
   if(!Number.isFinite(d.getTime()))return String(value||'');
   return d.toLocaleString('en-US',{timeZone:'Africa/Cairo',day:'2-digit',month:'2-digit',hour:'numeric',minute:'2-digit',hour12:true}).replace(',',' •');
 }
-async function loadLogs(){const r=$('#adminRoot');try{const d=await api('/api/admin/logs');const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));const icon=x=>x.kind==='security'?'⚿':/DELETE|REMOVED|FAILED|DENIED/i.test(x.action||'')?'✕':/CREATE|ADD|ACTIV/i.test(x.action||'')?'＋':/UPDATE|EDIT|CHANGED/i.test(x.action||'')?'✦':'•';const detail=x=>{let d=x.details;try{if(typeof d==='string')d=JSON.parse(d)}catch{}if(!d||typeof d!=='object')return '';return Object.entries(d).slice(0,4).map(([k,v])=>k+': '+String(v)).join(' • ')};r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security</span></div><div class="log-list">'+(rows.map((x,i)=>'<article class="log-row" style="--i:'+i+'"><span class="log-icon">'+icon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+x.kind+'">'+x.kind+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(detail(x)?'<div class="log-detail">'+esc(detail(x))+'</div>':'')+'</div></article>').join('')||'<div class="empty">No activity yet.</div>')+'</div>'}catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}}
+function logTime(value){
+  const d=new Date(value);
+  if(!Number.isFinite(d.getTime()))return String(value||'');
+  return d.toLocaleString('en-US',{timeZone:'Africa/Cairo',day:'2-digit',month:'2-digit',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).replace(',',' •');
+}
+function parseLogDetails(value){
+  if(value&&typeof value==='object')return value;
+  try{const d=JSON.parse(value||'null');return d&&typeof d==='object'?d:{message:String(value||'')};}catch{return value?{message:String(value)}:{}}
+}
+function logIcon(x){
+  return x.kind==='security'?'⚿':/DELETE|REMOVED|FAILED|DENIED/i.test(x.action||'')?'✕':/CREATE|ADD|ACTIV/i.test(x.action||'')?'＋':/UPDATE|EDIT|CHANGED/i.test(x.action||'')?'✦':'•';
+}
+function logKey(x){return String(x.kind||'activity')+':'+String(x.id||'')}
+function logRowHTML(x){
+  const details=parseLogDetails(x.details);
+  const summary=details.message_content?String(details.message_content).slice(0,120):details.message?String(details.message).slice(0,120):'';
+  return '<article class="log-row" data-log-key="'+esc(logKey(x))+'" onclick="openLogDetails('+Number(x.id)+',\''+esc(x.kind||'activity')+'\')"><span class="log-icon">'+logIcon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+esc(x.kind||'activity')+'">'+esc(x.kind||'activity')+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(summary?'<div class="log-detail">'+esc(summary)+'</div>':'')+'</div><span class="log-open">›</span></article>';
+}
+function logsSignature(rows){return rows.map(x=>logKey(x)+'|'+String(x.created_at||'')+'|'+String(x.action||'')+'|'+String(x.details||'')).join('§')}
+function renderLogList(rows,animate=false){
+  const box=document.querySelector('.log-list');
+  if(!box)return;
+  if(!rows.length){box.innerHTML='<div class="empty">No activity yet.</div>';return}
+  if(animate)box.classList.add('live-log-update');
+  const existing=new Map([...box.querySelectorAll('[data-log-key]')].map(el=>[el.dataset.logKey,el]));
+  const keep=new Set();
+  rows.forEach(x=>{
+    const key=logKey(x),html=logRowHTML(x),holder=document.createElement('div');
+    holder.innerHTML=html.trim();
+    const next=holder.firstElementChild;if(!next)return;
+    const old=existing.get(key);
+    if(old){keep.add(key);if(old.outerHTML!==next.outerHTML)old.replaceWith(next);}
+    else{keep.add(key);box.prepend(next);}
+  });
+  [...box.querySelectorAll('[data-log-key]')].forEach(el=>{if(!keep.has(el.dataset.logKey))el.remove()});
+  const ordered=rows.map(x=>existing.get(logKey(x))||box.querySelector('[data-log-key="'+CSS.escape(logKey(x))+'"]')).filter(Boolean);
+  ordered.forEach(el=>box.appendChild(el));
+  if(animate)setTimeout(()=>box.classList.remove('live-log-update'),80);
+}
+async function fetchLogsData(){
+  const d=await api('/api/admin/logs');
+  const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0);
+  return rows;
+}
+async function loadLogs(){
+  const r=$('#adminRoot');if(!r)return;
+  try{
+    const rows=await fetchLogsData();
+    S.logRows=rows;
+    S.logSignature=logsSignature(rows);
+    r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security • LIVE</span></div><div class="log-list">'+(rows.length?rows.map(logRowHTML).join(''):'<div class="empty">No activity yet.</div>')+'</div>';
+  }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
+}
+async function syncLogsLive(){
+  if(S.view!=='logs'||!S.me)return;
+  try{
+    const rows=await fetchLogsData(),sig=logsSignature(rows);
+    if(sig===S.logSignature)return;
+    S.logRows=rows;S.logSignature=sig;
+    const toolbar=document.querySelector('.logs-toolbar');
+    if(toolbar){const count=toolbar.querySelector('b');if(count)count.textContent=String(rows.length)}
+    renderLogList(rows,true);
+  }catch{}
+}
+function openLogDetails(id,kind='activity'){
+  const x=(S.logRows||[]).find(v=>Number(v.id)===Number(id)&&String(v.kind||'activity')===String(kind||'activity'));
+  if(!x)return;
+  const d=parseLogDetails(x.details);
+  const isDeleted=/MESSAGE_DELETED/i.test(x.action||'')&&d.message_content!==undefined;
+  const field=(label,value)=>'<div class="log-detail-field"><small>'+esc(label)+'</small><b>'+esc(value===null||value===undefined||value===''?'—':String(value))+'</b></div>';
+  let body='<div class="log-detail-grid">'+field('Action',x.action)+field('Log actor',x.actor_name||'System')+field('Date',logTime(x.created_at));
+  if(isDeleted){
+    body+=field('Message owner',d.message_owner_name||'Unknown')+field('Message owner ID',d.message_owner_id||'—')+field('Message date',d.message_created_at?logTime(d.message_created_at):'—')+field('Deleted by',d.deleted_by_name||x.actor_name||'Unknown')+field('Deleted by ID',d.deleted_by_id||x.actor_user_id||'—')+field('Deletion type',d.deletion_type||'—')+'<div class="log-detail-content"><small>Message content</small><div>'+esc(d.message_content||'')+'</div></div>';
+  }
+  const extra=Object.entries(d).filter(([k])=>!['message_owner_name','message_owner_id','message_created_at','deleted_by_name','deleted_by_id','deletion_type','message_content','message'].includes(k));
+  if(extra.length)body+='<div class="log-detail-content"><small>Additional details</small><div>'+extra.map(([k,v])=>'<b>'+esc(k)+'</b>: '+esc(typeof v==='object'?JSON.stringify(v):String(v))).join('<br>')+'</div></div>';
+  body+='</div>';
+  modal('<div class="modalhead"><div><span class="eyebrow">LOG DETAILS</span><h2>'+esc(x.action||'EVENT')+'</h2></div><button class="close" onclick="b4Close()">×</button></div>'+body);
+}
 async function loadDevelopers(){
   const r=$('#adminRoot');
   if(!r)return;
