@@ -1490,3 +1490,14 @@ body.b4-cursor-hover .b4-cursor-ring{width:30px;height:30px;margin:-15px 0 0 -15
 body.b4-cursor-hover .b4-cursor-dot{width:3px;height:3px;margin:-1.5px 0 0 -1.5px}
 body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px}
 @media(pointer:coarse){.b4-cursor-ring,.b4-cursor-dot{display:none!important}}
+
+
+/* ===== CURSOR VISIBILITY FIX ===== */
+@media (pointer:fine){
+  html,body,body *{cursor:none!important}
+  .b4-cursor-ring,.b4-cursor-dot{opacity:1!important}
+  .b4-cursor-ring{border-width:2px;box-shadow:0 0 14px #a855f799,0 0 3px #fff8}
+  .b4-cursor-dot{width:6px;height:6px;margin:-3px 0 0 -3px;box-shadow:0 0 10px #a855f7,0 0 3px #fff9}
+  body.b4-cursor-hover .b4-cursor-ring{width:32px;height:32px;margin:-16px 0 0 -16px}
+  body.b4-cursor-click .b4-cursor-ring{width:19px;height:19px;margin:-9.5px 0 0 -9.5px}
+}
