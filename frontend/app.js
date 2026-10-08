@@ -376,6 +376,7 @@ function ensureGlobalRealtime(){
       clearInterval(window.liveFallbackTimer);
     });
     window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
+    window.globalRealtimeStream.addEventListener('permissions-changed',()=>syncLiveData());
     window.globalRealtimeStream.addEventListener('notification',(event)=>{
       try{
         const n=JSON.parse(event.data||'{}');
