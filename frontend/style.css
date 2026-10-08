@@ -1593,3 +1593,53 @@ body.b4-cursor-click .b4-cursor-ring{width:18px;height:18px;margin:-9px 0 0 -9px
   .app aside .side-bottom{margin:10px 0 0!important;gap:8px!important}
   .side-bottom button{padding:10px 11px!important;font-size:12px!important;min-height:42px!important}
 }
+
+/* ===== MOBILE SIDEBAR FULL HEIGHT + SCROLL ===== */
+@media(max-width:800px){
+  .app aside{
+    height:100dvh!important;
+    min-height:100dvh!important;
+    max-height:100dvh!important;
+    bottom:0!important;
+    overflow:hidden!important;
+    display:flex!important;
+    flex-direction:column!important;
+  }
+
+  .app aside .brand,
+  .app aside .live{
+    flex:0 0 auto!important;
+  }
+
+  .app aside nav#nav{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    height:auto!important;
+    max-height:none!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    padding-bottom:12px!important;
+    margin-bottom:4px!important;
+    -webkit-overflow-scrolling:touch!important;
+    overscroll-behavior:contain!important;
+    scrollbar-width:thin;
+    scrollbar-color:#7c3aed66 transparent;
+  }
+
+  .app aside nav#nav::-webkit-scrollbar{width:4px}
+  .app aside nav#nav::-webkit-scrollbar-thumb{
+    background:#7c3aed66;
+    border-radius:99px;
+  }
+  .app aside nav#nav::-webkit-scrollbar-track{background:transparent}
+
+  .app aside .side-bottom{
+    flex:0 0 auto!important;
+    position:static!important;
+    left:auto!important;
+    right:auto!important;
+    bottom:auto!important;
+    margin-top:6px!important;
+    padding-bottom:max(2px,env(safe-area-inset-bottom))!important;
+  }
+}
