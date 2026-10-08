@@ -1160,13 +1160,15 @@ function teacherChatLoop(){
   if(!S.me||S.view!=='teacherChat')return;
   ensureTeacherRealtime();
   const sync=async()=>{
-    if(window.teacherRealtimeOnline===true)return;
+    if(window.teacherSyncBusy)return;
+    window.teacherSyncBusy=true;
     try{
       const d=await api('/api/teacher-chat/messages?_='+Date.now(),{cache:'no-store'});
       applyTeacherMessages(d.messages||[]);
-    }catch{}
+    }catch{}finally{window.teacherSyncBusy=false}
   };
-  window.teacherTimer=setInterval(sync,5000);
+  // Keep a DB-backed fallback running even when SSE reports "open".
+  window.teacherTimer=setInterval(sync,2000);
   window.teacherTypingTimer=setInterval(async()=>{
     if(S.view!=='teacherChat')return;
     try{
@@ -1177,7 +1179,7 @@ function teacherChatLoop(){
   },1000);
   sync();
 }
-async function sendTeacherChat(e){e.preventDefault();const i=$('#teacherInput');if(i.dataset.sending==='1'||!i.value.trim())return;i.dataset.sending='1';const btn=e.submitter||e.target.querySelector('button');if(btn)btn.disabled=true;const body=i.value.trim(),replyToId=window.teacherReplyTo||null;try{await api('/api/teacher-chat/messages',{method:'POST',body:JSON.stringify({body,replyToId})});i.value='';i.style.height='auto';i.placeholder='Write a message...';window.teacherReplyTo=null;teacherTyping(false);toast('Message sent ✓')}catch(x){toast(x.message)}finally{i.dataset.sending='0';if(btn)btn.disabled=false}}
+async function sendTeacherChat(e){e.preventDefault();const i=$('#teacherInput');if(i.dataset.sending==='1'||!i.value.trim())return;i.dataset.sending='1';const btn=e.submitter||e.target.querySelector('button');if(btn)btn.disabled=true;const body=i.value.trim(),replyToId=window.teacherReplyTo||null;try{const result=await api('/api/teacher-chat/messages',{method:'POST',body:JSON.stringify({body,replyToId})});if(result?.message&&!S.teacherMessages.some(m=>Number(m.id)===Number(result.message.id)))applyTeacherMessages([...S.teacherMessages,result.message]);else{const d=await api('/api/teacher-chat/messages?_='+Date.now(),{cache:'no-store'});applyTeacherMessages(d.messages||[])}i.value='';i.style.height='auto';i.placeholder='Write a message...';window.teacherReplyTo=null;teacherTyping(false);toast('Message sent ✓')}catch(x){toast(x.message)}finally{i.dataset.sending='0';if(btn)btn.disabled=false}}
 function teacherTyping(v){if(!S.me)return;api('/api/teacher-chat/typing',{method:'POST',body:JSON.stringify({typing:v})}).catch(()=>{});if(window.teacherTypingT)clearTimeout(window.teacherTypingT);if(v)window.teacherTypingT=setTimeout(()=>teacherTyping(false),1600)}
 function teacherMessageMenu(e,id){e.preventDefault();if(!S.me)return;const m=S.teacherMessages.find(x=>Number(x.id)===Number(id));if(!m)return;const own=Number(m.user_id)===Number(S.me.id),moderator=can('MANAGE_TEACHER_CHAT');modal('<div class="modalhead"><h2>Message</h2><button class="close" onclick="b4Close()">×</button></div><button class="btn ghost" onclick="replyTeacherMessage('+id+')">Reply</button>'+(own?'<button class="btn ghost" onclick="editTeacherMessage('+id+')">Edit</button>':'')+((own||moderator)?'<button class="btn danger" onclick="deleteTeacherMessage('+id+')">Delete</button>':'')+'<button class="btn ghost" onclick="b4Close()">Close</button>')}
 function replyTeacherMessage(id){const m=S.teacherMessages.find(x=>Number(x.id)===Number(id));close();window.teacherReplyTo=id;const input=$('#teacherInput');if(input){input.value='';input.placeholder='Replying to '+(m?.display_name||'message')+'…';input.focus()}toast('Reply mode enabled')}
