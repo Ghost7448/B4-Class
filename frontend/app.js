@@ -158,8 +158,10 @@ const nav=[['dashboard','⌂'],['students','♙'],['teachers','♟'],['subjects'
 function go(v){
   if(!S.me&&!['students','teachers','subjects','schedule','developers'].includes(v)){loginModal();return}
   if(S.view==='exam-run'&&v!=='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
-  S.view=v;
-  render();
+  const changeView=()=>{S.view=v;render()};
+  if(S.view!==v&&document.startViewTransition&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+    document.startViewTransition(changeView);
+  }else changeView();
   window.scrollTo({top:0,behavior:'smooth'});
   $('#side')?.classList.remove('open');
 }
