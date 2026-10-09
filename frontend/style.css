@@ -2411,3 +2411,35 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
   flex:1;min-width:0;resize:none;max-height:180px;overflow-y:hidden;
   font:inherit;line-height:1.45;
 }
+
+
+/* ===== B4 MOTION PACK: staggered entrances, page transitions, shimmer skeletons, cinematic theme ===== */
+.b4-page-enter{animation:b4PageEnter .34s cubic-bezier(.2,.75,.25,1) both}
+@keyframes b4PageEnter{from{opacity:0;transform:translateY(8px);filter:blur(2px)}to{opacity:1;transform:translateY(0);filter:blur(0)}}
+.b4-stagger-in{animation:b4CardEnter .46s cubic-bezier(.2,.75,.25,1) both;animation-delay:var(--b4-enter-delay,0ms)}
+@keyframes b4CardEnter{from{opacity:0;transform:translateY(13px) scale(.99)}to{opacity:1;transform:translateY(0) scale(1)}}
+.b4-skeleton-page{max-width:1500px;margin:0 auto;padding:2px 0 24px;animation:b4SkeletonFade .25s ease both}
+.b4-skeleton-line,.b4-skeleton-hero,.b4-skeleton-card i,.b4-skeleton-card b,.b4-skeleton-card span{display:block;position:relative;overflow:hidden;background:var(--s2);border-radius:10px}
+.b4-skeleton-line{height:14px;margin:8px 0 12px;width:34%}
+.b4-skeleton-line.wide{height:26px;width:42%;border-radius:9px}
+.b4-skeleton-line.short{width:24%;height:11px;margin-bottom:24px}
+.b4-skeleton-hero{height:170px;border-radius:24px;margin-bottom:16px;background:color-mix(in srgb,var(--p) 12%,var(--s2))}
+.b4-skeleton-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:14px}
+.b4-skeleton-grid.lower{grid-template-columns:repeat(2,minmax(0,1fr))}
+.b4-skeleton-card{padding:20px;border:1px solid var(--line);border-radius:18px;background:var(--s);min-height:118px}
+.b4-skeleton-card i{width:34%;height:10px;margin-bottom:17px}
+.b4-skeleton-card b{width:48%;height:24px;margin-bottom:15px}
+.b4-skeleton-card span{width:78%;height:9px;margin-top:8px}
+.b4-skeleton-card.large{min-height:150px}
+.b4-skeleton-line:after,.b4-skeleton-hero:after,.b4-skeleton-card i:after,.b4-skeleton-card b:after,.b4-skeleton-card span:after{content:"";position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--p) 13%,white),transparent);animation:b4Shimmer 1.35s ease-in-out infinite}
+@keyframes b4Shimmer{to{transform:translateX(100%)}}
+@keyframes b4SkeletonFade{from{opacity:0}to{opacity:1}}
+/* Theme changes use the browser's view-transition snapshot for a soft cinematic crossfade. */
+::view-transition-old(root),::view-transition-new(root){animation-duration:.48s;mix-blend-mode:normal}
+::view-transition-old(root){animation-name:b4ThemeOut}
+::view-transition-new(root){animation-name:b4ThemeIn}
+@keyframes b4ThemeOut{to{opacity:0;filter:brightness(.9)}}
+@keyframes b4ThemeIn{from{opacity:.45;filter:brightness(1.12)}to{opacity:1;filter:brightness(1)}}
+@media(max-width:900px){.b4-skeleton-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.b4-skeleton-grid,.b4-skeleton-grid.lower{grid-template-columns:1fr 1fr;gap:9px}.b4-skeleton-card{padding:13px;min-height:100px}.b4-skeleton-hero{height:145px}}
+@media(prefers-reduced-motion:reduce){.b4-page-enter,.b4-stagger-in,.b4-skeleton-page,.b4-skeleton-line:after,.b4-skeleton-hero:after,.b4-skeleton-card i:after,.b4-skeleton-card b:after,.b4-skeleton-card span:after{animation:none!important}::view-transition-old(root),::view-transition-new(root){animation:none!important}}
