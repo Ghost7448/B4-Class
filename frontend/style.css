@@ -2504,3 +2504,19 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
 @keyframes b4CardEnter{from{opacity:0;transform:translateY(10px) scale(.995)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(hover:none){.card:hover{transform:none;box-shadow:var(--shadow)}.card:hover:after{opacity:0}}
 @media(prefers-reduced-motion:reduce){.b4-page-enter,.b4-stagger-in{animation:none!important}.card,.card:hover{transition:none!important;transform:none!important}}
+
+
+/* Fix Arabic glyph rendering inside the custom Select control */
+.b4-select-wrap,.b4-select-trigger,.b4-select-label,.b4-select-menu,.b4-select-option{
+  font-family:"Cairo","Noto Sans Arabic",Tahoma,Arial,sans-serif!important;
+  font-kerning:normal!important;
+  font-variant-ligatures:normal!important;
+  letter-spacing:normal!important;
+  word-spacing:normal!important;
+  text-rendering:optimizeLegibility;
+}
+.b4-select-trigger{font-weight:600!important;direction:inherit;unicode-bidi:plaintext}
+.b4-select-label,.b4-select-option{line-height:1.65!important;white-space:normal!important;overflow-wrap:anywhere}
+.b4-select-menu{direction:inherit}
+.b4-select-option{font-weight:500!important;text-align:start!important}
+.b4-select-option.selected{font-weight:800!important}
