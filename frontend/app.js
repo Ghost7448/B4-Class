@@ -329,13 +329,7 @@ async function syncLiveData(){
     // They are more important than preserving an open modal or form because
     // the current user's visible navigation and access may have changed.
     if(meChanged){
-      const scrollY=window.scrollY;
-      document.documentElement.classList.add('live-update');
       render();
-      requestAnimationFrame(()=>{
-        window.scrollTo({top:scrollY,left:0,behavior:'instant'});
-        document.documentElement.classList.remove('live-update');
-      });
       return;
     }
 
@@ -346,9 +340,6 @@ async function syncLiveData(){
     if($('#back')?.classList.contains('show'))return;
     if(S.view==='chat'||S.view==='teacherChat')return;
     if(S.view==='exam-run'||S.view==='exam-result'||S.view==='exam-answers'||S.view==='exam-review')return;
-    // Avoid replacing Subject/Resources DOM during background sync; it caused visible flicker.
-    if(S.view==='resources'||S.view==='subject')return;
-    if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName||''))return;
     if(S.view==='assignments'){
       patchLiveCards('#content > .grid.c2',S.assignments,assignmentCard);
       updateAssignmentCountdowns();
@@ -366,10 +357,7 @@ async function syncLiveData(){
       patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3><p>'+esc(a.body||'')+'</p>'+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
       return;
     }
-    const scrollY=window.scrollY;
-    document.documentElement.classList.add('live-update');
     render();
-    requestAnimationFrame(()=>{window.scrollTo({top:scrollY,left:0,behavior:'instant'});document.documentElement.classList.remove('live-update')});
   }catch{}
   finally{liveSyncBusy=false}
 }
@@ -619,6 +607,8 @@ function settingsV(){
 function devV(){return title(t('developers'),'The Wep Devoleper')+'<div class="grid developers-grid">'+S.developers.map(d=>'<article class="card developer-card"><div class="developer-photo"><img class="avatar xl" src="'+esc(d.avatar_url||'/assets/logo.svg')+'" onerror="this.src=\'assets/logo.svg\'"></div><div class="developer-info"><span class="badge">B4 DEVELOPER</span>'+(d.title?'<span class="developer-title">'+esc(d.title)+'</span>':'')+(d.title2?'<span class="developer-title">'+esc(d.title2)+'</span>':'')+'<h3>'+esc(d.name)+'</h3>'+(d.link_url?'<a class="btn ghost developer-link" href="'+esc(d.link_url)+'" target="_blank" rel="noopener">Open profile ↗</a>':'')+'</div></article>').join('')||'<div class="card empty">No developers added yet.</div>'+'</div>'}
 function animateDashboardStats(){
   document.querySelectorAll('[data-stat-count]').forEach(function(el){
+    if(el.dataset.countAnimated==='1')return;
+    el.dataset.countAnimated='1';
     var target=parseInt(el.getAttribute('data-stat-count'),10)||0;
     el.textContent='0';
     if(target<=0)return;
@@ -639,15 +629,62 @@ function showInitialSkeleton(){
   const root=$('#content');if(!root||root.children.length)return;
   root.innerHTML='<div class="b4-skeleton-page" aria-label="Loading B4"><div class="b4-skeleton-line wide"></div><div class="b4-skeleton-line short"></div><div class="b4-skeleton-hero"></div><div class="b4-skeleton-grid">'+Array.from({length:4},()=>'<div class="b4-skeleton-card"><i></i><b></b><span></span></div>').join('')+'</div><div class="b4-skeleton-grid lower">'+Array.from({length:2},()=>'<div class="b4-skeleton-card large"><i></i><b></b><span></span><span></span></div>').join('')+'</div></div>';
 }
-function animatePageEntrance(){
-  const root=$('#content');if(!root)return;
+let lastAnimatedView=null;
+function animatePageEntrance(force=false){
+  const root=$('#content');if(!root||(!force&&lastAnimatedView===S.view))return;
+  lastAnimatedView=S.view;
   const page=root.firstElementChild;
   if(page){page.classList.remove('b4-page-enter');void page.offsetWidth;page.classList.add('b4-page-enter');}
-  const cards=root.querySelectorAll('.card,.hero,.title,.grid > article');
-  cards.forEach((el,i)=>{el.classList.remove('b4-stagger-in');el.style.setProperty('--b4-enter-delay',Math.min(i,9)*42+'ms');void el.offsetWidth;el.classList.add('b4-stagger-in')});
+  root.querySelectorAll('.card,.hero,.title,.grid > article').forEach((el,i)=>{el.classList.remove('b4-stagger-in');el.style.setProperty('--b4-enter-delay',Math.min(i,9)*30+'ms');void el.offsetWidth;el.classList.add('b4-stagger-in')});
 }
-
-function render(){document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';$('#nav').innerHTML=buildNav();let v=S.view;let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();$('#content').innerHTML=html;animatePageEntrance();if(v==='dashboard')animateDashboardStats();$('#topName').textContent=S.me?.display_name||t('guest');if(S.me?.avatar_url)$('#topAvatar').src=S.me.avatar_url;if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}if(v.startsWith('admin:'))adminLoad(v.slice(6));if(v==='assignments')startAssignmentCountdown();if(v==='exam-answers')examAnswersLoop(S.examAnswers?.examId)}
+function morphHtml(root,html){
+  if(!root)return;
+  const template=document.createElement('template');template.innerHTML=String(html??'');
+  const key=n=>n.nodeType===1?(n.getAttribute('data-live-id')||n.id||n.getAttribute('data-v')||''):'';
+  const compatible=(a,b)=>a&&b&&a.nodeType===b.nodeType&&(a.nodeType!==1||a.tagName===b.tagName);
+  const sync=(oldNode,newNode)=>{
+    if(oldNode.nodeType===3||oldNode.nodeType===8){if(oldNode.nodeValue!==newNode.nodeValue)oldNode.nodeValue=newNode.nodeValue;return}
+    if(oldNode.nodeType!==1)return;
+    const active=oldNode===document.activeElement,keepValue=active&&('value'in oldNode),value=keepValue?oldNode.value:null,keepChecked=active&&('checked'in oldNode),checked=keepChecked?oldNode.checked:null,st=oldNode.scrollTop,sl=oldNode.scrollLeft;
+    [...oldNode.attributes].forEach(a=>{if(!newNode.hasAttribute(a.name))oldNode.removeAttribute(a.name)});
+    [...newNode.attributes].forEach(a=>{if(oldNode.getAttribute(a.name)!==a.value)oldNode.setAttribute(a.name,a.value)});
+    children(oldNode,newNode);
+    if(keepValue)oldNode.value=value;if(keepChecked)oldNode.checked=checked;
+    if(st)oldNode.scrollTop=st;if(sl)oldNode.scrollLeft=sl;
+  };
+  const children=(oldParent,newParent)=>{
+    const olds=[...oldParent.childNodes],news=[...newParent.childNodes],keyed=new Map(),used=new Set();
+    olds.forEach(n=>{const k=key(n);if(k)keyed.set(k,n)});
+    news.forEach((fresh,i)=>{
+      const k=key(fresh);let match=k?keyed.get(k):null;
+      if(match&&!compatible(match,fresh))match=null;
+      if(!match){const at=olds[i];if(at&&!used.has(at)&&!key(at)&&compatible(at,fresh))match=at}
+      if(!match&&!k)match=olds.find(n=>!used.has(n)&&!key(n)&&compatible(n,fresh))||null;
+      if(match){used.add(match);sync(match,fresh);const at=oldParent.childNodes[i];if(at!==match)oldParent.insertBefore(match,at||null)}
+      else{const clone=fresh.cloneNode(true);oldParent.insertBefore(clone,oldParent.childNodes[i]||null);used.add(clone)}
+    });
+    [...oldParent.childNodes].forEach(n=>{if(!used.has(n))n.remove()});
+  };
+  children(root,template.content);
+}
+function render(){
+  document.documentElement.dataset.theme=S.theme;
+  document.documentElement.classList.toggle('dark',S.theme==='dark');
+  document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
+  if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';
+  const previousView=lastAnimatedView;let v=S.view;
+  morphHtml($('#nav'),buildNav());
+  let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
+  morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
+  if(v==='dashboard')animateDashboardStats();
+  $('#topName').textContent=S.me?.display_name||t('guest');
+  if(S.me?.avatar_url&&$('#topAvatar'))$('#topAvatar').src=S.me.avatar_url;
+  if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}
+  if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}
+  if(v.startsWith('admin:'))adminLoad(v.slice(6));
+  if(v==='assignments')startAssignmentCountdown();
+  if(v==='exam-answers')examAnswersLoop(S.examAnswers?.examId);
+}
 function teacherChatV(){
   return title(t('teacherChat'),'')+'<div class="card chat"><div class="messages" id="teacherMessages">'+S.teacherMessages.map(teacherMessageHTML).join('')+'</div><div id="teacherTyping" class="typing-indicator"></div><button type="button" id="teacherChatJumpBottom" class="chat-jump-bottom" onclick="jumpChatBottom(\'teacherMessages\')" aria-label="Scroll to latest messages" title="Scroll to latest messages">↓</button><form class="chatform" onsubmit="sendTeacherChat(event)"><textarea id="teacherInput" rows="1" oninput="teacherTyping(!!this.value.trim());autoGrowChat(this)" placeholder="Write a message..." onkeydown="if(event.key===&quot;Enter&quot;&amp;&amp;!event.shiftKey){event.preventDefault();this.form.requestSubmit()}"></textarea><button class="btn primary" aria-label="Send message">➤</button></form></div>'
 }
