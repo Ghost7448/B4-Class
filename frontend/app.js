@@ -605,26 +605,25 @@ function settingsV(){
   '</div></div>';
 }
 function devV(){return title(t('developers'),'The Wep Devoleper')+'<div class="grid developers-grid">'+S.developers.map(d=>'<article class="card developer-card"><div class="developer-photo"><img class="avatar xl" src="'+esc(d.avatar_url||'/assets/logo.svg')+'" onerror="this.src=\'assets/logo.svg\'"></div><div class="developer-info"><span class="badge">B4 DEVELOPER</span>'+(d.title?'<span class="developer-title">'+esc(d.title)+'</span>':'')+(d.title2?'<span class="developer-title">'+esc(d.title2)+'</span>':'')+'<h3>'+esc(d.name)+'</h3>'+(d.link_url?'<a class="btn ghost developer-link" href="'+esc(d.link_url)+'" target="_blank" rel="noopener">Open profile ↗</a>':'')+'</div></article>').join('')||'<div class="card empty">No developers added yet.</div>'+'</div>'}
+const dashboardCountTargets=new WeakMap();
 function animateDashboardStats(){
   document.querySelectorAll('[data-stat-count]').forEach(function(el){
-    if(el.dataset.countAnimated==='1')return;
-    el.dataset.countAnimated='1';
     var target=parseInt(el.getAttribute('data-stat-count'),10)||0;
-    el.textContent='0';
-    if(target<=0)return;
-    var start=performance.now();
-    var duration=2200;
+    if(dashboardCountTargets.get(el)===target)return;
+    dashboardCountTargets.set(el,target);
+    var from=Math.max(0,Number(el.textContent)||0);
+    if(target<=0){el.textContent='0';return}
+    var start=performance.now(),duration=650;
     function tick(now){
       var progress=Math.min(1,(now-start)/duration);
       var eased=1-Math.pow(1-progress,3);
-      el.textContent=String(Math.floor(target*eased));
+      el.textContent=String(Math.round(from+(target-from)*eased));
       if(progress<1)requestAnimationFrame(tick);
       else el.textContent=String(target);
     }
     requestAnimationFrame(tick);
   });
 }
-
 function showInitialSkeleton(){
   const root=$('#content');if(!root||root.children.length)return;
   root.innerHTML='<div class="b4-skeleton-page" aria-label="Loading B4"><div class="b4-skeleton-line wide"></div><div class="b4-skeleton-line short"></div><div class="b4-skeleton-hero"></div><div class="b4-skeleton-grid">'+Array.from({length:4},()=>'<div class="b4-skeleton-card"><i></i><b></b><span></span></div>').join('')+'</div><div class="b4-skeleton-grid lower">'+Array.from({length:2},()=>'<div class="b4-skeleton-card large"><i></i><b></b><span></span><span></span></div>').join('')+'</div></div>';
@@ -643,7 +642,7 @@ function morphHtml(root,html){
   const key=n=>n.nodeType===1?(n.getAttribute('data-live-id')||n.id||n.getAttribute('data-v')||''):'';
   const compatible=(a,b)=>a&&b&&a.nodeType===b.nodeType&&(a.nodeType!==1||a.tagName===b.tagName);
   const sync=(oldNode,newNode)=>{
-    if(oldNode.nodeType===3||oldNode.nodeType===8){if(oldNode.nodeValue!==newNode.nodeValue)oldNode.nodeValue=newNode.nodeValue;return}
+    if(oldNode.nodeType===3||oldNode.nodeType===8){if(oldNode.nodeValue!==newNode.nodeValue){const p=oldNode.parentElement,np=newNode.parentElement;if(!(p?.hasAttribute('data-stat-count')&&p.getAttribute('data-stat-count')===np?.getAttribute('data-stat-count')))oldNode.nodeValue=newNode.nodeValue}return}
     if(oldNode.nodeType!==1)return;
     const active=oldNode===document.activeElement,keepValue=active&&('value'in oldNode),value=keepValue?oldNode.value:null,keepChecked=active&&('checked'in oldNode),checked=keepChecked?oldNode.checked:null,st=oldNode.scrollTop,sl=oldNode.scrollLeft;
     [...oldNode.attributes].forEach(a=>{if(!newNode.hasAttribute(a.name))oldNode.removeAttribute(a.name)});
