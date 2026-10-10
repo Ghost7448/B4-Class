@@ -613,7 +613,7 @@ function animateDashboardStats(){
     dashboardCountTargets.set(el,target);
     var from=Math.max(0,Number(el.textContent)||0);
     if(target<=0){el.textContent='0';return}
-    var start=performance.now(),duration=2200;
+    var start=performance.now(),duration=5000;
     function tick(now){
       var progress=Math.min(1,(now-start)/duration);
       var eased=1-Math.pow(1-progress,3);
