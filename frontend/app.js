@@ -1297,7 +1297,7 @@ async function loadReports(){
     root.innerHTML='<div class="reports-toolbar"><span class="badge">'+reports.length+' '+(ar?'بلاغ':'reports')+'</span><span class="muted">'+(ar?'مرتبة حسب الحالة والأحدث':'Sorted by status and newest first')+'</span></div><div class="reports-list">'+reports.map(r=>{
       const status=String(r.status||'OPEN'),statusText=ar?(status==='RESOLVED'?'تم الحل':status==='IN_PROGRESS'?'قيد المراجعة':'مفتوحة'):(status==='RESOLVED'?'Resolved':status==='IN_PROGRESS'?'In progress':'Open');
       const files=(r.files||[]).map(f=>{
-        const url='/api/admin/reports/'+r.id+'/files/'+f.id,isVideo=String(f.mime_type||'').startsWith('video/');
+        const url=API+'/api/admin/reports/'+r.id+'/files/'+f.id,isVideo=String(f.mime_type||'').startsWith('video/');
         return '<a class="report-attachment" href="'+url+'" target="_blank" rel="noopener">'+(isVideo?'▶':'▧')+' '+esc(f.filename)+' <small>'+esc((Number(f.size_bytes||0)/1024/1024).toFixed(2))+' MB</small></a>';
       }).join('');
       const date=r.created_at?new Date(r.created_at).toLocaleString(ar?'ar-EG':'en-US'):'';
