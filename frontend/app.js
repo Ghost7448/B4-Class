@@ -113,7 +113,6 @@ const close=(fromPopstate=false)=>{
     const cancel=activeConfirmCancel;
     activeConfirmCancel=null;
     cancel();
-    if(!fromPopstate&&history.state?.b4Modal)history.back();
     return
   }
   $('#back')?.classList.remove('show');
