@@ -321,6 +321,20 @@ CREATE TABLE IF NOT EXISTS b4_user_badges(
  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(user_id,badge_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS b4_bug_reports(
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ user_id BIGINT UNSIGNED NULL,reporter_name VARCHAR(120) NOT NULL,reporter_role VARCHAR(20) NOT NULL,
+ description TEXT NOT NULL,status ENUM('OPEN','IN_PROGRESS','RESOLVED') NOT NULL DEFAULT 'OPEN',
+ resolved_by BIGINT UNSIGNED NULL,resolved_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_bug_reports_status(status),INDEX idx_bug_reports_created(created_at),
+ FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,FOREIGN KEY(resolved_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE IF NOT EXISTS b4_bug_report_files(
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,report_id BIGINT UNSIGNED NOT NULL,filename VARCHAR(255) NOT NULL,
+ mime_type VARCHAR(120) NOT NULL,data LONGBLOB NOT NULL,size_bytes BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(report_id) REFERENCES b4_bug_reports(id) ON DELETE CASCADE,INDEX idx_bug_report_files_report(report_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS b4_developers(
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,name VARCHAR(120) NOT NULL,
  title VARCHAR(120),link_url VARCHAR(500),image_mime VARCHAR(120),image_data MEDIUMBLOB,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -360,7 +374,7 @@ INSERT IGNORE INTO permissions(code,label) VALUES
 ('MANAGE_RESOURCES','Manage resources'),('MANAGE_EXAMS','Manage exams'),
 ('MANAGE_ANNOUNCEMENTS','Manage announcements'),('MANAGE_CHAT','Moderate chat'),('VIEW_LOGS','View logs'),
 ('USE_AI','Use B4 AI'),('VIEW_CLASS','View class'),('MANAGE_BADGES','Manage badges'),
-('MANAGE_DEVELOPERS','Manage developers'),('MANAGE_TEACHER_CHAT','Teacher chat'),
+('MANAGE_DEVELOPERS','Manage developers'),('MANAGE_REPORTS','Manage Bug Reports'),('MANAGE_TEACHER_CHAT','Teacher chat'),
 ('ADMINISTRATOR','Administrator');
 
 INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'TEACHER',id FROM permissions WHERE code IN
