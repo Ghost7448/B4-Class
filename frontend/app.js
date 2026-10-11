@@ -183,6 +183,15 @@ function dashboard(){return title('Welcome to B4 👋',S.me?'<button class="btn 
 '<div class="grid stats"><div class="card stat"><small>Students</small><b data-stat-count="'+S.students.length+'">0</b></div><div class="card stat"><small>Teachers</small><b data-stat-count="'+S.teachers.length+'">0</b></div><div class="card stat"><small>Subjects</small><b data-stat-count="'+S.subjects.length+'">0</b></div><div class="card stat"><small>Assignments</small><b data-stat-count="'+S.assignments.length+'">0</b></div></div>'+
 '<div class="grid c2"><div class="card dashboard-announcements"><div class="head"><h3>'+t('announcements')+'</h3>'+ (S.me?'<button class="btn ghost" onclick="go(\'announcements\')">View</button>':'')+'</div>'+(!S.me?'<p class="muted">Log in as a B4 student or teacher to see class announcements.</p>':S.announcements.slice(0,5).map(a=>'<div class="item"><div class="grow"><b>'+esc(a.title)+'</b><p class="muted">'+esc(a.body||'')+'</p></div></div>').join('')||'<div class="empty">No announcements.</div>')+'</div>'+
 '<div class="card"><div class="head"><h3>✦ '+t('ai')+'</h3><span class="badge">ONLINE</span></div><p class="muted"></p><button class="btn primary" onclick="aiModal()">Open AI</button></div></div>'}
+function applySuperAdminCrown(){
+  const me=S.me,name=String(me?.display_name||'').trim(),isSuper=Number(me?.is_super_admin)===1||me?.is_super_admin===true;
+  document.querySelectorAll('#topName,b,strong,span,small,p,a,button,div').forEach(el=>{
+    if(el.children.length||!el.childNodes.length)return;
+    const matches=!!name&&el.textContent.trim()===name;
+    if(isSuper&&matches){el.classList.add('super-admin-crown-name');el.setAttribute('title',(el.getAttribute('title')||name)+' • Super Admin');}
+    else if(el.classList.contains('super-admin-crown-name')){el.classList.remove('super-admin-crown-name');}
+  });
+}
 function badgeHTML(badges,compact=false){
   const list=Array.isArray(badges)?badges:[];
   if(!list.length)return '';
@@ -727,6 +736,7 @@ function render(){
   morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
   if(v==='dashboard')animateDashboardStats();
   $('#topName').textContent=S.me?.display_name||t('guest');
+  applySuperAdminCrown();
   if(S.me?.avatar_url&&$('#topAvatar'))$('#topAvatar').src=S.me.avatar_url;
   if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}
   if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}
@@ -2416,4 +2426,5 @@ setupMobileDockAutoHide();showInitialSkeleton();document.documentElement.dataset
   enhanceAll();
   new MutationObserver(records=>records.forEach(r=>{if(r.type==='attributes'&&r.target.matches?.('select[data-b4-select="1"]')){const w=r.target.closest('.b4-select-wrap');if(w){w.hidden=r.target.hidden;const b=w.querySelector('.b4-select-trigger');if(b)b.disabled=r.target.disabled;}return}r.addedNodes.forEach(n=>{if(n.nodeType===1){if(n.matches?.('input[type="date"],input[type="datetime-local"],input[type="time"],input[type="number"],select'))enhanceAll(n.parentNode||document);else enhanceAll(n)}})})).observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','disabled']});
   window.B4RefreshCustomControls=enhanceAll;
+  new MutationObserver(()=>applySuperAdminCrown()).observe(document.body,{childList:true,subtree:true,characterData:true});
 })();
