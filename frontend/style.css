@@ -2555,3 +2555,7 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
   .b4-select-trigger{min-height:52px!important;padding:8px 11px!important}
   .b4-select-option{padding:9px 10px 11px!important}
 }
+
+
+/* Discord-style crown for Super Admin names */
+.super-admin-crown-name::after{content:"👑";display:inline-block;margin-inline-start:.32em;font-size:.86em;line-height:1;vertical-align:.08em;filter:drop-shadow(0 1px 2px rgba(245,185,66,.28));}
