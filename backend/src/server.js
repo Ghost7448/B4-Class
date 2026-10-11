@@ -45,6 +45,7 @@ app.use(express.json({ limit: '2mb' }));
 const assignmentUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const submissionUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 const pdfUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 }, fileFilter: (req,file,cb) => cb(null, file.mimetype === 'application/pdf') });
+const reportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024, files: 5 } });
 
 const MySQLStore = MySQLStoreFactory(session);
 app.use(session({
@@ -310,6 +311,7 @@ const PERMISSION_DEFS = [
   ['VIEW_CLASS','View class'],
   ['MANAGE_BADGES','Manage badges'],
   ['MANAGE_DEVELOPERS','Manage developers'],
+  ['MANAGE_REPORTS','Manage Bug Reports'],
   ['MANAGE_TEACHER_CHAT','Teacher chat'],
   ['MANAGE_ANALYTICS','View attendance analytics'],
   ['MANAGE_SITE','Manage Site'],
@@ -317,6 +319,8 @@ const PERMISSION_DEFS = [
 ];
 
 async function ensurePermissionSchema() {
+  await q("CREATE TABLE IF NOT EXISTS b4_bug_reports(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NULL,reporter_name VARCHAR(120) NOT NULL,reporter_role VARCHAR(20) NOT NULL,description TEXT NOT NULL,status ENUM('OPEN','IN_PROGRESS','RESOLVED') NOT NULL DEFAULT 'OPEN',resolved_by BIGINT UNSIGNED NULL,resolved_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_bug_reports_status(status),INDEX idx_bug_reports_created(created_at),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,FOREIGN KEY(resolved_by) REFERENCES users(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS b4_bug_report_files(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,report_id BIGINT UNSIGNED NOT NULL,filename VARCHAR(255) NOT NULL,mime_type VARCHAR(120) NOT NULL,data LONGBLOB NOT NULL,size_bytes BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(report_id) REFERENCES b4_bug_reports(id) ON DELETE CASCADE,INDEX idx_bug_report_files_report(report_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS profile_images(entity_type VARCHAR(20) NOT NULL,entity_id BIGINT UNSIGNED NOT NULL,mime_type VARCHAR(120) NOT NULL,data MEDIUMBLOB NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(entity_type,entity_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS chat_typing(user_id BIGINT UNSIGNED PRIMARY KEY,typing TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS notification_settings(user_id BIGINT UNSIGNED PRIMARY KEY,class_chat_messages TINYINT(1) NOT NULL DEFAULT 1,class_chat_reply TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_messages TINYINT(1) NOT NULL DEFAULT 1,teacher_chat_reply TINYINT(1) NOT NULL DEFAULT 1,exam_notifications TINYINT(1) NOT NULL DEFAULT 1,exam_results TINYINT(1) NOT NULL DEFAULT 1,announcement_notifications TINYINT(1) NOT NULL DEFAULT 1,assignment_notifications TINYINT(1) NOT NULL DEFAULT 1,resource_notifications TINYINT(1) NOT NULL DEFAULT 1,system_notifications TINYINT(1) NOT NULL DEFAULT 1,push_enabled TINYINT(1) NOT NULL DEFAULT 0,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -908,6 +912,54 @@ app.patch('/api/auth/profile', requireAuth, async (req, res) => {
   await q(`UPDATE users SET display_name=? WHERE id=?`, [displayName.trim(), req.session.userId]);
   await audit(req,'PROFILE_UPDATED','user',req.session.userId,{displayName:displayName.trim()});
   res.json({ ok: true, user: await userById(req.session.userId) });
+});
+
+app.post('/api/reports',requireAuth,reportUpload.array('files',5),async(req,res)=>{
+  const description=String(req.body?.description||'').trim();
+  if(description.length<10||description.length>5000)return res.status(400).json({error:'Please describe the problem in 10 to 5000 characters'});
+  const files=req.files||[];
+  const allowed=new Set(['image/jpeg','image/png','image/webp','image/gif','image/avif','video/mp4','video/webm','video/quicktime']);
+  if(files.some(f=>!allowed.has(String(f.mimetype||'').toLowerCase())))return res.status(400).json({error:'Only image and video attachments are allowed'});
+  const [users]=await q("SELECT display_name,role FROM users WHERE id=? AND status='ACTIVE' LIMIT 1",[req.session.userId]);
+  if(!users[0])return res.status(401).json({error:'Please sign in again'});
+  const [created]=await q("INSERT INTO b4_bug_reports(user_id,reporter_name,reporter_role,description) VALUES(?,?,?,?)",[req.session.userId,users[0].display_name,users[0].role,description]);
+  for(const f of files){
+    const filename=String(f.originalname||'attachment').replace(/[\/\\\x00-\x1f]/g,'_').slice(0,255)||'attachment';
+    await q('INSERT INTO b4_bug_report_files(report_id,filename,mime_type,data,size_bytes) VALUES(?,?,?,?,?)',[created.insertId,filename,f.mimetype,f.buffer,f.size]);
+  }
+  await audit(req,'BUG_REPORT_CREATED','bug_report',created.insertId,{attachment_count:files.length});
+  res.status(201).json({ok:true,id:created.insertId});
+});
+
+app.get('/api/admin/reports',requirePermission('MANAGE_REPORTS'),async(req,res)=>{
+  const [reports]=await q("SELECT id,user_id,reporter_name,reporter_role,description,status,resolved_by,resolved_at,created_at,updated_at FROM b4_bug_reports ORDER BY CASE status WHEN 'OPEN' THEN 0 WHEN 'IN_PROGRESS' THEN 1 ELSE 2 END,created_at DESC");
+  const ids=reports.map(r=>r.id);
+  let attachments=[];
+  if(ids.length){
+    const [rows]=await q('SELECT id,report_id,filename,mime_type,size_bytes,created_at FROM b4_bug_report_files WHERE report_id IN ('+ids.map(()=>'?').join(',')+') ORDER BY id',[...ids]);
+    attachments=rows;
+  }
+  res.json({reports:reports.map(r=>({...r,files:attachments.filter(f=>Number(f.report_id)===Number(r.id))}))});
+});
+app.patch('/api/admin/reports/:id/status',requirePermission('MANAGE_REPORTS'),async(req,res)=>{
+  const id=Number(req.params.id),status=String(req.body?.status||'').toUpperCase();
+  if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({error:'Invalid report'});
+  if(!['OPEN','IN_PROGRESS','RESOLVED'].includes(status))return res.status(400).json({error:'Invalid report status'});
+  const [found]=await q('SELECT id,status FROM b4_bug_reports WHERE id=? LIMIT 1',[id]);
+  if(!found[0])return res.status(404).json({error:'Report not found'});
+  await q("UPDATE b4_bug_reports SET status=?,resolved_by=?,resolved_at=? WHERE id=?",[status,status==='RESOLVED'?req.session.userId:null,status==='RESOLVED'?new Date():null,id]);
+  await audit(req,'BUG_REPORT_STATUS_CHANGED','bug_report',id,{from:found[0].status,to:status});
+  res.json({ok:true,status});
+});
+app.get('/api/admin/reports/:reportId/files/:fileId',requirePermission('MANAGE_REPORTS'),async(req,res)=>{
+  const reportId=Number(req.params.reportId),fileId=Number(req.params.fileId);
+  if(!Number.isSafeInteger(reportId)||!Number.isSafeInteger(fileId))return res.status(400).end();
+  const [rows]=await q('SELECT filename,mime_type,data FROM b4_bug_report_files WHERE id=? AND report_id=? LIMIT 1',[fileId,reportId]);
+  if(!rows[0])return res.status(404).end();
+  res.setHeader('Content-Type',rows[0].mime_type);
+  res.setHeader('Content-Disposition',"inline; filename*=UTF-8''"+encodeURIComponent(rows[0].filename));
+  res.setHeader('X-Content-Type-Options','nosniff');
+  res.send(rows[0].data);
 });
 
 app.get('/api/admin/site', requirePermission('MANAGE_SITE'), async (req,res)=>{
