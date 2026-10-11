@@ -191,7 +191,8 @@ function applySuperAdminCrown(){
   const me=S.me,name=String(me?.display_name||'').trim(),isSuper=isSuperAdminAccount(me);
   const topName=$('#topName');
   if(topName){
-    topName.textContent=(name||t('guest'))+(isSuper?' 👑':'');
+    const label=(name||t('guest'))+(isSuper?' 👑':'');
+    if(topName.textContent!==label)topName.textContent=label;
     topName.classList.remove('super-admin-crown-name');
     if(isSuper)topName.setAttribute('title',(name||'Account')+' • Super Admin');
     else if(String(topName.getAttribute('title')||'').includes('Super Admin'))topName.removeAttribute('title');
