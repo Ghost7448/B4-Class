@@ -108,18 +108,24 @@ async function installB4(){
   openInstallModal('ready');
 }
 let activeConfirmCancel=null;
-const close=()=>{
+const close=(fromPopstate=false)=>{
   if(activeConfirmCancel){
     const cancel=activeConfirmCancel;
     activeConfirmCancel=null;
     cancel();
+    if(!fromPopstate&&history.state?.b4Modal)history.back();
     return
   }
-  $('#back')?.classList.remove('show')
+  $('#back')?.classList.remove('show');
+  if(!fromPopstate&&history.state?.b4Modal)history.back()
 };
 window.b4Close=close;
 document.addEventListener('click',e=>{const back=$('#back');if(back?.classList.contains('show')&&e.target===back)close()});
-const modal=h=>{$('#modal').innerHTML='<div class="modal">'+h+'</div>';$('#back').classList.add('show')};
+const modal=h=>{
+  if(!$('#back')?.classList.contains('show'))history.pushState({...history.state,b4View:S.view,b4Modal:true},'',location.href);
+  $('#modal').innerHTML='<div class="modal">'+h+'</div>';
+  $('#back').classList.add('show')
+};
 function confirmAction(message,options={}){
   const title=options.title||'Confirm action';
   const confirmText=options.confirmText||'Confirm';
@@ -132,6 +138,7 @@ function confirmAction(message,options={}){
       settled=true;
       activeConfirmCancel=null;
       $('#back')?.classList.remove('show');
+      if(history.state?.b4Modal)history.back();
       resolve(value)
     };
     activeConfirmCancel=()=>finish(false);
@@ -337,6 +344,7 @@ async function syncLiveData(){
     if(S.view==='chat'||S.view==='teacherChat')return;
     if(S.view==='exam-run'||S.view==='exam-result'||S.view==='exam-answers'||S.view==='exam-review')return;
     if(!changed)return;
+    if(S.view==='admin:reports'){loadReports({silent:true});return}
     if($('#back')?.classList.contains('show'))return;
     if(S.view==='chat'||S.view==='teacherChat')return;
     if(S.view==='exam-run'||S.view==='exam-result'||S.view==='exam-answers'||S.view==='exam-review')return;
@@ -613,7 +621,7 @@ function reportBugV(){
     '<form class="form" id="bugReportForm" onsubmit="submitBugReport(event)"><label>'+(ar?'وصف المشكلة':'Problem description')+'<textarea id="bugReportDescription" rows="10" minlength="10" maxlength="5000" required placeholder="'+(ar?'اشرح المشكلة بالتفصيل، وإيه اللي كنت بتعمله لما ظهرت...':'Explain the issue in detail, including what you clicked and what happened...')+'"></textarea></label>'+
     '<label class="report-file-picker"><span class="report-file-icon">＋</span><span><b>'+(ar?'إرفاق صور أو فيديوهات':'Attach images or videos')+'</b><small class="muted">'+(ar?'اختياري • حتى 5 ملفات • 15 ميجابايت للملف':'Optional • Up to 5 files • 15 MB per file')+'</small></span><input id="bugReportFiles" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm,video/quicktime" multiple onchange="showBugFiles()"></label><div id="bugReportFileList" class="report-file-list muted">'+(ar?'لم يتم اختيار ملفات':'No files selected')+'</div>'+
     '<button class="btn primary report-submit" type="submit">➤ '+(ar?'إرسال البلاغ':'Submit report')+'</button></form></div>'+
-    '<div class="card report-side-card"><span class="report-icon">🛠</span><h3>'+(ar?'هنراجع البلاغ':'What happens next?')+'</h3><p class="muted">'+(ar?'البلاغ هيوصل لفريق الإدارة. هنراجع المشكلة ونحدّث حالتها لحد ما تتحل.':'Your report goes to the admin team. We will review it and update its status as we work on a fix.')+'</p><div class="report-status-legend"><span class="badge red">'+(ar?'مفتوحة':'Open')+'</span><span class="badge warn">'+(ar?'قيد المراجعة':'In progress')+'</span><span class="badge good">'+(ar?'تم الحل':'Resolved')+'</span></div></div></div>';
+    '</div>';
 }
 function showBugFiles(){
   const ar=S.lang==='ar',input=$('#bugReportFiles'),box=$('#bugReportFileList');
@@ -712,6 +720,9 @@ function render(){
   document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
   if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';
   const previousView=lastAnimatedView;let v=S.view;
+  if(v==='admin:reports'){
+    if(!window.b4ReportsLiveTimer)window.b4ReportsLiveTimer=setInterval(()=>{if(S.view==='admin:reports'&&!document.hidden)loadReports({silent:true})},5000);
+  }else if(window.b4ReportsLiveTimer){clearInterval(window.b4ReportsLiveTimer);window.b4ReportsLiveTimer=null}
   morphHtml($('#nav'),buildNav());
   let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
   morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
@@ -1287,14 +1298,17 @@ function teacherMessageHTML(m){
 
 function adminLoad(p){if(p==='roles')loadRoles();if(p==='permissions')loadPermissions();if(p==='accounts')loadAccounts();if(p==='keys')loadKeys();if(p==='badges')loadBadges();if(p==='admins')loadAdmins();if(p==='logs')loadLogs();if(p==='site')loadSiteManagement();if(p==='reports')loadReports();if(p==='developers')loadDevelopers()}
 
-async function loadReports(){
-  const root=$('#adminRoot');if(!root)return;
-  const ar=S.lang==='ar';
-  root.innerHTML='<div class="card notice">'+(ar?'جارٍ تحميل البلاغات...':'Loading reports...')+'</div>';
+async function loadReports(options={}){
+  const root=$('#adminRoot');if(!root||window.reportsLoadBusy)return;
+  const ar=S.lang==='ar',silent=!!options.silent;
+  window.reportsLoadBusy=true;
+  if(!silent&&!root.childElementCount)root.innerHTML='<div class="card notice">'+(ar?'جارٍ تحميل البلاغات...':'Loading reports...')+'</div>';
   try{
     const d=await api('/api/admin/reports'),reports=d.reports||[];
-    if(!reports.length){root.innerHTML='<div class="card empty"><div class="report-icon">✓</div><h3>'+(ar?'مفيش بلاغات لحد دلوقتي':'No reports yet')+'</h3><p class="muted">'+(ar?'أي بلاغ جديد هيظهر هنا.':'New bug reports will appear here.')+'</p></div>';return}
-    root.innerHTML='<div class="reports-toolbar"><span class="badge">'+reports.length+' '+(ar?'بلاغ':'reports')+'</span><span class="muted">'+(ar?'مرتبة حسب الحالة والأحدث':'Sorted by status and newest first')+'</span></div><div class="reports-list">'+reports.map(r=>{
+    if(!root.isConnected||S.view!=='admin:reports')return;
+    let html;
+    if(!reports.length)html='<div class="card empty"><div class="report-icon">✓</div><h3>'+(ar?'مفيش بلاغات لحد دلوقتي':'No reports yet')+'</h3><p class="muted">'+(ar?'أي بلاغ جديد هيظهر هنا.':'New bug reports will appear here.')+'</p></div>';
+    else html='<div class="reports-toolbar"><span class="badge">'+reports.length+' '+(ar?'بلاغ':'reports')+'</span><span class="muted">'+(ar?'مرتبة حسب الحالة والأحدث':'Sorted by status and newest first')+'</span></div><div class="reports-list">'+reports.map(r=>{
       const status=String(r.status||'OPEN'),statusText=ar?(status==='RESOLVED'?'تم الحل':status==='IN_PROGRESS'?'قيد المراجعة':'مفتوحة'):(status==='RESOLVED'?'Resolved':status==='IN_PROGRESS'?'In progress':'Open');
       const files=(r.files||[]).map(f=>{
         const url=API+'/api/admin/reports/'+r.id+'/files/'+f.id,isVideo=String(f.mime_type||'').startsWith('video/');
@@ -1303,13 +1317,14 @@ async function loadReports(){
       const date=r.created_at?new Date(r.created_at).toLocaleString(ar?'ar-EG':'en-US'):'';
       return '<article class="card report-admin-card"><div class="report-admin-head"><div><span class="eyebrow">REPORT #'+esc(r.id)+'</span><h3>'+esc(r.reporter_name||'Unknown user')+'</h3><p class="muted">'+esc(r.reporter_role||'USER')+' • '+esc(date)+'</p></div><span class="badge '+(status==='RESOLVED'?'good':status==='IN_PROGRESS'?'warn':'red')+'">'+statusText+'</span></div><div class="report-description">'+esc(r.description)+'</div>'+(files?'<div class="report-attachments"><b>'+(ar?'المرفقات':'Attachments')+'</b>'+files+'</div>':'')+'<div class="report-admin-actions">'+(status!=='IN_PROGRESS'?'<button class="btn ghost" onclick="setReportStatus('+r.id+',\'IN_PROGRESS\')">'+(ar?'قيد المراجعة':'Mark in progress')+'</button>':'')+(status!=='RESOLVED'?'<button class="btn primary" onclick="setReportStatus('+r.id+',\'RESOLVED\')">✓ '+(ar?'تم حل المشكلة':'Mark resolved')+'</button>':'<button class="btn ghost" onclick="setReportStatus('+r.id+',\'OPEN\')">'+(ar?'إعادة فتح البلاغ':'Reopen report')+'</button>')+'</div></article>';
     }).join('')+'</div>';
-  }catch(e){root.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
+    morphHtml(root,html);
+  }catch(e){if(root.isConnected)morphHtml(root,'<div class="card notice">'+esc(e.message)+'</div>')}
+  finally{window.reportsLoadBusy=false}
 }
 async function setReportStatus(id,status){
-  try{await api('/api/admin/reports/'+id+'/status',{method:'PATCH',body:JSON.stringify({status})});toast(S.lang==='ar'?'تم تحديث حالة البلاغ ✓':'Report status updated ✓');await loadReports()}
+  try{await api('/api/admin/reports/'+id+'/status',{method:'PATCH',body:JSON.stringify({status})});toast(S.lang==='ar'?'تم تحديث حالة البلاغ ✓':'Report status updated ✓');await loadReports({silent:true})}
   catch(e){toast(e.message||'Could not update report')}
 }
-
 async function loadSiteManagement(){
   const r=$('#adminRoot');
   if(!r)return;
@@ -1957,6 +1972,7 @@ const params=new URLSearchParams(location.search);const requestedView=params.get
 // Establish the current page as the starting point, then restore prior in-app views on browser Back.
 history.replaceState({...(history.state||{}),b4View:S.view},'',location.href);
 window.addEventListener('popstate',event=>{
+  if($('#back')?.classList.contains('show')){close(true);return}
   const target=event.state?.b4View;
   if(typeof target!=='string')return;
   if(S.view==='exam-run'&&target!=='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
