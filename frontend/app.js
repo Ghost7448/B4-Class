@@ -183,10 +183,21 @@ function dashboard(){return title('Welcome to B4 👋',S.me?'<button class="btn 
 '<div class="grid stats"><div class="card stat"><small>Students</small><b data-stat-count="'+S.students.length+'">0</b></div><div class="card stat"><small>Teachers</small><b data-stat-count="'+S.teachers.length+'">0</b></div><div class="card stat"><small>Subjects</small><b data-stat-count="'+S.subjects.length+'">0</b></div><div class="card stat"><small>Assignments</small><b data-stat-count="'+S.assignments.length+'">0</b></div></div>'+
 '<div class="grid c2"><div class="card dashboard-announcements"><div class="head"><h3>'+t('announcements')+'</h3>'+ (S.me?'<button class="btn ghost" onclick="go(\'announcements\')">View</button>':'')+'</div>'+(!S.me?'<p class="muted">Log in as a B4 student or teacher to see class announcements.</p>':S.announcements.slice(0,5).map(a=>'<div class="item"><div class="grow"><b>'+esc(a.title)+'</b><p class="muted">'+esc(a.body||'')+'</p></div></div>').join('')||'<div class="empty">No announcements.</div>')+'</div>'+
 '<div class="card"><div class="head"><h3>✦ '+t('ai')+'</h3><span class="badge">ONLINE</span></div><p class="muted"></p><button class="btn primary" onclick="aiModal()">Open AI</button></div></div>'}
+function isSuperAdminAccount(user=S.me){
+  const flag=user?.is_super_admin;
+  return Number(flag)===1||flag===true||String(flag??'').trim().toLowerCase()==='true';
+}
 function applySuperAdminCrown(){
-  const me=S.me,name=String(me?.display_name||'').trim(),isSuper=Number(me?.is_super_admin)===1||me?.is_super_admin===true;
-  document.querySelectorAll('#topName,b,strong,span,small,p,a,button,div').forEach(el=>{
-    if(el.children.length||!el.childNodes.length)return;
+  const me=S.me,name=String(me?.display_name||'').trim(),isSuper=isSuperAdminAccount(me);
+  const topName=$('#topName');
+  if(topName){
+    topName.textContent=(name||t('guest'))+(isSuper?' 👑':'');
+    topName.classList.remove('super-admin-crown-name');
+    if(isSuper)topName.setAttribute('title',(name||'Account')+' • Super Admin');
+    else if(String(topName.getAttribute('title')||'').includes('Super Admin'))topName.removeAttribute('title');
+  }
+  document.querySelectorAll('b,strong,span,small,p,a,button,div').forEach(el=>{
+    if(el===topName||el.children.length||!el.childNodes.length)return;
     const matches=!!name&&el.textContent.trim()===name;
     if(isSuper&&matches){el.classList.add('super-admin-crown-name');if(!String(el.getAttribute('title')||'').includes('Super Admin'))el.setAttribute('title',name+' • Super Admin');}
     else if(el.classList.contains('super-admin-crown-name')){el.classList.remove('super-admin-crown-name');}
@@ -735,7 +746,6 @@ function render(){
   let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
   morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
   if(v==='dashboard')animateDashboardStats();
-  $('#topName').textContent=S.me?.display_name||t('guest');
   applySuperAdminCrown();
   if(S.me?.avatar_url&&$('#topAvatar'))$('#topAvatar').src=S.me.avatar_url;
   if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}
