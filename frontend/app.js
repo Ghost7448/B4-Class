@@ -667,6 +667,10 @@ function morphHtml(root,html){
   children(root,template.content);
 }
 function render(){
+  // Keep the browser history aligned with in-app navigation so Android Back returns to the previous B4 view.
+  if(!window.b4HandlingPopState && S.view && history.state?.b4View!==S.view){
+    history.pushState({...(history.state||{}),b4View:S.view},'',location.href);
+  }
   document.documentElement.dataset.theme=S.theme;
   document.documentElement.classList.toggle('dark',S.theme==='dark');
   document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
@@ -1890,6 +1894,16 @@ window.addEventListener('beforeunload',()=>clearInterval(window.examTimer));
 startSiteLockWatcher();
 document.addEventListener('DOMContentLoaded',async()=>{
 const params=new URLSearchParams(location.search);const requestedView=params.get('view');const requestedId=Number(params.get('id')||0);if(['dashboard','students','teachers','subjects','schedule','assignments','resources','exams','announcements','chat','teacherChat','admin','teacherCenter','settings','developers'].includes(requestedView))S.view=requestedView;
+// Establish the current page as the starting point, then restore prior in-app views on browser Back.
+history.replaceState({...(history.state||{}),b4View:S.view},'',location.href);
+window.addEventListener('popstate',event=>{
+  const target=event.state?.b4View;
+  if(typeof target!=='string')return;
+  if(S.view==='exam-run'&&target!=='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
+  window.b4HandlingPopState=true;
+  try{S.view=target;render();window.scrollTo({top:0,behavior:'smooth'});}
+  finally{window.b4HandlingPopState=false;}
+});
 setupMobileDockAutoHide();showInitialSkeleton();document.documentElement.dataset.theme=S.theme;document.documentElement.classList.toggle('dark',S.theme==='dark');$('#theme').onclick=toggleTheme;$('#lang').onclick=toggleLang;$('#install').onclick=installB4;$('#mobile').onclick=()=>$('#side').classList.toggle('open');document.addEventListener('click',e=>{if(window.innerWidth<=800){const side=$('#side');if(side?.classList.contains('open')&&!side.contains(e.target)&&!e.target.closest('#mobile'))side.classList.remove('open')}});document.addEventListener('keydown',e=>{if(e.key==='Escape'&&window.innerWidth<=800)$('#side')?.classList.remove('open')});$('#ai').onclick=aiModal;$('#bell').onclick=openNotifications;$('#mobileAlerts').onclick=openNotifications;$('#profile').onclick=()=>S.me?go('settings'):loginModal();searchBind();await loadMe();if(requestedView&&requestedId&&requestedView==='assignments')setTimeout(()=>openAssignment(requestedId),120);if(requestedView&&requestedId&&requestedView==='exams')setTimeout(()=>startExam(requestedId),120);startAssignmentCountdown()});
 
 
