@@ -188,7 +188,7 @@ function applySuperAdminCrown(){
   document.querySelectorAll('#topName,b,strong,span,small,p,a,button,div').forEach(el=>{
     if(el.children.length||!el.childNodes.length)return;
     const matches=!!name&&el.textContent.trim()===name;
-    if(isSuper&&matches){el.classList.add('super-admin-crown-name');el.setAttribute('title',(el.getAttribute('title')||name)+' • Super Admin');}
+    if(isSuper&&matches){el.classList.add('super-admin-crown-name');if(!String(el.getAttribute('title')||'').includes('Super Admin'))el.setAttribute('title',name+' • Super Admin');}
     else if(el.classList.contains('super-admin-crown-name')){el.classList.remove('super-admin-crown-name');}
   });
 }
