@@ -24,3 +24,30 @@ body.b4-schedule-open header{position:sticky;z-index:110}
 @media(prefers-reduced-motion:reduce){
  .b4-schedule-wrap,.b4-schedule-wrap .b4-schedule,#mobile,.b4-schedule-wrap .b4-schedule td{animation:none!important;transition:none!important}
 }
+
+/* Keep the hamburger reachable above the schedule on small screens. */
+body.b4-schedule-open header{
+  position:sticky!important;
+  top:0;
+  z-index:2147483000!important;
+}
+body.b4-schedule-open #mobile{
+  position:fixed!important;
+  top:10px!important;
+  left:10px!important;
+  right:auto!important;
+  z-index:2147483647!important;
+  pointer-events:auto!important;
+  touch-action:manipulation;
+}
+body.ar.b4-schedule-open #mobile{
+  left:auto!important;
+  right:10px!important;
+}
+body.b4-schedule-open .b4-schedule-wrap{
+  z-index:0;
+}
+@media(max-width:800px){
+  body.b4-schedule-open #mobile{top:8px!important;left:8px!important}
+  body.ar.b4-schedule-open #mobile{left:auto!important;right:8px!important}
+}
