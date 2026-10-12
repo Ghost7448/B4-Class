@@ -2570,3 +2570,22 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
   mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'%3E%3Cpath d='M2 3.2 7.7 7.1 12 1.2l4.3 5.9L22 3.2l-2.1 13.4H4.1L2 3.2Z'/%3E%3Cpath d='M4.1 18h15.8v1.4H4.1z'/%3E%3C/svg%3E") center / contain no-repeat;
   filter:drop-shadow(0 1px 1px rgba(217,154,36,.24));
 }
+
+/* School timetable inspired by the supplied paper schedule */
+.b4-schedule-wrap{overflow-x:auto}
+.b4-schedule{min-width:1120px;border-collapse:separate;border-spacing:0;table-layout:fixed}
+.b4-schedule th,.b4-schedule td{border:1px solid var(--line)!important;text-align:center;vertical-align:middle;padding:9px 7px}
+.b4-schedule thead th{background:var(--s2);min-width:105px}
+.b4-schedule thead th:first-child{min-width:85px}
+.b4-schedule thead th small,.b4-schedule thead th b{display:block}
+.b4-schedule thead th small{font-size:10px;color:var(--m);margin-bottom:5px}
+.b4-schedule thead th b{font-size:12px}
+.b4-schedule .schedule-day{background:var(--s2);font-weight:850;min-width:85px}
+.b4-schedule .schedule-subject{font-size:12px;font-weight:850;line-height:1.25}
+.b4-schedule .schedule-teacher{font-size:11px;color:var(--m);margin-top:5px;line-height:1.2}
+.b4-schedule .break-head,.b4-schedule .break-cell{min-width:40px;width:40px;padding:4px;background:linear-gradient(180deg,#eee7fb,#f8f5ff);color:#6d28d9}
+.b4-schedule .break-head span{writing-mode:vertical-rl;transform:rotate(180deg);display:inline-block;font-size:11px;font-weight:900;letter-spacing:.5px}
+.b4-schedule .break-cell{writing-mode:vertical-rl;transform:none;font-size:10px;font-weight:900;letter-spacing:.5px}
+.schedule-editor .schedule-row{display:grid;grid-template-columns:1fr repeat(4,minmax(110px,1fr));gap:8px;margin-bottom:9px}
+.schedule-editor .schedule-row input{min-width:0}
+@media(max-width:800px){.schedule-editor .schedule-row{grid-template-columns:1fr 1fr}}
