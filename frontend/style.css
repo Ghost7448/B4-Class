@@ -2798,3 +2798,29 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
   .b4-schedule-wrap{max-height:calc(100vh - 120px)!important;overflow:auto!important}
   .b4-schedule{min-width:900px!important;width:900px!important}
 }
+
+
+/* Mobile timetable landscape presentation: rotate only the timetable view on portrait phones. Desktop stays unchanged. */
+@media (max-width: 700px) and (orientation: portrait) {
+  body:has(.b4-schedule-wrap) .b4-schedule-wrap.mobile-landscape-view {
+    position: fixed !important;
+    z-index: 9999 !important;
+    top: 0 !important;
+    left: 100vw !important;
+    width: 100vh !important;
+    height: 100vw !important;
+    max-width: none !important;
+    max-height: none !important;
+    padding: 10px !important;
+    margin: 0 !important;
+    overflow: auto !important;
+    background: var(--bg, #0b1020) !important;
+    transform: rotate(90deg) !important;
+    transform-origin: top left !important;
+  }
+  body:has(.b4-schedule-wrap) .b4-schedule-wrap.mobile-landscape-view .b4-schedule {
+    width: 100% !important;
+    min-width: 0 !important;
+    table-layout: fixed !important;
+  }
+}
