@@ -51,3 +51,25 @@ body.b4-schedule-open .b4-schedule-wrap{
   body.b4-schedule-open #mobile{top:8px!important;left:8px!important}
   body.ar.b4-schedule-open #mobile{left:auto!important;right:8px!important}
 }
+
+/* v62: keep the landscape timetable inside the phone viewport and prevent cell content clipping. */
+@media (max-width:700px) and (orientation:portrait) {
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view {
+    top:10px!important;
+    left:calc(100vw - 10px)!important;
+    width:calc(100dvh - 20px)!important;
+    height:calc(100dvw - 20px)!important;
+    padding:6px!important;
+    overflow:auto!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule {
+    height:auto!important;
+    min-height:100%!important;
+    table-layout:fixed!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule th,
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule td {
+    padding:3px 1px!important;
+    overflow-wrap:anywhere!important;
+  }
+}
