@@ -3,7 +3,7 @@ const FILES=['./','./index.html','./style.css','./schedule-polish.css','./app.js
 self.addEventListener('install',function(event){
   event.waitUntil(caches.open(CACHE).then(function(cache){return cache.addAll(FILES);}).then(function(){return self.skipWaiting();}));
 });
-self.addEventListener('activate',event){
+self.addEventListener('activate',event=>{
   event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));
 });
 self.addEventListener('push',function(event){
