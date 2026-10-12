@@ -2962,3 +2962,36 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
     font-size:9px!important;white-space:nowrap!important;word-break:keep-all!important;
   }
 }
+
+
+/* Full-screen card for the mobile landscape timetable only. */
+@media (max-width:700px) and (orientation:portrait) {
+  html:has(.b4-schedule-wrap.mobile-landscape-view),
+  body:has(.b4-schedule-wrap.mobile-landscape-view) {
+    background: #080b12 !important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view {
+    top: 8px !important;
+    left: calc(100vw - 8px) !important;
+    width: calc(100dvh - 16px) !important;
+    height: calc(100dvw - 16px) !important;
+    padding: 10px !important;
+    border: 1px solid var(--line, #2b3040) !important;
+    border-radius: 18px !important;
+    background: var(--s, #11141b) !important;
+    box-shadow: 0 12px 36px rgba(0,0,0,.28) !important;
+    overflow: auto !important;
+    display: flex !important;
+    align-items: stretch !important;
+    justify-content: center !important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule {
+    flex: 1 1 auto !important;
+    align-self: stretch !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    border-radius: 10px !important;
+  }
+}
