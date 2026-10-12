@@ -2684,3 +2684,26 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
  .b4-schedule thead th b{font-size:7px!important;line-height:1.1!important}
  .b4-schedule .schedule-day,.b4-schedule .schedule-day-head{font-size:7px!important;line-height:1.1!important}
 }
+
+/* Final schedule polish: merged break cells and centered readable text. */
+.b4-schedule-wrap{width:100%;max-width:100%;overflow-x:auto!important;overscroll-behavior-x:contain}
+.b4-schedule{width:100%;min-width:0;table-layout:fixed;border-collapse:collapse}
+.b4-schedule th,.b4-schedule td{box-sizing:border-box;text-align:center;vertical-align:middle;overflow:hidden}
+.b4-schedule .break-cell-merged{padding:5px 2px!important;vertical-align:middle!important}
+.b4-schedule .break-cell-merged span{display:inline-block;writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;font-size:12px!important;font-weight:900;letter-spacing:.5px}
+.b4-schedule .schedule-subject{font-size:clamp(8px,1.15vw,12px)!important;line-height:1.18!important;overflow-wrap:normal!important;word-break:normal!important;hyphens:none}
+.b4-schedule .schedule-teacher{font-size:clamp(7px,.95vw,10px)!important;line-height:1.15!important;overflow-wrap:normal!important;word-break:normal!important;hyphens:none}
+.b4-schedule .schedule-day,.b4-schedule .schedule-day-head{font-size:clamp(8px,1vw,11px)!important;overflow-wrap:normal!important;word-break:normal!important}
+@media(max-width:700px){
+ .b4-schedule-wrap{padding:8px!important;overflow-x:auto!important}
+ .b4-schedule{width:100%!important;min-width:0!important}
+ .b4-schedule th,.b4-schedule td{padding:4px 2px!important}
+ .b4-schedule .schedule-subject{font-size:clamp(7px,2.1vw,9px)!important;line-height:1.18!important}
+ .b4-schedule .schedule-teacher{font-size:clamp(6px,1.75vw,7.5px)!important;line-height:1.12!important;margin-top:2px!important}
+ .b4-schedule thead th b{font-size:8px!important;line-height:1.1!important}
+ .b4-schedule thead th small{font-size:7px!important;line-height:1.1!important}
+ .b4-schedule .schedule-day,.b4-schedule .schedule-day-head{font-size:8px!important;line-height:1.1!important}
+ .b4-schedule .break-cell-merged span{font-size:10px!important;letter-spacing:.2px!important}
+ .b4-schedule .break-head span{font-size:8px!important}
+ .b4-schedule .break-head span small{font-size:6px!important}
+}
