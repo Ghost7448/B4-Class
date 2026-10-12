@@ -2589,3 +2589,34 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
 .schedule-editor .schedule-row{display:grid;grid-template-columns:1fr repeat(4,minmax(110px,1fr));gap:8px;margin-bottom:9px}
 .schedule-editor .schedule-row input{min-width:0}
 @media(max-width:800px){.schedule-editor .schedule-row{grid-template-columns:1fr 1fr}}
+
+/* Live class timetable: crisp paper-grid layout, responsive scroll, active period */
+.b4-schedule-wrap{overflow-x:auto;border-radius:16px}
+.b4-schedule{min-width:1120px;width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;background:var(--card)}
+.b4-schedule th,.b4-schedule td{border:1px solid var(--line)!important;text-align:center;vertical-align:middle;padding:10px 7px;transition:background .2s,border-color .2s,box-shadow .2s}
+.b4-schedule thead th{background:var(--s2);min-width:98px}
+.b4-schedule thead th:first-child{min-width:82px}
+.b4-schedule thead th small,.b4-schedule thead th b{display:block}
+.b4-schedule thead th small{font-size:10px;color:var(--m);margin-bottom:5px;white-space:nowrap}
+.b4-schedule thead th b{font-size:12px}
+.b4-schedule .schedule-day,.b4-schedule .schedule-day-head{background:var(--s2);font-weight:850;min-width:82px}
+.b4-schedule .schedule-day{font-size:13px}
+.b4-schedule .schedule-subject{font-size:12px;font-weight:850;line-height:1.3;overflow-wrap:anywhere}
+.b4-schedule .schedule-teacher{font-size:11px;color:var(--m);margin-top:5px;line-height:1.2;overflow-wrap:anywhere}
+.b4-schedule .break-head,.b4-schedule .break-cell{width:48px;min-width:48px;padding:4px;background:color-mix(in srgb,#8b5cf6 9%,var(--card));color:#7c3aed}
+.b4-schedule .break-head span{writing-mode:vertical-rl;transform:rotate(180deg);display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:900;letter-spacing:.5px;white-space:nowrap}
+.b4-schedule .break-head span small{writing-mode:horizontal-tb;transform:rotate(180deg);font-size:9px}
+.b4-schedule .break-cell span{writing-mode:vertical-rl;transform:rotate(180deg);display:inline-block;font-size:10px;font-weight:900;letter-spacing:.7px}
+.b4-schedule tr.is-today .schedule-day{box-shadow:inset 4px 0 #22c55e;background:color-mix(in srgb,#22c55e 10%,var(--card))}
+.b4-schedule td.is-current-period,.b4-schedule th.is-current-period{background:#dcfce7!important;color:#166534!important;border-color:#22c55e!important;box-shadow:inset 0 0 0 2px #22c55e}
+.b4-schedule td.is-current-period .schedule-teacher{color:#166534}
+.b4-schedule td.is-current-break,.b4-schedule th.is-current-break{background:#fef3c7!important;color:#92400e!important;border-color:#f59e0b!important;box-shadow:inset 0 0 0 2px #f59e0b}
+.live{transition:background .2s,border-color .2s}
+.live>i{background:#22c55e!important;box-shadow:0 0 0 4px rgba(34,197,94,.12)}
+.live.is-period{background:color-mix(in srgb,#22c55e 10%,var(--card));border-color:color-mix(in srgb,#22c55e 45%,var(--line))}
+.live.is-period>i{background:#22c55e!important;box-shadow:0 0 0 4px rgba(34,197,94,.16)}
+.live.is-break{background:color-mix(in srgb,#f59e0b 12%,var(--card));border-color:color-mix(in srgb,#f59e0b 55%,var(--line))}
+.live.is-break>i{background:#f59e0b!important;box-shadow:0 0 0 4px rgba(245,158,11,.2)}
+.live.is-out{background:var(--s2);border-color:var(--line)}
+.live.is-out>i{background:#94a3b8!important;box-shadow:0 0 0 4px rgba(148,163,184,.15)}
+@media(max-width:800px){.b4-schedule{min-width:1050px}.b4-schedule th,.b4-schedule td{padding:9px 6px}.b4-schedule .schedule-subject{font-size:11px}}
