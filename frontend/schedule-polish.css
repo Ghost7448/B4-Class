@@ -163,6 +163,14 @@ body.b4-schedule-open .b4-schedule-wrap{
     font-size:clamp(7px,1vh,9px)!important;
     line-height:1!important;
   }
+  body.b4-schedule-open header .search,
+  body.b4-schedule-open header .top {
+    display:none!important;
+  }
+  body.b4-schedule-open #side.open {
+    position:fixed!important;
+    z-index:2147483200!important;
+  }
   body.b4-schedule-open header {
     position:fixed!important;
     top:0!important;
