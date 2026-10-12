@@ -1,0 +1,26 @@
+/* Schedule card polish: keep the mobile menu above the schedule and add subtle motion. */
+#mobile{position:relative;z-index:85;flex:0 0 auto}
+body.b4-schedule-open #mobile{position:fixed;top:10px;left:10px;z-index:120;box-shadow:0 8px 24px rgba(0,0,0,.16);animation:menuPop .28s cubic-bezier(.2,.8,.2,1)}
+body.ar.b4-schedule-open #mobile{left:auto;right:10px}
+body.b4-schedule-open header{position:sticky;z-index:110}
+.b4-schedule-wrap{position:relative;isolation:isolate;animation:scheduleCardIn .42s cubic-bezier(.2,.8,.2,1) both}
+.b4-schedule-wrap.mobile-landscape-view{border-radius:22px}
+.b4-schedule-wrap .b4-schedule{animation:scheduleTableIn .48s cubic-bezier(.2,.8,.2,1) both}
+.b4-schedule-wrap .b4-schedule th,.b4-schedule-wrap .b4-schedule td{transition:background-color .22s ease,color .22s ease,box-shadow .22s ease}
+.b4-schedule-wrap .b4-schedule td.is-current-period{animation:currentPeriodPulse 2.2s ease-in-out infinite}
+.b4-schedule-wrap .b4-schedule td.is-current-break{animation:currentBreakPulse 2.2s ease-in-out infinite}
+.b4-schedule-wrap .break-cell-merged{vertical-align:middle;text-align:center;font-weight:900;letter-spacing:.04em}
+#side{z-index:130}
+@keyframes menuPop{from{opacity:0;transform:translateY(-7px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes scheduleCardIn{from{opacity:0;transform:translateY(12px) scale(.992)}to{opacity:1;transform:none}}
+@keyframes scheduleTableIn{from{opacity:.65;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes currentPeriodPulse{0%,100%{box-shadow:inset 0 0 0 1px rgba(22,163,74,.15)}50%{box-shadow:inset 0 0 0 2px rgba(22,163,74,.55)}}
+@keyframes currentBreakPulse{0%,100%{box-shadow:inset 0 0 0 1px rgba(217,119,6,.15)}50%{box-shadow:inset 0 0 0 2px rgba(217,119,6,.5)}}
+@media(max-width:800px){
+ body.b4-schedule-open #mobile{top:8px;left:8px}
+ body.ar.b4-schedule-open #mobile{left:auto;right:8px}
+ .b4-schedule-wrap{border-radius:20px;overflow:auto}
+}
+@media(prefers-reduced-motion:reduce){
+ .b4-schedule-wrap,.b4-schedule-wrap .b4-schedule,#mobile,.b4-schedule-wrap .b4-schedule td{animation:none!important;transition:none!important}
+}
