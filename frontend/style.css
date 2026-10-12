@@ -2907,3 +2907,58 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
     word-break:keep-all!important;
   }
 }
+
+
+/* Mobile-only landscape timetable: use a real landscape-sized canvas; leave desktop untouched. */
+@media (max-width:700px) and (orientation:portrait) {
+  html:has(.b4-schedule-wrap.mobile-landscape-view),
+  body:has(.b4-schedule-wrap.mobile-landscape-view) {
+    width:100%!important;height:100%!important;overflow:hidden!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view {
+    position:fixed!important;
+    inset:auto!important;
+    top:0!important;left:100vw!important;
+    width:100dvh!important;height:100dvw!important;
+    min-width:0!important;max-width:none!important;
+    min-height:0!important;max-height:none!important;
+    margin:0!important;padding:8px!important;
+    display:block!important;overflow:auto!important;
+    box-sizing:border-box!important;
+    transform:rotate(90deg)!important;transform-origin:top left!important;
+    z-index:999999!important;
+    border-radius:0!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule {
+    display:table!important;
+    width:100%!important;min-width:0!important;max-width:none!important;
+    table-layout:fixed!important;border-collapse:collapse!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule th,
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule td {
+    min-width:0!important;max-width:none!important;
+    padding:4px 2px!important;overflow:hidden!important;
+    text-align:center!important;vertical-align:middle!important;
+    white-space:normal!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-day,
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-day-head {
+    width:8%!important;min-width:0!important;max-width:none!important;font-size:9px!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .break-head,
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .break-cell,
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .break-cell-merged {
+    width:3.5%!important;min-width:0!important;max-width:none!important;padding:2px 1px!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-subject {
+    font-size:clamp(8px,1.35vh,11px)!important;line-height:1.15!important;
+    overflow-wrap:anywhere!important;word-break:normal!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-teacher {
+    font-size:clamp(7px,1.05vh,9px)!important;line-height:1.1!important;
+    overflow-wrap:anywhere!important;word-break:normal!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .break-cell-merged span {
+    font-size:9px!important;white-space:nowrap!important;word-break:keep-all!important;
+  }
+}
