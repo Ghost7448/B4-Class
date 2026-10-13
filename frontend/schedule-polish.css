@@ -1,72 +1,203 @@
-/* Responsive B4 timetable: normal page flow, never covers the rest of the app. */
-.b4-schedule-wrap,
-.b4-schedule-wrap.mobile-landscape-view{
-  position:relative!important;inset:auto!important;transform:none!important;
-  transform-origin:center!important;z-index:1!important;
-  width:100%!important;max-width:100%!important;min-width:0!important;
-  height:auto!important;max-height:none!important;min-height:0!important;
-  margin:12px 0!important;padding:clamp(5px,1vw,12px)!important;
-  overflow:visible!important;border-radius:16px!important;
-  box-sizing:border-box!important;
+/* Schedule card polish: keep the mobile menu above the schedule and add subtle motion. */
+#mobile{position:relative;z-index:85;flex:0 0 auto}
+body.b4-schedule-open #mobile{position:fixed;top:10px;left:10px;z-index:120;box-shadow:0 8px 24px rgba(0,0,0,.16);animation:menuPop .28s cubic-bezier(.2,.8,.2,1)}
+body.ar.b4-schedule-open #mobile{left:auto;right:10px}
+body.b4-schedule-open header{position:sticky;z-index:110}
+.b4-schedule-wrap{position:relative;isolation:isolate;animation:scheduleCardIn .42s cubic-bezier(.2,.8,.2,1) both}
+.b4-schedule-wrap.mobile-landscape-view{border-radius:22px}
+.b4-schedule-wrap .b4-schedule{animation:scheduleTableIn .48s cubic-bezier(.2,.8,.2,1) both}
+.b4-schedule-wrap .b4-schedule th,.b4-schedule-wrap .b4-schedule td{transition:background-color .22s ease,color .22s ease,box-shadow .22s ease}
+.b4-schedule-wrap .b4-schedule td.is-current-period{animation:currentPeriodPulse 2.2s ease-in-out infinite}
+.b4-schedule-wrap .b4-schedule td.is-current-break{animation:currentBreakPulse 2.2s ease-in-out infinite}
+.b4-schedule-wrap .break-cell-merged{vertical-align:middle;text-align:center;font-weight:900;letter-spacing:.04em}
+#side{z-index:130}
+@keyframes menuPop{from{opacity:0;transform:translateY(-7px) scale(.94)}to{opacity:1;transform:none}}
+@keyframes scheduleCardIn{from{opacity:0;transform:translateY(12px) scale(.992)}to{opacity:1;transform:none}}
+@keyframes scheduleTableIn{from{opacity:.65;transform:translateY(5px)}to{opacity:1;transform:none}}
+@keyframes currentPeriodPulse{0%,100%{box-shadow:inset 0 0 0 1px rgba(22,163,74,.15)}50%{box-shadow:inset 0 0 0 2px rgba(22,163,74,.55)}}
+@keyframes currentBreakPulse{0%,100%{box-shadow:inset 0 0 0 1px rgba(217,119,6,.15)}50%{box-shadow:inset 0 0 0 2px rgba(217,119,6,.5)}}
+@media(max-width:800px){
+ body.b4-schedule-open #mobile{top:8px;left:8px}
+ body.ar.b4-schedule-open #mobile{left:auto;right:8px}
+ .b4-schedule-wrap{border-radius:20px;overflow:auto}
 }
-.b4-schedule-wrap .b4-schedule{
-  display:table!important;width:100%!important;min-width:0!important;max-width:100%!important;
-  height:auto!important;max-height:none!important;margin:0!important;
-  table-layout:fixed!important;border-collapse:collapse!important;
-}
-.b4-schedule th,.b4-schedule td{
-  min-width:0!important;max-width:none!important;box-sizing:border-box!important;
-  padding:clamp(3px,.55vw,8px) clamp(1px,.3vw,4px)!important;
-  text-align:center!important;vertical-align:middle!important;
-  white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important;
-  line-height:1.15!important;
-}
-.b4-schedule .schedule-day,.b4-schedule .schedule-day-head{
-  width:7%!important;min-width:0!important;font-size:clamp(8px,1.05vw,12px)!important;
-}
-.b4-schedule .break-head,.b4-schedule .break-cell,.b4-schedule .break-cell-merged{
-  width:3%!important;min-width:0!important;max-width:none!important;padding:2px 0!important;
-}
-.b4-schedule .break-cell-merged span{
-  display:inline-block!important;writing-mode:vertical-rl!important;transform:rotate(180deg)!important;
-  white-space:nowrap!important;font-size:clamp(7px,.9vw,11px)!important;line-height:1!important;
-}
-.b4-schedule thead th b{display:block!important;font-size:clamp(7px,1vw,12px)!important;line-height:1.1!important}
-.b4-schedule thead th small{display:block!important;font-size:clamp(6px,.8vw,10px)!important;line-height:1.1!important}
-.b4-schedule .schedule-subject{display:block!important;width:100%!important;font-size:clamp(7px,1vw,12px)!important;line-height:1.15!important;overflow-wrap:anywhere!important}
-.b4-schedule .schedule-teacher{display:block!important;width:100%!important;font-size:clamp(6px,.8vw,10px)!important;line-height:1.1!important;overflow-wrap:anywhere!important;margin-top:2px!important}
-.b4-mobile-schedule{display:none!important}
-body.b4-schedule-open header{position:relative!important;z-index:110!important;pointer-events:auto!important}
-body.b4-schedule-open #mobile{position:relative!important;top:auto!important;left:auto!important;right:auto!important;z-index:120!important}
-
-/* Tablet: keep the full timetable inside the available content width. */
-@media (min-width:701px) and (max-width:1100px){
-  .app{grid-template-columns:210px minmax(0,1fr)!important}
-  .b4-schedule-wrap{overflow-x:auto!important}
-  .b4-schedule th,.b4-schedule td{padding:4px 2px!important}
-  .b4-schedule .schedule-subject{font-size:9px!important}
-  .b4-schedule .schedule-teacher{font-size:7px!important}
+@media(prefers-reduced-motion:reduce){
+ .b4-schedule-wrap,.b4-schedule-wrap .b4-schedule,#mobile,.b4-schedule-wrap .b4-schedule td{animation:none!important;transition:none!important}
 }
 
-/* Phone: readable day cards instead of squeezing ten columns into a narrow screen. */
-@media (max-width:700px){
-  body:has(.b4-schedule-wrap.mobile-landscape-view),
-  html:has(.b4-schedule-wrap.mobile-landscape-view){width:auto!important;height:auto!important;overflow-x:hidden!important;overflow-y:auto!important}
-  body.b4-schedule-open header{position:relative!important;inset:auto!important;width:auto!important;height:auto!important;background:var(--s)!important;pointer-events:auto!important}
-  body.b4-schedule-open header .search,body.b4-schedule-open header .top{display:flex!important}
-  body.b4-schedule-open #mobile,body.ar.b4-schedule-open #mobile{position:relative!important;top:auto!important;left:auto!important;right:auto!important}
-  .b4-schedule-wrap,.b4-schedule-wrap.mobile-landscape-view{display:none!important}
-  .b4-mobile-schedule{display:grid!important;gap:12px!important;width:100%!important;min-width:0!important;padding:0!important}
-  .mobile-day-card{display:block!important;min-width:0!important;padding:12px!important;border:1px solid var(--line)!important;border-radius:16px!important;background:var(--s)!important;box-shadow:var(--shadow)!important;overflow:hidden!important}
-  .mobile-day-card h3{margin:0 0 10px!important;font-size:15px!important;font-weight:800!important}
-  .mobile-period-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
-  .mobile-period,.mobile-break{min-width:0!important;padding:9px!important;border:1px solid var(--line)!important;border-radius:11px!important;background:var(--s2)!important;overflow-wrap:anywhere!important}
-  .mobile-period small,.mobile-break small{display:block!important;margin-bottom:5px!important;color:var(--m)!important;font-size:10px!important;line-height:1.2!important}
-  .mobile-period .schedule-subject{display:block!important;font-size:12px!important;line-height:1.25!important;font-weight:800!important;overflow-wrap:anywhere!important}
-  .mobile-period .schedule-teacher{display:block!important;font-size:10px!important;line-height:1.2!important;margin-top:4px!important;overflow-wrap:anywhere!important}
-  .mobile-break{display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:center!important;min-height:56px!important;background:color-mix(in srgb,var(--p) 10%,var(--s2))!important;border-color:color-mix(in srgb,var(--p) 30%,var(--line))!important;text-align:center!important}
-  .mobile-break b{font-size:11px!important;font-weight:900!important}
-  .mobile-break small{margin:4px 0 0!important}
+/* Keep the hamburger reachable above the schedule on small screens. */
+body.b4-schedule-open header{
+  position:sticky!important;
+  top:0;
+  z-index:2147483000!important;
 }
-@media (max-width:360px){.mobile-period-grid{grid-template-columns:minmax(0,1fr)!important}.mobile-day-card{padding:9px!important}}
-@media(prefers-reduced-motion:reduce){.b4-schedule-wrap,.b4-schedule-wrap .b4-schedule{animation:none!important;transition:none!important}}
+body.b4-schedule-open #mobile{
+  position:fixed!important;
+  top:10px!important;
+  left:10px!important;
+  right:auto!important;
+  z-index:2147483647!important;
+  pointer-events:auto!important;
+  touch-action:manipulation;
+}
+body.ar.b4-schedule-open #mobile{
+  left:auto!important;
+  right:10px!important;
+}
+body.b4-schedule-open .b4-schedule-wrap{
+  z-index:0;
+}
+@media(max-width:800px){
+  body.b4-schedule-open #mobile{top:8px!important;left:8px!important}
+  body.ar.b4-schedule-open #mobile{left:auto!important;right:8px!important}
+}
+
+/* Single source of truth: simulated landscape timetable on portrait phones. */
+@media (max-width:700px) and (orientation:portrait) {
+  html:has(.b4-schedule-wrap.mobile-landscape-view),
+  body:has(.b4-schedule-wrap.mobile-landscape-view) {
+    width:100%!important;
+    height:100%!important;
+    overflow:hidden!important;
+    overscroll-behavior:none!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view {
+    position:fixed!important;
+    inset:auto!important;
+    top:8px!important;
+    left:calc(100vw - 8px)!important;
+    width:calc(100dvh - 16px)!important;
+    height:calc(100dvw - 16px)!important;
+    min-width:0!important;
+    max-width:none!important;
+    min-height:0!important;
+    max-height:none!important;
+    margin:0!important;
+    padding:6px!important;
+    box-sizing:border-box!important;
+    display:block!important;
+    overflow:hidden!important;
+    border:1px solid var(--line,#2b3040)!important;
+    border-radius:18px!important;
+    background:var(--s,#11141b)!important;
+    box-shadow:0 12px 36px rgba(0,0,0,.28)!important;
+    transform:rotate(90deg)!important;
+    transform-origin:top left!important;
+    z-index:999990!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule {
+    display:table!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    height:100%!important;
+    min-height:0!important;
+    max-height:100%!important;
+    margin:0!important;
+    table-layout:fixed!important;
+    border-collapse:collapse!important;
+    box-sizing:border-box!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule th,
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule td {
+    box-sizing:border-box!important;
+    min-width:0!important;
+    max-width:none!important;
+    padding:3px 2px!important;
+    text-align:center!important;
+    vertical-align:middle!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+    word-break:normal!important;
+    line-height:1.1!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-day,
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-day-head {
+    width:7%!important;
+    min-width:0!important;
+    max-width:none!important;
+    font-size:clamp(7px,1vh,9px)!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .break-head,
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .break-cell,
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .break-cell-merged {
+    width:3.5%!important;
+    min-width:0!important;
+    max-width:none!important;
+    padding:2px 1px!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule thead th small {
+    display:block!important;
+    font-size:clamp(6px,.9vh,8px)!important;
+    line-height:1.05!important;
+    white-space:normal!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule thead th b {
+    display:block!important;
+    font-size:clamp(7px,1.05vh,9px)!important;
+    line-height:1.05!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-subject {
+    display:block!important;
+    width:100%!important;
+    font-size:clamp(7px,1.15vh,10px)!important;
+    line-height:1.1!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-teacher {
+    display:block!important;
+    width:100%!important;
+    margin-top:2px!important;
+    font-size:clamp(6px,.95vh,8px)!important;
+    line-height:1.05!important;
+    white-space:normal!important;
+    overflow-wrap:anywhere!important;
+  }
+  body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .break-cell-merged span {
+    display:inline-block!important;
+    writing-mode:vertical-rl!important;
+    transform:rotate(180deg)!important;
+    white-space:nowrap!important;
+    word-break:keep-all!important;
+    font-size:clamp(7px,1vh,9px)!important;
+    line-height:1!important;
+  }
+  body.b4-schedule-open header .search,
+  body.b4-schedule-open header .top {
+    display:none!important;
+  }
+  body.b4-schedule-open #side.open {
+    position:fixed!important;
+    z-index:2147483200!important;
+  }
+  body.b4-schedule-open header {
+    position:fixed!important;
+    top:0!important;
+    left:0!important;
+    right:0!important;
+    width:100%!important;
+    height:52px!important;
+    padding:0 8px!important;
+    background:transparent!important;
+    border:0!important;
+    backdrop-filter:none!important;
+    z-index:2147483000!important;
+    pointer-events:none!important;
+  }
+  body.b4-schedule-open header #mobile {
+    position:fixed!important;
+    top:8px!important;
+    left:8px!important;
+    right:auto!important;
+    display:block!important;
+    pointer-events:auto!important;
+    z-index:2147483647!important;
+    touch-action:manipulation!important;
+    box-shadow:0 8px 24px rgba(0,0,0,.22)!important;
+  }
+  body.ar.b4-schedule-open header #mobile {
+    left:auto!important;
+    right:8px!important;
+  }
+}
