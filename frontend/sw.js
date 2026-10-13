@@ -1,4 +1,4 @@
-const CACHE='b4-v68';
+const CACHE='b4-v69';
 const FILES=['./','./index.html','./style.css','./schedule-polish.css','./app.js','./timetable-fix.js','./manifest.webmanifest','./assets/logo.svg'];
 self.addEventListener('install',function(event){
   event.waitUntil(caches.open(CACHE).then(function(cache){return cache.addAll(FILES);}).then(function(){return self.skipWaiting();}));
