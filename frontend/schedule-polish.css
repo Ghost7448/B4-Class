@@ -52,38 +52,42 @@ body.b4-schedule-open .b4-schedule-wrap{
   body.ar.b4-schedule-open #mobile{left:auto!important;right:8px!important}
 }
 
-/* Single source of truth: simulated landscape timetable on portrait phones. */
+/* Mobile: keep the familiar rotated timetable, but make it a compact card
+   so it no longer locks the whole page or hides every other control. */
 @media (max-width:700px) and (orientation:portrait) {
   html:has(.b4-schedule-wrap.mobile-landscape-view),
   body:has(.b4-schedule-wrap.mobile-landscape-view) {
     width:100%!important;
-    height:100%!important;
-    overflow:hidden!important;
-    overscroll-behavior:none!important;
+    height:auto!important;
+    min-height:100%!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior:auto!important;
   }
   body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view {
     position:fixed!important;
-    inset:auto!important;
-    top:8px!important;
-    left:calc(100vw - 8px)!important;
-    width:calc(100dvh - 16px)!important;
-    height:calc(100dvw - 16px)!important;
+    top:50%!important;
+    left:50%!important;
+    right:auto!important;
+    bottom:auto!important;
+    width:calc(50dvh)!important;
+    height:calc(82dvw)!important;
     min-width:0!important;
     max-width:none!important;
     min-height:0!important;
     max-height:none!important;
     margin:0!important;
-    padding:6px!important;
+    padding:5px!important;
     box-sizing:border-box!important;
     display:block!important;
     overflow:hidden!important;
     border:1px solid var(--line,#2b3040)!important;
-    border-radius:18px!important;
+    border-radius:16px!important;
     background:var(--s,#11141b)!important;
-    box-shadow:0 12px 36px rgba(0,0,0,.28)!important;
-    transform:rotate(90deg)!important;
-    transform-origin:top left!important;
-    z-index:999990!important;
+    box-shadow:0 8px 24px rgba(0,0,0,.22)!important;
+    transform:translate(-50%,-50%) rotate(90deg)!important;
+    transform-origin:center center!important;
+    z-index:80!important;
   }
   body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule {
     display:table!important;
@@ -103,20 +107,20 @@ body.b4-schedule-open .b4-schedule-wrap{
     box-sizing:border-box!important;
     min-width:0!important;
     max-width:none!important;
-    padding:3px 2px!important;
+    padding:2px 1px!important;
     text-align:center!important;
     vertical-align:middle!important;
     white-space:normal!important;
     overflow-wrap:anywhere!important;
     word-break:normal!important;
-    line-height:1.1!important;
+    line-height:1.05!important;
   }
   body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-day,
   body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-day-head {
     width:7%!important;
     min-width:0!important;
     max-width:none!important;
-    font-size:clamp(7px,1vh,9px)!important;
+    font-size:clamp(6px,.85vh,8px)!important;
   }
   body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .break-head,
   body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .break-cell,
@@ -124,33 +128,33 @@ body.b4-schedule-open .b4-schedule-wrap{
     width:3.5%!important;
     min-width:0!important;
     max-width:none!important;
-    padding:2px 1px!important;
+    padding:1px!important;
   }
   body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule thead th small {
     display:block!important;
-    font-size:clamp(6px,.9vh,8px)!important;
-    line-height:1.05!important;
+    font-size:clamp(5px,.7vh,7px)!important;
+    line-height:1!important;
     white-space:normal!important;
   }
   body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule thead th b {
     display:block!important;
-    font-size:clamp(7px,1.05vh,9px)!important;
-    line-height:1.05!important;
+    font-size:clamp(6px,.85vh,8px)!important;
+    line-height:1!important;
   }
   body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-subject {
     display:block!important;
     width:100%!important;
-    font-size:clamp(7px,1.15vh,10px)!important;
-    line-height:1.1!important;
+    font-size:clamp(6px,.9vh,8px)!important;
+    line-height:1.05!important;
     white-space:normal!important;
     overflow-wrap:anywhere!important;
   }
   body:has(.b4-schedule-wrap.mobile-landscape-view) .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-teacher {
     display:block!important;
     width:100%!important;
-    margin-top:2px!important;
-    font-size:clamp(6px,.95vh,8px)!important;
-    line-height:1.05!important;
+    margin-top:1px!important;
+    font-size:clamp(5px,.7vh,7px)!important;
+    line-height:1!important;
     white-space:normal!important;
     overflow-wrap:anywhere!important;
   }
@@ -160,16 +164,12 @@ body.b4-schedule-open .b4-schedule-wrap{
     transform:rotate(180deg)!important;
     white-space:nowrap!important;
     word-break:keep-all!important;
-    font-size:clamp(7px,1vh,9px)!important;
+    font-size:clamp(6px,.8vh,8px)!important;
     line-height:1!important;
   }
   body.b4-schedule-open header .search,
   body.b4-schedule-open header .top {
     display:none!important;
-  }
-  body.b4-schedule-open #side.open {
-    position:fixed!important;
-    z-index:2147483200!important;
   }
   body.b4-schedule-open header {
     position:fixed!important;
@@ -177,7 +177,7 @@ body.b4-schedule-open .b4-schedule-wrap{
     left:0!important;
     right:0!important;
     width:100%!important;
-    height:52px!important;
+    height:48px!important;
     padding:0 8px!important;
     background:transparent!important;
     border:0!important;
