@@ -2743,3 +2743,30 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
 body.b4-schedule-open header .search,body.b4-schedule-open header .top{display:flex!important}
 body.b4-schedule-open header{position:sticky!important;top:0!important;width:auto!important;height:70px!important;padding:0 25px!important;background:color-mix(in srgb,var(--bg) 88%,transparent)!important;border-bottom:1px solid var(--line)!important;backdrop-filter:blur(15px)!important;pointer-events:auto!important}
 @media(max-width:800px){body.b4-schedule-open header{height:70px!important;padding:0 13px!important}body.b4-schedule-open header .search{display:flex!important;min-width:0!important}body.b4-schedule-open header .top{display:flex!important}}
+
+
+/* Schedule landscape layout: a larger, horizontal card that stays in page flow. */
+@media(max-width:700px) and (orientation:portrait){
+  body.b4-schedule-open #content{padding:14px!important}
+  body.b4-schedule-open .b4-schedule-wrap.mobile-landscape-view{
+    position:relative!important;inset:auto!important;display:block!important;
+    width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;
+    margin:0 0 18px!important;padding:14px!important;overflow-x:auto!important;overflow-y:hidden!important;
+    transform:none!important;transform-origin:center!important;border-radius:20px!important;
+    background:var(--s)!important;box-shadow:var(--shadow)!important;z-index:1!important;
+  }
+  body.b4-schedule-open .b4-schedule-wrap.mobile-landscape-view .b4-schedule{
+    display:table!important;width:1180px!important;min-width:1180px!important;max-width:none!important;
+    height:auto!important;max-height:none!important;table-layout:fixed!important;margin:0!important;
+  }
+  body.b4-schedule-open .b4-schedule-wrap.mobile-landscape-view .b4-schedule th,
+  body.b4-schedule-open .b4-schedule-wrap.mobile-landscape-view .b4-schedule td{padding:12px 8px!important}
+  body.b4-schedule-open .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-subject{font-size:12px!important;line-height:1.3!important}
+  body.b4-schedule-open .b4-schedule-wrap.mobile-landscape-view .b4-schedule .schedule-teacher{font-size:10px!important;line-height:1.2!important}
+  body.b4-schedule-open header .search,body.b4-schedule-open header .top{display:flex!important}
+  body.b4-schedule-open header{position:sticky!important;top:0!important;width:auto!important;height:70px!important;padding:0 13px!important;background:color-mix(in srgb,var(--bg) 88%,transparent)!important;border-bottom:1px solid var(--line)!important;backdrop-filter:blur(15px)!important;pointer-events:auto!important}
+}
+@media(max-width:700px) and (orientation:landscape){
+  .b4-schedule-wrap{overflow-x:auto!important}
+  .b4-schedule-wrap .b4-schedule{width:1180px!important;min-width:1180px!important}
+}
