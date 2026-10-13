@@ -1,14 +1,10 @@
-/* Keep the timetable as an in-page horizontal landscape card, never fullscreen. */
+/* Keep the schedule in normal page flow. No forced landscape rotation or fullscreen mode. */
 (function(){
-  function update(){
-    var wrap=document.querySelector('.b4-schedule-wrap');
-    document.body.classList.toggle('b4-schedule-open',!!wrap);
-    if(wrap)wrap.classList.toggle('mobile-landscape-view',window.matchMedia('(max-width:700px)').matches);
+  function restore(){
+    document.body.classList.remove('b4-schedule-open');
+    document.querySelectorAll('.b4-schedule-wrap.mobile-landscape-view').forEach(el=>el.classList.remove('mobile-landscape-view'));
   }
-  var queued=false;
-  function queue(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;update()})}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',queue);else queue();
-  window.addEventListener('resize',queue,{passive:true});
-  window.addEventListener('orientationchange',queue,{passive:true});
-  new MutationObserver(queue).observe(document.body,{childList:true,subtree:true});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',restore);
+  else restore();
+  new MutationObserver(restore).observe(document.body,{childList:true,subtree:true});
 })();
