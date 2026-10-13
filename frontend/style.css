@@ -2770,3 +2770,22 @@ body.b4-schedule-open header{position:sticky!important;top:0!important;width:aut
   .b4-schedule-wrap{overflow-x:auto!important}
   .b4-schedule-wrap .b4-schedule{width:1180px!important;min-width:1180px!important}
 }
+
+
+/* Revert the forced landscape presentation: keep the timetable in normal page flow. */
+@media(max-width:700px) and (orientation:portrait){
+  body.b4-schedule-open #content{padding:14px!important}
+  body.b4-schedule-open .b4-schedule-wrap.mobile-landscape-view{
+    position:relative!important;left:auto!important;top:auto!important;inset:auto!important;
+    width:100%!important;height:auto!important;min-width:0!important;min-height:0!important;
+    max-width:100%!important;max-height:none!important;margin:0 0 18px!important;
+    padding:12px!important;transform:none!important;transform-origin:center!important;
+    overflow-x:auto!important;overflow-y:hidden!important;border-radius:17px!important;
+    background:var(--s)!important;box-shadow:var(--shadow)!important;z-index:1!important;
+  }
+  body.b4-schedule-open .b4-schedule-wrap.mobile-landscape-view .b4-schedule{
+    display:table!important;width:1180px!important;min-width:1180px!important;
+    max-width:none!important;height:auto!important;max-height:none!important;margin:0!important;
+    table-layout:fixed!important;
+  }
+}
