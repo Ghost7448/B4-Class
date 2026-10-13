@@ -2669,3 +2669,23 @@ html[data-theme="light"],html:not(.dark):not([data-theme="dark"]){color-scheme:l
  .mobile-break.is-current-break{background:#fef3c7!important;box-shadow:inset 0 0 0 2px #f59e0b}
  .mobile-day-card .mobile-period:last-child,.mobile-day-card .mobile-break:last-child{border-bottom:0}
 }
+
+/* Restore the single desktop-style timetable on every screen.
+   Hide the duplicate mobile day cards and keep the full-width table scrollable. */
+.b4-mobile-schedule{display:none!important}
+.b4-schedule-wrap{display:block!important;width:100%;max-width:100%;overflow-x:auto!important;overflow-y:hidden!important;box-sizing:border-box}
+.b4-schedule-wrap.mobile-landscape-view{
+  position:relative!important;inset:auto!important;width:100%!important;height:auto!important;
+  min-width:0!important;max-width:100%!important;min-height:0!important;max-height:none!important;
+  margin:0!important;padding:12px!important;transform:none!important;overflow-x:auto!important;
+  overflow-y:hidden!important;border-radius:16px;z-index:auto!important;
+}
+.b4-schedule-wrap .b4-schedule{
+  display:table!important;width:100%!important;min-width:1120px!important;max-width:none!important;
+  height:auto!important;max-height:none!important;table-layout:auto!important;margin:0!important;
+}
+@media(max-width:800px){
+  .b4-mobile-schedule{display:none!important}
+  .b4-schedule-wrap{display:block!important;overflow-x:auto!important;-webkit-overflow-scrolling:touch!important}
+  .b4-schedule-wrap .b4-schedule{min-width:1120px!important;width:1120px!important}
+}
