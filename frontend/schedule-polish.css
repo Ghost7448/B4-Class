@@ -264,3 +264,31 @@ body.schedule-modal-open{overflow:hidden!important}
 .schedule-modal-table td.is-current-period .schedule-subject,.schedule-modal-table td.is-current-period .schedule-teacher{color:#d1fae5!important}
 .schedule-modal-close{top:10px!important;right:10px!important;background:rgba(20,22,32,.88)!important;box-shadow:0 4px 18px #0006!important}
 @media(max-width:800px){.schedule-modal-landscape{width:100vh!important;height:100vw!important;padding:18px!important;border-radius:22px!important}.schedule-modal-table{font-size:11px!important}}
+
+
+/* Final modal sizing polish: a little taller, slightly narrower, and keep close control fully inside. */
+.schedule-modal-landscape{
+  height:94vw!important;
+  padding:14px!important;
+}
+.schedule-modal-close{
+  top:24px!important;
+  right:24px!important;
+}
+.schedule-modal-table tbody th,
+.schedule-modal-table tbody td{
+  height:68px!important;
+}
+@media(max-width:800px){
+  .schedule-modal-landscape{
+    width:100vh!important;
+    height:94vw!important;
+    padding:14px!important;
+  }
+  .schedule-modal-close{
+    top:24px!important;
+    right:24px!important;
+    width:40px!important;
+    height:40px!important;
+  }
+}
