@@ -471,3 +471,26 @@ body.schedule-modal-open{overflow:hidden!important}
   .schedule-modal-landscape{width:100vw!important;height:100dvh!important;padding:10px!important;border-radius:14px!important}
   .schedule-modal-close{top:7px!important;right:7px!important;width:36px!important;height:36px!important;min-width:36px!important}
 }
+
+
+/* v83 mobile portrait: rotate the shell into landscape but counter-rotate the table stage,
+   so the timetable text remains upright and the whole grid fits the visible landscape area. */
+@media(max-width:800px) and (orientation:portrait){
+  .schedule-modal-landscape{
+    position:absolute!important;left:50%!important;top:50%!important;
+    width:100vw!important;height:100dvh!important;
+    transform:translate(-50%,-50%) rotate(90deg)!important;
+    padding:10px!important;border-radius:15px!important;
+  }
+  .schedule-modal-stage{
+    position:absolute!important;left:50%!important;top:50%!important;
+    width:100dvh!important;height:100vw!important;
+    transform:translate(-50%,-50%) rotate(-90deg)!important;
+    transform-origin:center center!important;
+    border-radius:10px!important;
+  }
+  .schedule-modal-close{
+    top:8px!important;left:8px!important;right:auto!important;
+    width:36px!important;height:36px!important;min-width:36px!important;
+  }
+}
