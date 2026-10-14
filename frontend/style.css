@@ -2789,3 +2789,65 @@ body.b4-schedule-open header{position:sticky!important;top:0!important;width:aut
     table-layout:fixed!important;
   }
 }
+
+
+/* B4 Schedule fullscreen modal — isolated styles, leaving the normal page unchanged. */
+.schedule-fullscreen-modal{
+  position:fixed!important;inset:0!important;z-index:99999!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  padding:clamp(8px,2vw,24px)!important;box-sizing:border-box!important;
+  background:rgba(7,10,20,.78)!important;backdrop-filter:blur(12px)!important;
+  -webkit-backdrop-filter:blur(12px)!important;
+}
+.schedule-modal-landscape{
+  position:relative!important;display:flex!important;align-items:center!important;justify-content:center!important;
+  width:min(96vw,1600px)!important;height:min(94dvh,1000px)!important;
+  min-width:0!important;min-height:0!important;box-sizing:border-box!important;
+  overflow:hidden!important;border:1px solid var(--line,#343747)!important;
+  border-radius:24px!important;padding:22px!important;
+  background:var(--s,#fff)!important;color:var(--t,#171717)!important;
+  box-shadow:0 28px 100px rgba(0,0,0,.42)!important;
+}
+.schedule-modal-stage{
+  position:relative!important;flex:1 1 auto!important;min-width:0!important;min-height:0!important;
+  overflow:hidden!important;box-sizing:border-box!important;border-radius:14px!important;
+  background:var(--bg,#f6f7fb)!important;
+}
+.schedule-modal-scaled{
+  position:absolute!important;left:50%!important;top:50%!important;
+  transform-origin:center center!important;
+}
+.schedule-modal-table{
+  display:table!important;width:1180px!important;min-width:1180px!important;max-width:none!important;
+  height:auto!important;max-height:none!important;margin:0!important;table-layout:fixed!important;
+  border-collapse:separate!important;border-spacing:0!important;
+}
+.schedule-modal-table th,.schedule-modal-table td{box-sizing:border-box!important}
+.schedule-modal-close{
+  position:absolute!important;z-index:5!important;top:12px!important;right:12px!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  width:42px!important;height:42px!important;min-width:42px!important;padding:0!important;
+  border:1px solid var(--line,#d8dbe5)!important;border-radius:14px!important;
+  background:var(--s2,#f1f3f7)!important;color:var(--t,#171717)!important;
+  font-size:27px!important;line-height:1!important;font-weight:500!important;
+  box-shadow:0 5px 18px rgba(0,0,0,.14)!important;cursor:pointer!important;
+}
+.schedule-modal-close:hover{transform:scale(1.04)!important}
+body.schedule-modal-open{overflow:hidden!important}
+@media(max-width:700px) and (orientation:portrait){
+  .schedule-fullscreen-modal{padding:0!important}
+  .schedule-modal-landscape{
+    position:absolute!important;left:50%!important;top:50%!important;
+    width:100dvh!important;height:100vw!important;max-width:none!important;max-height:none!important;
+    min-width:0!important;min-height:0!important;margin:0!important;padding:12px!important;
+    border-radius:18px!important;transform:translate(-50%,-50%) rotate(90deg)!important;
+    transform-origin:center center!important;
+  }
+  .schedule-modal-stage{width:100%!important;height:100%!important;border-radius:12px!important}
+  .schedule-modal-close{top:7px!important;right:7px!important;width:36px!important;height:36px!important;min-width:36px!important;border-radius:12px!important;font-size:24px!important}
+}
+@media(max-width:700px) and (orientation:landscape){
+  .schedule-fullscreen-modal{padding:6px!important}
+  .schedule-modal-landscape{width:100%!important;height:100%!important;padding:12px!important;border-radius:16px!important}
+  .schedule-modal-close{top:7px!important;right:7px!important;width:36px!important;height:36px!important;min-width:36px!important}
+}
