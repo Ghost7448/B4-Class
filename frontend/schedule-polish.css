@@ -292,3 +292,78 @@ body.schedule-modal-open{overflow:hidden!important}
     height:40px!important;
   }
 }
+
+
+/* Full-viewport schedule modal polish (v81). Keep controls inside the modal safe area. */
+.schedule-fullscreen-modal{
+  position:fixed!important;
+  inset:0!important;
+  width:100vw!important;
+  height:100dvh!important;
+  padding:0!important;
+  margin:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  overflow:hidden!important;
+  background:rgba(5,7,14,.96)!important;
+}
+.schedule-modal-landscape{
+  width:100vh!important;
+  height:100vw!important;
+  max-width:none!important;
+  max-height:none!important;
+  padding:12px!important;
+  border:1px solid rgba(167,139,250,.28)!important;
+  border-radius:18px!important;
+  box-sizing:border-box!important;
+}
+.schedule-modal-stage{
+  width:100%!important;
+  height:100%!important;
+  min-width:0!important;
+  min-height:0!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  overflow:hidden!important;
+}
+.schedule-modal-scaled{
+  flex:0 0 auto!important;
+  margin:auto!important;
+}
+.schedule-modal-close{
+  top:14px!important;
+  right:14px!important;
+  width:42px!important;
+  height:42px!important;
+  border:1px solid rgba(255,255,255,.2)!important;
+  border-radius:14px!important;
+  background:linear-gradient(145deg,rgba(124,58,237,.9),rgba(76,29,149,.9))!important;
+  color:#fff!important;
+  font-size:26px!important;
+  font-weight:500!important;
+  line-height:1!important;
+  box-shadow:0 8px 24px rgba(0,0,0,.4),inset 0 1px rgba(255,255,255,.18)!important;
+  -webkit-tap-highlight-color:transparent!important;
+}
+.schedule-modal-close:active{transform:scale(.95)!important}
+@media(max-width:800px){
+  .schedule-modal-landscape{
+    width:100vh!important;
+    height:100vw!important;
+    padding:10px!important;
+    border-radius:14px!important;
+  }
+  .schedule-modal-close{top:12px!important;right:12px!important;width:40px!important;height:40px!important}
+}
+@media(min-width:801px){
+  .schedule-modal-landscape{
+    width:min(96vw,1400px)!important;
+    height:min(94vh,900px)!important;
+    transform:translate(-50%,-50%)!important;
+    padding:24px!important;
+    border-radius:24px!important;
+  }
+  .schedule-modal-close{top:16px!important;right:16px!important}
+}
