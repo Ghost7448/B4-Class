@@ -201,3 +201,32 @@ body.b4-schedule-open .b4-schedule-wrap{
     right:8px!important;
   }
 }
+
+
+/* Current lesson: highlight only the active lesson cell with a translucent green glass effect. */
+.b4-schedule td.is-current-period{
+  position:relative!important;
+  isolation:isolate;
+  background:rgba(34,197,94,.19)!important;
+  color:#bbf7d0!important;
+  border:1px solid rgba(74,222,128,.72)!important;
+  box-shadow:inset 0 0 0 1px rgba(74,222,128,.32),inset 0 0 22px rgba(34,197,94,.10),0 0 12px rgba(34,197,94,.08)!important;
+  -webkit-backdrop-filter:blur(8px);
+  backdrop-filter:blur(8px);
+}
+.b4-schedule td.is-current-period .schedule-subject{color:#bbf7d0!important}
+.b4-schedule td.is-current-period .schedule-teacher{color:rgba(187,247,208,.82)!important}
+.b4-schedule th.is-current-period,
+.b4-schedule .schedule-day.is-current-period,
+.b4-schedule .schedule-day-head.is-current-period{
+  background:var(--s2)!important;
+  color:var(--t)!important;
+  border-color:var(--line)!important;
+  box-shadow:none!important;
+}
+.b4-schedule tr.is-today .schedule-day{box-shadow:inset 4px 0 rgba(34,197,94,.72);background:color-mix(in srgb,#22c55e 7%,var(--s2))}
+.b4-schedule td.is-current-period{animation:currentPeriodGlass 2.4s ease-in-out infinite!important}
+@keyframes currentPeriodGlass{
+  0%,100%{box-shadow:inset 0 0 0 1px rgba(74,222,128,.25),inset 0 0 18px rgba(34,197,94,.07),0 0 5px rgba(34,197,94,.04)}
+  50%{box-shadow:inset 0 0 0 1px rgba(74,222,128,.55),inset 0 0 25px rgba(34,197,94,.14),0 0 12px rgba(34,197,94,.10)}
+}
