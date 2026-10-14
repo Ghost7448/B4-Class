@@ -584,3 +584,30 @@ body.schedule-modal-open{overflow:hidden!important}
   .schedule-modal-landscape{padding:54px 18px 18px!important}
   .schedule-modal-close{top:10px!important;right:12px!important}
 }
+
+
+/* v85 — actual landscape orientation on portrait phones: rotate the whole full-size canvas. */
+@media(max-width:800px) and (orientation:portrait){
+  .schedule-modal-landscape{
+    width:100vw!important;
+    height:100dvh!important;
+    padding:48px 8px 8px!important;
+    transform:translate(-50%,-50%) rotate(90deg)!important;
+    transform-origin:center center!important;
+  }
+  .schedule-modal-stage{
+    position:relative!important;
+    left:auto!important;top:auto!important;
+    width:100%!important;height:100%!important;
+    transform:none!important;
+    border-radius:8px!important;
+  }
+  .schedule-modal-scaled{
+    position:absolute!important;inset:0!important;
+    width:100%!important;height:100%!important;
+    transform:none!important;
+  }
+  .schedule-modal-table{
+    width:100%!important;min-width:0!important;max-width:100%!important;height:100%!important;
+  }
+}
