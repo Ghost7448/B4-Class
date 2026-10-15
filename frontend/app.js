@@ -1408,12 +1408,18 @@ async function loadRoles(){
 }
 async function loadPermissions(){
   const r=$('#adminRoot');
-  try{const d=await api('/api/admin/users');S.users=d.users||[];
-    r.innerHTML='<div class="grid c2">'+S.users.map(u=>{
+  if(!r||!r.isConnected)return;
+  try{
+    const d=await api('/api/admin/users');S.users=d.users||[];
+    if(!r.isConnected||S.view!=='admin:permissions')return;
+    const html='<div class="grid c2">'+S.users.map(u=>{
       const superAdmin=Number(u.is_super_admin)===1, administrator=(u.direct_permissions||[]).includes('ADMINISTRATOR');
       return '<div class="card permission-user" data-user-id="'+u.id+'"><div class="head"><div><b>'+esc(u.display_name)+'</b><p class="muted identity-line">'+((u.student_code||u.teacher_code)?'<span class="identity-code">'+esc(u.student_code||u.teacher_code)+'</span>':'')+' <span>'+esc(u.role)+'</span></p></div><span class="badge">'+(superAdmin?'SUPER ADMIN':(administrator?'ADMINISTRATOR':((u.direct_permissions||[]).length||0)+' direct'))+'</span></div><div class="permission-grid">'+PERMS.map(p=>'<label class="permission-tile '+(((u.direct_permissions||[]).includes(p[0])||superAdmin)?'is-on':'')+'"><input type="checkbox" class="permission-checkbox" data-perm="'+p[0]+'" '+(((u.direct_permissions||[]).includes(p[0])||superAdmin)?'checked':'')+' '+(superAdmin?'disabled':'')+'><span>'+p[1]+'</span></label>').join('')+'</div>'+(superAdmin?'<div class="notice">Super Admin has every permission automatically.</div>':'<button class="btn primary" onclick="savePermissions('+u.id+')">Save permissions</button>')+'</div>';
     }).join('')+'</div>';
-  }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
+    /* Morph existing cards in place instead of replacing the entire permission panel;
+       this avoids animation/reflow flicker during live updates. */
+    morphHtml(r,html);
+  }catch(e){if(r.isConnected)morphHtml(r,'<div class="card notice">'+esc(e.message)+'</div>')}
 }
 function identityEdit(id){
   const u=S.users.find(x=>Number(x.id)===Number(id))||{};
