@@ -2451,3 +2451,15 @@ setupMobileDockAutoHide();showInitialSkeleton();document.documentElement.dataset
   window.B4RefreshCustomControls=enhanceAll;
   new MutationObserver(()=>applySuperAdminCrown()).observe(document.body,{childList:true,subtree:true,characterData:true});
 })();
+
+// Preserve the user's current page scroll across a browser refresh.
+(function(){
+  const key='b4:scroll:'+location.pathname+location.search;
+  let restoreY=null;
+  try{const saved=sessionStorage.getItem(key);if(saved!==null){restoreY=Number(saved);sessionStorage.removeItem(key)}}catch(_){}
+  let saveFrame=0;
+  const save=()=>{if(saveFrame)return;saveFrame=requestAnimationFrame(()=>{saveFrame=0;try{sessionStorage.setItem(key,String(window.scrollY||window.pageYOffset||0))}catch(_){}})};
+  window.addEventListener('scroll',save,{passive:true});
+  window.addEventListener('pagehide',()=>{try{sessionStorage.setItem(key,String(window.scrollY||window.pageYOffset||0))}catch(_){}});
+  window.addEventListener('load',()=>{if(restoreY===null||!Number.isFinite(restoreY))return;requestAnimationFrame(()=>requestAnimationFrame(()=>window.scrollTo({top:restoreY,behavior:'instant'})))},{once:true});
+})();
