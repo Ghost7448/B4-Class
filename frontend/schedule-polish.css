@@ -665,3 +665,36 @@ body.schedule-modal-open{overflow:hidden!important}
     height:clamp(72px,9vh,112px)!important;
   }
 }
+
+
+/* v91: proportional schedule sizing for both the embedded card and fullscreen view. */
+@media(min-width:801px){
+  .b4-schedule-wrap:not(.mobile-landscape-view){overflow-x:auto!important}
+  .b4-schedule-wrap:not(.mobile-landscape-view) .b4-schedule{
+    width:100%!important;min-width:0!important;max-width:100%!important;
+    table-layout:fixed!important;border-spacing:4px!important;
+  }
+  .b4-schedule-wrap:not(.mobile-landscape-view) .b4-schedule th,
+  .b4-schedule-wrap:not(.mobile-landscape-view) .b4-schedule td{
+    overflow-wrap:anywhere;word-break:normal;
+  }
+  .b4-schedule-wrap:not(.mobile-landscape-view) .b4-schedule thead th{height:64px!important}
+  .b4-schedule-wrap:not(.mobile-landscape-view) .b4-schedule tbody th,
+  .b4-schedule-wrap:not(.mobile-landscape-view) .b4-schedule tbody td{height:clamp(78px,10vh,112px)!important}
+  .schedule-fullscreen-modal .schedule-modal-landscape{
+    transform:translate(-50%,-47%) scale(.96)!important;
+  }
+  .schedule-fullscreen-modal.is-open .schedule-modal-landscape{
+    transform:translate(-50%,-50%) scale(1)!important;
+  }
+  .schedule-fullscreen-modal .schedule-modal-table{
+    width:100%!important;min-width:0!important;max-width:100%!important;
+    height:100%!important;table-layout:fixed!important;border-spacing:4px!important;
+  }
+  .schedule-fullscreen-modal .schedule-modal-table thead th{height:clamp(54px,7vh,76px)!important}
+  .schedule-fullscreen-modal .schedule-modal-table tbody th,
+  .schedule-fullscreen-modal .schedule-modal-table tbody td{height:clamp(62px,8.5vh,98px)!important}
+}
+@media(max-width:800px){
+  .b4-schedule-wrap:not(.mobile-landscape-view) .b4-schedule{min-width:1120px!important}
+}
