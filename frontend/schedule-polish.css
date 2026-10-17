@@ -625,3 +625,43 @@ body.schedule-modal-open{overflow:hidden!important}
 @media(prefers-reduced-motion:reduce){
   .schedule-fullscreen-modal,.schedule-fullscreen-modal .schedule-modal-landscape{transition:none!important}
 }
+
+
+/* Layout correction after desktop review: fill the card without rotating on PC. */
+.b4-schedule-wrap:not(.mobile-landscape-view){
+  width:100%!important;
+}
+.b4-schedule-wrap:not(.mobile-landscape-view) .b4-schedule{
+  width:100%!important;
+  min-width:1120px!important;
+  max-width:none!important;
+}
+@media(min-width:801px){
+  .schedule-fullscreen-modal .schedule-modal-landscape{
+    position:absolute!important;
+    left:50%!important;top:50%!important;
+    width: min(98vw, 1600px)!important;
+    height: min(96vh, 1100px)!important;
+    max-width:none!important;max-height:none!important;
+    transform:translate(-50%,-47%) scale(.96)!important;
+    padding:22px!important;
+  }
+  .schedule-fullscreen-modal.is-open .schedule-modal-landscape{
+    transform:translate(-50%,-50%) scale(1)!important;
+  }
+  .schedule-fullscreen-modal .schedule-modal-stage{
+    width:100%!important;height:100%!important;
+    padding:10px!important;
+  }
+  .schedule-modal-table{
+    width:100%!important;min-width:0!important;max-width:none!important;
+    table-layout:fixed!important;
+  }
+  .schedule-modal-table th,.schedule-modal-table td{
+    overflow-wrap:anywhere;
+  }
+  .schedule-modal-table tbody tr:not(:has(.break-cell-merged)) th,
+  .schedule-modal-table tbody tr:not(:has(.break-cell-merged)) td{
+    height:clamp(72px,9vh,112px)!important;
+  }
+}
