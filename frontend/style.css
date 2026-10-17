@@ -2975,25 +2975,3 @@ body.b4-schedule-open header{
 }
 .log-row-clickable:hover{transform:none!important;box-shadow:none!important}
 .log-row-clickable::after{display:none!important}
-
-/* Scroll reveal: animate cards as they enter the viewport, not all at once. */
-#content .b4-scroll-reveal{
-  opacity:1;
-  transform:none;
-  animation:none!important;
-}
-#content .b4-scroll-reveal:not(.b4-scroll-revealed){
-  opacity:1;
-  transform:none;
-}
-#content .b4-scroll-reveal.b4-scroll-revealed{
-  animation:b4ScrollRevealIn .42s cubic-bezier(.2,.75,.25,1) both!important;
-}
-@keyframes b4ScrollRevealIn{
-  from{opacity:.72;transform:translate3d(0,12px,0) scale(.995);filter:blur(1px)}
-  to{opacity:1;transform:translate3d(0,0,0) scale(1);filter:blur(0)}
-}
-@media(prefers-reduced-motion:reduce){
-  #content .b4-scroll-reveal,
-  #content .b4-scroll-reveal.b4-scroll-revealed{animation:none!important;opacity:1!important;transform:none!important;filter:none!important}
-}
