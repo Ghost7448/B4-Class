@@ -2922,3 +2922,45 @@ body.b4-schedule-open header{
     background-color:var(--s)!important;
   }
 }
+
+
+/* B4 entrance motion: restore the staggered reveal without heavy blur or continuous effects. */
+#content > .b4-page-enter{
+  animation:b4PageEnter .26s cubic-bezier(.2,.75,.25,1) both!important;
+}
+#content .card.b4-stagger-in,
+#content .admin-card.b4-stagger-in,
+#content .hero.b4-stagger-in,
+#content .title.b4-stagger-in,
+#content .grid>article.b4-stagger-in{
+  animation:b4CardEnter .36s cubic-bezier(.2,.75,.25,1) var(--b4-enter-delay,0ms) both!important;
+  will-change:opacity,transform;
+}
+@keyframes b4PageEnter{
+  from{opacity:0;transform:translateY(7px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes b4CardEnter{
+  from{opacity:0;transform:translateY(12px) scale(.99)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+@media(max-width:800px){
+  #content .card.b4-stagger-in,
+  #content .admin-card.b4-stagger-in,
+  #content .hero.b4-stagger-in,
+  #content .title.b4-stagger-in,
+  #content .grid>article.b4-stagger-in{
+    animation-duration:.3s!important;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  #content > .b4-page-enter,
+  #content .card.b4-stagger-in,
+  #content .admin-card.b4-stagger-in,
+  #content .hero.b4-stagger-in,
+  #content .title.b4-stagger-in,
+  #content .grid>article.b4-stagger-in{
+    animation:none!important;
+    will-change:auto!important;
+  }
+}
