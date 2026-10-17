@@ -471,3 +471,71 @@ body.schedule-modal-open{overflow:hidden!important}
   .schedule-modal-landscape{width:100vw!important;height:100dvh!important;padding:10px!important;border-radius:14px!important}
   .schedule-modal-close{top:7px!important;right:7px!important;width:36px!important;height:36px!important;min-width:36px!important}
 }
+
+
+/* Reference-match polish v83: edge-to-edge portrait phone modal, rotated timetable card,
+   deep violet headers/breaks, slate-blue lesson cells, and an inset close control. */
+.schedule-fullscreen-modal{
+  padding:0!important;
+  background:rgba(5,7,14,.97)!important;
+}
+.schedule-modal-landscape{
+  border:1px solid rgba(167,139,250,.34)!important;
+  border-radius:24px!important;
+  background:linear-gradient(145deg,rgba(124,58,237,.1),rgba(7,10,20,.98) 55%)!important;
+  box-shadow:0 24px 70px rgba(0,0,0,.55),inset 0 1px rgba(255,255,255,.06)!important;
+}
+.schedule-modal-stage{
+  border:1px solid rgba(167,139,250,.24)!important;
+  border-radius:18px!important;
+  background:rgba(9,12,24,.82)!important;
+  padding:8px!important;
+  box-sizing:border-box!important;
+}
+.schedule-modal-table{
+  border-spacing:4px!important;
+}
+.schedule-modal-table thead th{
+  background:linear-gradient(145deg,rgba(76,29,149,.72),rgba(30,27,75,.96))!important;
+  border-color:rgba(167,139,250,.25)!important;
+  border-radius:12px!important;
+}
+.schedule-modal-table tbody th,.schedule-modal-table tbody td{
+  background:linear-gradient(145deg,rgba(21,34,53,.96),rgba(15,23,42,.98))!important;
+  border-color:rgba(100,116,139,.28)!important;
+  border-radius:12px!important;
+}
+.schedule-modal-table tbody th.schedule-day,.schedule-modal-table .schedule-day{
+  background:linear-gradient(145deg,rgba(76,29,149,.48),rgba(30,41,59,.98))!important;
+}
+.schedule-modal-table .break-head,.schedule-modal-table .break-cell,.schedule-modal-table .break-cell-merged{
+  background:linear-gradient(145deg,rgba(76,29,149,.8),rgba(46,16,101,.96))!important;
+  border-color:rgba(167,139,250,.35)!important;
+}
+.schedule-modal-table td.is-current-period{
+  background:linear-gradient(145deg,rgba(22,163,74,.42),rgba(20,83,45,.58))!important;
+  border:2px solid rgba(74,222,128,.9)!important;
+  box-shadow:inset 0 0 0 1px rgba(134,239,172,.22),0 0 14px rgba(34,197,94,.14)!important;
+}
+.schedule-modal-close{
+  top:10px!important;right:10px!important;
+  width:42px!important;height:42px!important;min-width:42px!important;
+  border-radius:15px!important;
+  background:linear-gradient(145deg,#9333ea,#6d28d9 55%,#4c1d95)!important;
+  border:1px solid rgba(221,214,254,.32)!important;
+  box-shadow:0 8px 24px rgba(0,0,0,.45),inset 0 1px rgba(255,255,255,.2)!important;
+}
+@media(max-width:800px) and (orientation:portrait){
+  .schedule-modal-landscape{
+    width:100dvh!important;height:100vw!important;
+    padding:12px!important;border-radius:22px!important;
+    transform:translate(-50%,-50%) rotate(90deg)!important;
+  }
+  .schedule-modal-stage{padding:6px!important;border-radius:14px!important}
+  .schedule-modal-table{border-spacing:3px!important}
+  .schedule-modal-table thead th{border-radius:9px!important}
+  .schedule-modal-table tbody th,.schedule-modal-table tbody td{border-radius:9px!important}
+  .schedule-modal-close{
+    top:8px!important;right:8px!important;width:38px!important;height:38px!important;min-width:38px!important;
+  }
+}
