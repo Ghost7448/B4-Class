@@ -736,6 +736,7 @@ function morphHtml(root,html){
   children(root,template.content);
 }
 function render(){
+  window.b4SaveView?.(S.view);
   // Keep the browser history aligned with in-app navigation so Android Back returns to the previous B4 view.
   if(!window.b4HandlingPopState && S.view && history.state?.b4View!==S.view){
     history.pushState({...(history.state||{}),b4View:S.view},'',location.href);
