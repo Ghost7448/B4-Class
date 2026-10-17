@@ -703,7 +703,29 @@ function animatePageEntrance(force=false){
   lastAnimatedView=S.view;
   const page=root.firstElementChild;
   if(page){page.classList.remove('b4-page-enter');void page.offsetWidth;page.classList.add('b4-page-enter');}
-  root.querySelectorAll('.card,.hero,.title,.grid > article').forEach((el,i)=>{el.classList.remove('b4-stagger-in');el.style.setProperty('--b4-enter-delay',Math.min(i,9)*30+'ms');void el.offsetWidth;el.classList.add('b4-stagger-in')});
+  setupScrollReveal(root);
+}
+let b4ScrollRevealObserver=null;
+function setupScrollReveal(root=$('#content')){
+  if(!root)return;
+  if(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)return;
+  if(!('IntersectionObserver'in window))return;
+  if(!b4ScrollRevealObserver)b4ScrollRevealObserver=new IntersectionObserver(entries=>{
+    entries.forEach(entry=>{
+      if(!entry.isIntersecting)return;
+      const el=entry.target;
+      el.classList.add('b4-scroll-revealed');
+      b4ScrollRevealObserver.unobserve(el);
+    });
+  },{root:null,rootMargin:'0px 0px 90px 0px',threshold:0.04});
+  root.querySelectorAll('.card,.admin-card,.item,.person-card,.permission-tile,.log-row,.hero,.grid>article').forEach(el=>{
+    if(el.dataset.b4RevealObserved==='1')return;
+    el.dataset.b4RevealObserved='1';
+    el.classList.remove('b4-stagger-in');
+    el.style.removeProperty('--b4-enter-delay');
+    el.classList.add('b4-scroll-reveal');
+    b4ScrollRevealObserver.observe(el);
+  });
 }
 function morphHtml(root,html){
   if(!root)return;
@@ -752,7 +774,7 @@ function render(){
   }else if(window.b4ReportsLiveTimer){clearInterval(window.b4ReportsLiveTimer);window.b4ReportsLiveTimer=null}
   morphHtml($('#nav'),buildNav());
   let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
-  morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
+  morphHtml($('#content'),html);setupScrollReveal($('#content'));animatePageEntrance(previousView!==v);
   if(v==='dashboard')animateDashboardStats();
   applySuperAdminCrown();
   if(S.me?.avatar_url&&$('#topAvatar'))$('#topAvatar').src=S.me.avatar_url;
