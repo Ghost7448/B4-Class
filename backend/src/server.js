@@ -1870,4 +1870,4 @@ app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-ensurePermissionSchema().then(()=>migratePushDefaultOff()).then(()=>app.listen(PORT,()=>console.log('B4 backend + frontend listening on '+PORT))).catch(e=>{console.error('Startup schema/migration failed:',e);process.exit(1)});
+ensurePermissionSchema().then(()=>migratePushDefaultOff()).then(()=>app.listen(PORT,()=>{console.log('B4 backend + frontend listening on '+PORT);checkSchoolEndPushSchedule();setInterval(checkSchoolEndPushSchedule,30000);})).catch(e=>{console.error('Startup schema/migration failed:',e);process.exit(1)});
