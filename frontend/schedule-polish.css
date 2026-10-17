@@ -698,3 +698,84 @@ body.schedule-modal-open{overflow:hidden!important}
 @media(max-width:800px){
   .b4-schedule-wrap:not(.mobile-landscape-view) .b4-schedule{min-width:1120px!important}
 }
+
+
+/* v92: render the expanded timetable at native layout size; no transform-scaling blur. */
+.schedule-fullscreen-modal{
+  position:fixed!important;inset:0!important;z-index:99999!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  padding:0!important;overflow:hidden!important;box-sizing:border-box!important;
+}
+.schedule-fullscreen-modal .schedule-modal-landscape{
+  position:relative!important;left:auto!important;top:auto!important;
+  width:min(98vw,1600px)!important;height:min(96dvh,1100px)!important;
+  max-width:none!important;max-height:none!important;
+  padding:18px!important;box-sizing:border-box!important;
+  transform:translateY(12px) scale(.985)!important;
+  display:flex!important;flex-direction:column!important;
+  overflow:hidden!important;
+}
+.schedule-fullscreen-modal.is-open .schedule-modal-landscape{
+  transform:translateY(0) scale(1)!important;
+}
+.schedule-fullscreen-modal .schedule-modal-stage{
+  position:relative!important;display:flex!important;flex:1 1 auto!important;
+  width:100%!important;height:auto!important;min-width:0!important;min-height:0!important;
+  padding:8px!important;overflow:hidden!important;box-sizing:border-box!important;
+}
+.schedule-fullscreen-modal .schedule-modal-scaled{
+  position:relative!important;left:auto!important;top:auto!important;
+  display:flex!important;flex:1 1 auto!important;align-items:stretch!important;
+  width:100%!important;height:100%!important;min-width:0!important;min-height:0!important;
+  margin:0!important;transform:none!important;transform-origin:initial!important;
+}
+.schedule-fullscreen-modal .schedule-modal-table{
+  flex:1 1 auto!important;width:100%!important;min-width:0!important;max-width:100%!important;
+  height:100%!important;min-height:0!important;margin:0!important;
+  table-layout:fixed!important;transform:none!important;filter:none!important;
+  border-collapse:separate!important;border-spacing:4px!important;
+}
+.schedule-fullscreen-modal .schedule-modal-table th,
+.schedule-fullscreen-modal .schedule-modal-table td{
+  box-sizing:border-box!important;min-width:0!important;
+  overflow-wrap:anywhere!important;word-break:normal!important;
+}
+.schedule-fullscreen-modal .schedule-modal-table thead{height:12%!important}
+.schedule-fullscreen-modal .schedule-modal-table thead th{height:12%!important;font-size:clamp(10px,.85vw,14px)!important}
+.schedule-fullscreen-modal .schedule-modal-table tbody tr{height:10%!important}
+.schedule-fullscreen-modal .schedule-modal-table tbody th,
+.schedule-fullscreen-modal .schedule-modal-table tbody td{
+  height:10%!important;padding:clamp(3px,.5vw,9px)!important;
+}
+.schedule-fullscreen-modal .schedule-modal-table .schedule-subject{
+  font-size:clamp(10px,.95vw,15px)!important;line-height:1.18!important;
+}
+.schedule-fullscreen-modal .schedule-modal-table .schedule-teacher{
+  font-size:clamp(8px,.72vw,11px)!important;line-height:1.15!important;
+}
+@media(max-width:800px) and (orientation:portrait){
+  .schedule-fullscreen-modal .schedule-modal-landscape{
+    position:absolute!important;left:50%!important;top:50%!important;
+    width:100dvh!important;height:100vw!important;
+    max-width:none!important;max-height:none!important;
+    padding:10px!important;border-radius:18px!important;
+    transform:translate(-50%,-48%) rotate(90deg) scale(.985)!important;
+  }
+  .schedule-fullscreen-modal.is-open .schedule-modal-landscape{
+    transform:translate(-50%,-50%) rotate(90deg) scale(1)!important;
+  }
+  .schedule-fullscreen-modal .schedule-modal-stage{padding:4px!important;border-radius:12px!important}
+  .schedule-fullscreen-modal .schedule-modal-table{border-spacing:2px!important}
+  .schedule-fullscreen-modal .schedule-modal-table thead th{font-size:clamp(9px,1.3vw,12px)!important;padding:3px 2px!important}
+  .schedule-fullscreen-modal .schedule-modal-table tbody th,
+  .schedule-fullscreen-modal .schedule-modal-table tbody td{padding:3px 2px!important}
+  .schedule-fullscreen-modal .schedule-modal-table .schedule-subject{font-size:clamp(9px,1.45vw,12px)!important}
+  .schedule-fullscreen-modal .schedule-modal-table .schedule-teacher{font-size:clamp(7px,1vw,9px)!important}
+  .schedule-fullscreen-modal .schedule-modal-close{top:7px!important;right:7px!important}
+}
+@media(max-width:800px) and (orientation:landscape){
+  .schedule-fullscreen-modal .schedule-modal-landscape{
+    width:100vw!important;height:100dvh!important;padding:8px!important;border-radius:14px!important;
+  }
+  .schedule-fullscreen-modal .schedule-modal-table{border-spacing:2px!important}
+}
