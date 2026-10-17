@@ -1797,6 +1797,63 @@ async function migratePushDefaultOff(){
   }
 }
 
+
+/* Scheduled school-day end push notification (Egypt local time).
+   Sunday-Wednesday: 15:30; Thursday: 14:40; Friday/Saturday: no notification.
+   A MySQL advisory lock and unique local date prevent duplicate sends across instances. */
+function egyptLocalParts(date=new Date()){
+  const parts=new Intl.DateTimeFormat('en-US',{
+    timeZone:'Africa/Cairo',year:'numeric',month:'2-digit',day:'2-digit',
+    weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'
+  }).formatToParts(date);
+  const get=k=>parts.find(p=>p.type===k)?.value||'';
+  return {date:get('year')+'-'+get('month')+'-'+get('day'),weekday:get('weekday'),hour:Number(get('hour')),minute:Number(get('minute'))};
+}
+let schoolEndCheckRunning=false;
+async function checkSchoolEndPushSchedule(){
+  if(schoolEndCheckRunning||!VAPID_READY)return;
+  schoolEndCheckRunning=true;
+  let hasLock=false;
+  try{
+    const local=egyptLocalParts();
+    if(local.weekday==='Fri'||local.weekday==='Sat')return;
+    const thursday=local.weekday==='Thu';
+    const targetMinutes=thursday?(14*60+40):(15*60+30);
+    if(local.hour*60+local.minute<targetMinutes)return;
+
+    await q("CREATE TABLE IF NOT EXISTS b4_school_end_push_log(school_date DATE PRIMARY KEY,weekday VARCHAR(3) NOT NULL,scheduled_time CHAR(5) NOT NULL,recipient_count INT NOT NULL DEFAULT 0,sent_count INT NOT NULL DEFAULT 0,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    const [lockRows]=await q("SELECT GET_LOCK('b4_school_end_push_schedule',0) acquired");
+    hasLock=Number(lockRows?.[0]?.acquired)===1;
+    if(!hasLock)return;
+    const [already]=await q('SELECT school_date FROM b4_school_end_push_log WHERE school_date=? LIMIT 1',[local.date]);
+    if(already.length)return;
+
+    const [users]=await q("SELECT DISTINCT u.id FROM users u JOIN notification_settings ns ON ns.user_id=u.id JOIN push_subscriptions ps ON ps.user_id=u.id WHERE u.status='ACTIVE' AND ns.push_enabled=1");
+    let sentCount=0;
+    for(const user of users){
+      try{
+        const result=await sendPushToUser(Number(user.id),{
+          title:'انتهى اليوم الدراسي 🎉',
+          body:'خلص يومنا الدراسي. نتمنى لكم يومًا سعيدًا!',
+          url:'/?view=schedule',
+          type:'system'
+        });
+        if(result?.ok)sentCount++;
+      }catch(e){
+        console.error('School-end push failed for user',user.id,String(e?.message||e));
+      }
+    }
+    await q('INSERT IGNORE INTO b4_school_end_push_log(school_date,weekday,scheduled_time,recipient_count,sent_count) VALUES(?,?,?,?,?)',
+      [local.date,local.weekday,thursday?'14:40':'15:30',users.length,sentCount]);
+    console.log('School-end push schedule processed', {date:local.date,weekday:local.weekday,time:thursday?'14:40':'15:30',recipients:users.length,sent:sentCount});
+  }catch(e){
+    console.error('School-end push scheduler error:',e?.message||e);
+  }finally{
+    if(hasLock){try{await q("SELECT RELEASE_LOCK('b4_school_end_push_schedule')");}catch{}}
+    schoolEndCheckRunning=false;
+  }
+}
+
 // Serve shared assets from the repository root before the SPA fallback.
 // The manifest references /assets/logo.svg, so this route must be public.
 const assetsPath = path.resolve(__dirname, '../../assets');
