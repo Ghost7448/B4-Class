@@ -746,6 +746,7 @@ function render(){
   document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
   if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';
   const previousView=lastAnimatedView;let v=S.view;
+  if(v!=='admin:logs'&&window.b4LogsLiveTimer){clearInterval(window.b4LogsLiveTimer);window.b4LogsLiveTimer=null}
   if(v==='admin:reports'){
     if(!window.b4ReportsLiveTimer)window.b4ReportsLiveTimer=setInterval(()=>{if(S.view==='admin:reports'&&!document.hidden)loadReports({silent:true})},5000);
   }else if(window.b4ReportsLiveTimer){clearInterval(window.b4ReportsLiveTimer);window.b4ReportsLiveTimer=null}
@@ -1322,7 +1323,7 @@ function teacherMessageHTML(m){
   return '<div class="msg '+(S.me&&Number(m.user_id)===Number(S.me.id)?'me':'')+'" data-message-id="'+esc(m.id)+'" onclick="teacherMessageMenu(event,'+m.id+')"><img class="avatar" src="'+esc(m.avatar_url||'/assets/logo.svg')+'"><div><div class="chat-name-line"><b>'+esc(m.display_name||'Deleted user')+'</b>'+badgeHTML(m.badges,true)+'</div>'+reply+'<div class="bubble">'+esc(m.body||'')+edited+'</div><small class="muted">'+esc(chatTime(m.created_at))+'</small></div></div>';
 }
 
-function adminLoad(p){if(p==='roles')loadRoles();if(p==='permissions')loadPermissions();if(p==='accounts')loadAccounts();if(p==='keys')loadKeys();if(p==='badges')loadBadges();if(p==='admins')loadAdmins();if(p==='logs')loadLogs();if(p==='site')loadSiteManagement();if(p==='reports')loadReports();if(p==='developers')loadDevelopers()}
+function adminLoad(p){if(p==='roles')loadRoles();if(p==='permissions')loadPermissions();if(p==='accounts')loadAccounts();if(p==='keys')loadKeys();if(p==='badges')loadBadges();if(p==='admins')loadAdmins();if(p==='logs'){loadLogs();if(!window.b4LogsLiveTimer)window.b4LogsLiveTimer=setInterval(syncLogsLive,5000)}else if(window.b4LogsLiveTimer){clearInterval(window.b4LogsLiveTimer);window.b4LogsLiveTimer=null}if(p==='site')loadSiteManagement();if(p==='reports')loadReports();if(p==='developers')loadDevelopers()}
 
 async function loadReports(options={}){
   const root=$('#adminRoot');if(!root||window.reportsLoadBusy)return;
@@ -1581,7 +1582,7 @@ function logKey(x){return String(x.kind||'activity')+':'+String(x.id||'')}
 function logRowHTML(x){
   const details=parseLogDetails(x.details);
   const summary=details.message_content?String(details.message_content).slice(0,120):details.message?String(details.message).slice(0,120):'';
-  return '<article class="log-row log-row-clickable" data-log-key="'+esc(logKey(x))+'" onclick="openLogDetailsByKey(\''+esc(logKey(x))+'\')"><span class="log-icon">'+logIcon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+esc(x.kind||'activity')+'">'+esc(x.kind||'activity')+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(summary?'<div class="log-detail">'+esc(summary)+'</div>':'')+'</div><span class="log-open">›</span></article>';
+  return '<article class="log-row log-row-clickable" data-live-id="log:'+esc(logKey(x))+'" data-log-key="'+esc(logKey(x))+'" tabindex="0" role="button" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openLogDetailsByKey(\''+esc(logKey(x))+'\')}" onclick="openLogDetailsByKey(\''+esc(logKey(x))+'\')"><span class="log-icon">'+logIcon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+esc(x.kind||'activity')+'">'+esc(x.kind||'activity')+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(summary?'<div class="log-detail">'+esc(summary)+'</div>':'')+'</div><span class="log-open">›</span></article>';
 }
 function openLogDetailsByKey(key){
   const x=(window.__b4LogRows||[]).find(v=>logKey(v)===String(key));
@@ -1618,16 +1619,29 @@ function openLogDetails(index){
   const rows=window.__b4LogRows||[],x=rows[index];
   if(x)openLogDetailsByKey(logKey(x));
 }
-async function loadLogs(){
+function logsSignature(rows){return JSON.stringify(rows.map(x=>[logKey(x),x.action,x.actor_name,x.created_at,x.entity_type,x.entity_id,x.details]));}
+async function loadLogs(options={}){
   const r=$('#adminRoot');
-  if(!r)return;
+  if(!r||S.view!=='admin:logs'||window.b4LogsLoadBusy)return;
+  window.b4LogsLoadBusy=true;
   try{
     const d=await api('/api/admin/logs');
     const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+    if(!r.isConnected||S.view!=='admin:logs')return;
+    const signature=logsSignature(rows);
+    if(signature===window.b4LogsSignature)return;
+    window.b4LogsSignature=signature;
     window.__b4LogRows=rows;
-    r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Every historical log is clickable</span></div><div class="log-list">'+(rows.map(logRowHTML).join('')||'<div class="empty">No activity yet.</div>')+'</div>';
-  }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
+    const html='<div class="logs-toolbar" data-live-id="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Live updates · Every historical log is clickable</span></div><div class="log-list" data-live-id="logs-list">'+(rows.map(logRowHTML).join('')||'<div class="empty">No activity yet.</div>')+'</div>';
+    morphHtml(r,html);
+  }catch(e){
+    if(!r.childElementCount)r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>';
+  }finally{window.b4LogsLoadBusy=false}
 }
+function syncLogsLive(){
+  if(S.view==='admin:logs'&&!document.hidden)loadLogs({silent:true});
+}
+
 async function loadDevelopers(){
   const r=$('#adminRoot');
   if(!r)return;
