@@ -2952,3 +2952,26 @@ body.b4-schedule-open header{
 @media(prefers-reduced-motion:reduce){
   #content .card.b4-stagger-in,#content .admin-card.b4-stagger-in,#content .hero.b4-stagger-in,#content .title.b4-stagger-in,#content .grid>article.b4-stagger-in,#content > .b4-page-enter{animation:none!important}
 }
+/* View Logs: keep the list calm, live and free of tap/focus flashes. */
+.log-row-clickable{
+  -webkit-tap-highlight-color:transparent!important;
+  outline:none!important;
+  box-shadow:none;
+  animation:none!important;
+  transform:none;
+  transition:border-color .16s ease,background-color .16s ease!important;
+  touch-action:manipulation;
+}
+.log-row-clickable:focus,
+.log-row-clickable:focus-visible{
+  outline:none!important;
+  box-shadow:none!important;
+}
+.log-row-clickable:active{
+  transform:none!important;
+  filter:none!important;
+  box-shadow:none!important;
+  background:var(--s2)!important;
+}
+.log-row-clickable:hover{transform:none!important;box-shadow:none!important}
+.log-row-clickable::after{display:none!important}
