@@ -2924,43 +2924,31 @@ body.b4-schedule-open header{
 }
 
 
-/* B4 entrance motion: restore the staggered reveal without heavy blur or continuous effects. */
-#content > .b4-page-enter{
-  animation:b4PageEnter .26s cubic-bezier(.2,.75,.25,1) both!important;
+
+/* B4 reliable entrance animation v95: animate actual rendered cards on every page navigation. */
+#content .card,
+#content .admin-card,
+#content .hero,
+#content .title,
+#content .grid>article{
+  animation:none;
 }
 #content .card.b4-stagger-in,
 #content .admin-card.b4-stagger-in,
 #content .hero.b4-stagger-in,
 #content .title.b4-stagger-in,
 #content .grid>article.b4-stagger-in{
-  animation:b4CardEnter .36s cubic-bezier(.2,.75,.25,1) var(--b4-enter-delay,0ms) both!important;
-  will-change:opacity,transform;
+  animation:b4RevealCard .42s cubic-bezier(.16,1,.3,1) var(--b4-enter-delay,0ms) both!important;
 }
-@keyframes b4PageEnter{
-  from{opacity:0;transform:translateY(7px)}
-  to{opacity:1;transform:translateY(0)}
+#content > .b4-page-enter{animation:b4RevealPage .32s ease-out both!important}
+@keyframes b4RevealCard{
+  0%{opacity:0;transform:translate3d(0,18px,0) scale(.985)}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1)}
 }
-@keyframes b4CardEnter{
-  from{opacity:0;transform:translateY(12px) scale(.99)}
-  to{opacity:1;transform:translateY(0) scale(1)}
-}
-@media(max-width:800px){
-  #content .card.b4-stagger-in,
-  #content .admin-card.b4-stagger-in,
-  #content .hero.b4-stagger-in,
-  #content .title.b4-stagger-in,
-  #content .grid>article.b4-stagger-in{
-    animation-duration:.3s!important;
-  }
+@keyframes b4RevealPage{
+  0%{opacity:.55;transform:translate3d(0,8px,0)}
+  100%{opacity:1;transform:translate3d(0,0,0)}
 }
 @media(prefers-reduced-motion:reduce){
-  #content > .b4-page-enter,
-  #content .card.b4-stagger-in,
-  #content .admin-card.b4-stagger-in,
-  #content .hero.b4-stagger-in,
-  #content .title.b4-stagger-in,
-  #content .grid>article.b4-stagger-in{
-    animation:none!important;
-    will-change:auto!important;
-  }
+  #content .card.b4-stagger-in,#content .admin-card.b4-stagger-in,#content .hero.b4-stagger-in,#content .title.b4-stagger-in,#content .grid>article.b4-stagger-in,#content > .b4-page-enter{animation:none!important}
 }
