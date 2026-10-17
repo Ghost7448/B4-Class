@@ -2851,3 +2851,39 @@ body.schedule-modal-open{overflow:hidden!important}
   .schedule-modal-landscape{width:100%!important;height:100%!important;padding:12px!important;border-radius:16px!important}
   .schedule-modal-close{top:7px!important;right:7px!important;width:36px!important;height:36px!important;min-width:36px!important}
 }
+
+
+/* B4 performance pass: keep the visual identity, reduce continuous paint/compositing work. */
+:root{--b4-motion-fast:140ms}
+html{scroll-behavior:auto}
+body,.app aside,header,.mobile-dock{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.hero:after,.live i,.developer-card:before,.people-card:before,.more-option:before,
+.assignment-timer-flow,.chat-jump-bottom:after{animation:none!important}
+.card,.admin-card,.item,.permission-tile,.person-card,.btn,.top button,#mobile,.quick,
+.google-btn,.close,.answer-option,.more-option,.key-card,.log-row,.notification-row{
+  will-change:auto!important
+}
+.card,.admin-card{animation:card .18s ease-out both;transition:transform var(--b4-motion-fast) ease,border-color var(--b4-motion-fast) ease}
+.card:hover,.admin-card:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+.item,.person-card,.permission-tile,.answer-option,.more-option,.key-card,.btn,.google-btn{
+  transition:background-color var(--b4-motion-fast) ease,border-color var(--b4-motion-fast) ease,color var(--b4-motion-fast) ease
+}
+.item:hover,.person-card:hover,.permission-tile:hover,.permission-tile.is-on,.more-option:hover,
+.admin-grid .admin-card:hover{transform:none;box-shadow:none}
+.btn:hover,.google-btn:hover{transform:translateY(-1px);box-shadow:none}
+.page,#content{animation:page .18s ease-out both}
+.modal{animation:modal .18s ease-out}
+.log-row{animation:none!important}
+.exam-question,.exam-run-question{animation:cardIn .14s ease-out both}
+.deadline-track span,.deadline-fill,.assignment-bar span{transition:width .2s linear,background-color .15s ease}
+.exam-timer.danger{animation:none!important}
+@media(max-width:800px){
+  .mobile-dock{box-shadow:0 8px 20px #0002}
+  .hero{box-shadow:0 10px 28px #7c3aed1c}
+  .card,.admin-card{box-shadow:none}
+  .card:hover,.admin-card:hover{transform:none;box-shadow:none}
+  .app aside{box-shadow:8px 0 24px #0002}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
