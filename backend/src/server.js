@@ -1786,6 +1786,24 @@ app.get('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{await q('DELETE 
 
 app.get('/api/admin/developers/public',async(req,res)=>{const [developers]=await q('SELECT id,name,title,title2,link_url,created_at,IF(image_data IS NULL,NULL,CONCAT("/api/developers/",id,"/avatar")) avatar_url FROM b4_developers ORDER BY id DESC');res.json({developers});});
 
+// Repair older Railway databases whose schedule table predates periods 5–8.
+// This is idempotent and preserves all existing timetable rows and values.
+async function ensureScheduleColumns(){
+  const [tableRows]=await q("SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='schedule' LIMIT 1");
+  if(!tableRows.length){
+    await q("CREATE TABLE schedule(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,class_name VARCHAR(20) NOT NULL DEFAULT 'B4',day_order INT NOT NULL,day_name VARCHAR(40) NOT NULL,p1 VARCHAR(255) NOT NULL DEFAULT '',p2 VARCHAR(255) NOT NULL DEFAULT '',p3 VARCHAR(255) NOT NULL DEFAULT '',p4 VARCHAR(255) NOT NULL DEFAULT '',p5 VARCHAR(255) NOT NULL DEFAULT '',p6 VARCHAR(255) NOT NULL DEFAULT '',p7 VARCHAR(255) NOT NULL DEFAULT '',p8 VARCHAR(255) NOT NULL DEFAULT '') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    console.log('Schedule schema created');
+    return;
+  }
+  for(const period of ['p1','p2','p3','p4','p5','p6','p7','p8']){
+    const [columns]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='schedule' AND COLUMN_NAME=? LIMIT 1",[period]);
+    if(!columns.length){
+      await q('ALTER TABLE schedule ADD COLUMN '+period+" VARCHAR(255) NOT NULL DEFAULT ''");
+      console.log('Schedule schema migration: added '+period);
+    }
+  }
+}
+
 // One-time migration: device push notifications must be OFF until each user explicitly enables them.
 async function migratePushDefaultOff(){
   await q("CREATE TABLE IF NOT EXISTS b4_notification_migrations(migration_key VARCHAR(100) PRIMARY KEY,applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -1870,4 +1888,4 @@ app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-ensurePermissionSchema().then(()=>migratePushDefaultOff()).then(()=>app.listen(PORT,()=>{console.log('B4 backend + frontend listening on '+PORT);checkSchoolEndPushSchedule();setInterval(checkSchoolEndPushSchedule,30000);})).catch(e=>{console.error('Startup schema/migration failed:',e);process.exit(1)});
+ensurePermissionSchema().then(()=>ensureScheduleColumns()).then(()=>migratePushDefaultOff()).then(()=>app.listen(PORT,()=>{console.log('B4 backend + frontend listening on '+PORT);checkSchoolEndPushSchedule();setInterval(checkSchoolEndPushSchedule,30000);})).catch(e=>{console.error('Startup schema/migration failed:',e);process.exit(1)});
