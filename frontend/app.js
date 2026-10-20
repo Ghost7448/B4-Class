@@ -369,6 +369,7 @@ async function syncLiveData(){
     if(S.view==='chat'||S.view==='teacherChat')return;
     if(S.view==='exam-run'||S.view==='exam-result'||S.view==='exam-answers'||S.view==='exam-review')return;
     if(!changed)return;
+    if(S.view==='admin:logs'){loadLogs({silent:true});return}
     if(S.view==='admin:reports'){loadReports({silent:true});return}
     if($('#back')?.classList.contains('show'))return;
     if(S.view==='chat'||S.view==='teacherChat')return;
@@ -749,6 +750,9 @@ function render(){
   if(v==='admin:reports'){
     if(!window.b4ReportsLiveTimer)window.b4ReportsLiveTimer=setInterval(()=>{if(S.view==='admin:reports'&&!document.hidden)loadReports({silent:true})},5000);
   }else if(window.b4ReportsLiveTimer){clearInterval(window.b4ReportsLiveTimer);window.b4ReportsLiveTimer=null}
+  if(v==='admin:logs'){
+    if(!window.b4LogsLiveTimer)window.b4LogsLiveTimer=setInterval(()=>{if(S.view==='admin:logs'&&!document.hidden)loadLogs({silent:true})},5000);
+  }else if(window.b4LogsLiveTimer){clearInterval(window.b4LogsLiveTimer);window.b4LogsLiveTimer=null}
   morphHtml($('#nav'),buildNav());
   let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
   morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
@@ -1581,7 +1585,8 @@ function logKey(x){return String(x.kind||'activity')+':'+String(x.id||'')}
 function logRowHTML(x){
   const details=parseLogDetails(x.details);
   const summary=details.message_content?String(details.message_content).slice(0,120):details.message?String(details.message).slice(0,120):'';
-  return '<article class="log-row log-row-clickable" data-log-key="'+esc(logKey(x))+'" onclick="openLogDetailsByKey(\''+esc(logKey(x))+'\')"><span class="log-icon">'+logIcon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+esc(x.kind||'activity')+'">'+esc(x.kind||'activity')+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(summary?'<div class="log-detail">'+esc(summary)+'</div>':'')+'</div><span class="log-open">›</span></article>';
+  const key=esc(logKey(x));
+  return '<article class="log-row log-row-clickable" role="button" tabindex="0" data-log-key="'+key+'" onclick="openLogDetailsByKey(\''+key+'\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();openLogDetailsByKey(\''+key+'\')}"><span class="log-icon">'+logIcon(x)+'</span><div class="grow"><div class="log-top"><b>'+esc(x.action||'EVENT')+'</b><span class="log-kind '+esc(x.kind||'activity')+'">'+esc(x.kind||'activity')+'</span></div><small class="muted">'+esc(x.actor_name||'System')+' · '+esc(logTime(x.created_at))+'</small>'+(summary?'<div class="log-detail">'+esc(summary)+'</div>':'')+'</div><span class="log-open">›</span></article>';
 }
 function openLogDetailsByKey(key){
   const x=(window.__b4LogRows||[]).find(v=>logKey(v)===String(key));
@@ -1618,15 +1623,25 @@ function openLogDetails(index){
   const rows=window.__b4LogRows||[],x=rows[index];
   if(x)openLogDetailsByKey(logKey(x));
 }
-async function loadLogs(){
+async function loadLogs(options={}){
   const r=$('#adminRoot');
-  if(!r)return;
+  if(!r||window.b4LogsLoadBusy)return;
+  const silent=!!options.silent;
+  window.b4LogsLoadBusy=true;
   try{
-    const d=await api('/api/admin/logs');
+    const d=await api('/api/admin/logs',{cache:'no-store'});
     const rows=[...(d.activity||[]).map(x=>({...x,kind:'activity'})),...(d.security||[]).map(x=>({...x,kind:'security'}))].sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+    const signature=JSON.stringify(rows);
     window.__b4LogRows=rows;
-    r.innerHTML='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Every historical log is clickable</span></div><div class="log-list">'+(rows.map(logRowHTML).join('')||'<div class="empty">No activity yet.</div>')+'</div>';
-  }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
+    if(silent&&signature===window.__b4LogSignature)return;
+    window.__b4LogSignature=signature;
+    const html='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Activity + security · Live · Tap any log for details</span></div><div class="log-list">'+(rows.map(logRowHTML).join('')||'<div class="empty">No activity yet.</div>')+'</div>';
+    if(r.innerHTML!==html)r.innerHTML=html;
+  }catch(e){
+    if(!silent)r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>';
+  }finally{
+    window.b4LogsLoadBusy=false;
+  }
 }
 async function loadDevelopers(){
   const r=$('#adminRoot');
