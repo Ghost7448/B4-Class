@@ -2,16 +2,7 @@ const $=s=>document.querySelector(s),esc=x=>String(x??'').replace(/[&<>"']/g,c=>
 /* Graceful avatar fallback: never show the browser's broken-image icon or alt text. */
 function b4AvatarFallback(img){
   if(!img || img.dataset.b4FallbackApplied==='1') return;
-  const isTop=img.id==='topAvatar';
-  const name=isTop
-    ? ($('#topName')?.textContent||'B4')
-    : (img.closest('.people-card')?.querySelector('.person-name-line b')?.textContent
-      || img.closest('.msg')?.querySelector('.chat-name-line b')?.textContent
-      || img.closest('.developer-card')?.querySelector('.developer-info')?.textContent
-      || 'B4');
-  const initial=String(name||'B4').trim().replace(/^./u,c=>c.toLocaleUpperCase())||'B';
-  const letter=Array.from(initial)[0]||'B';
-  const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#8b5cf6"/><stop offset="1" stop-color="#4338ca"/></linearGradient></defs><rect width="96" height="96" rx="24" fill="url(#g)"/><circle cx="76" cy="16" r="25" fill="#fff" opacity=".10"/><text x="48" y="58" text-anchor="middle" font-family="Inter,Arial,sans-serif" font-size="43" font-weight="800" fill="#fff">'+letter.replace(/[&<>"]/g,'')+'</text></svg>';
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#312e81"/><stop offset=".55" stop-color="#6d28d9"/><stop offset="1" stop-color="#7c3aed"/></linearGradient><linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity=".04"/></linearGradient></defs><rect width="96" height="96" rx="24" fill="url(#bg)"/><circle cx="78" cy="15" r="31" fill="#c4b5fd" opacity=".15"/><circle cx="14" cy="88" r="28" fill="#a5f3fc" opacity=".10"/><rect x="5" y="5" width="86" height="86" rx="20" fill="url(#glass)" stroke="#fff" stroke-opacity=".22"/><circle cx="48" cy="36" r="15" fill="#fff" fill-opacity=".94"/><path d="M19 82c2-16 13-25 29-25s27 9 29 25" fill="#fff" fill-opacity=".94"/><path d="M27 82c2-11 10-17 21-17s19 6 21 17" fill="#ddd6fe" fill-opacity=".9"/></svg>';
   img.dataset.b4FallbackApplied='1';
   img.alt='';
   img.src='data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);
