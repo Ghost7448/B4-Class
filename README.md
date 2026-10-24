@@ -1,4 +1,4 @@
-# B4 Class Portal
+# B4 Class
 
 B4 Telecommunication Class Portal — Node.js/Express + MySQL + vanilla HTML/CSS/JS.
 
