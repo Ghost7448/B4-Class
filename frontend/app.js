@@ -1,19 +1,4 @@
 const $=s=>document.querySelector(s),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
-/* Graceful avatar fallback: never show the browser's broken-image icon or alt text. */
-function b4AvatarFallback(img){
-  if(!img || img.dataset.b4FallbackApplied==='1') return;
-  const svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#312e81"/><stop offset=".55" stop-color="#6d28d9"/><stop offset="1" stop-color="#7c3aed"/></linearGradient><linearGradient id="glass" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity=".04"/></linearGradient></defs><rect width="96" height="96" rx="24" fill="url(#bg)"/><circle cx="78" cy="15" r="31" fill="#c4b5fd" opacity=".15"/><circle cx="14" cy="88" r="28" fill="#a5f3fc" opacity=".10"/><rect x="5" y="5" width="86" height="86" rx="20" fill="url(#glass)" stroke="#fff" stroke-opacity=".22"/><circle cx="48" cy="36" r="15" fill="#fff" fill-opacity=".94"/><path d="M19 82c2-16 13-25 29-25s27 9 29 25" fill="#fff" fill-opacity=".94"/><path d="M27 82c2-11 10-17 21-17s19 6 21 17" fill="#ddd6fe" fill-opacity=".9"/></svg>';
-  img.dataset.b4FallbackApplied='1';
-  img.alt='';
-  img.src='data:image/svg+xml;charset=UTF-8,'+encodeURIComponent(svg);
-}
-document.addEventListener('error',e=>{
-  const img=e.target;
-  if(img instanceof HTMLImageElement && (img.id==='topAvatar'||img.classList.contains('avatar')||img.closest('.developer-photo'))){
-    b4AvatarFallback(img);
-  }
-},true);
-
 const API=(window.B4_API_URL||'').replace(/\/$/,'');
 const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'light',view:'dashboard',me:null,linked:[],students:[],teachers:[],subjects:[],schedule:[],assignments:[],resources:[],exams:[],announcements:[],messages:[],developers:[],badges:[],accounts:[],permissions:[],users:[],teacherMessages:[],notifications:[],notificationSettings:{chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,system_notifications:1,push_enabled:0},examReview:null,examRun:null,examResult:null,examAnswers:null,serverNowMs:0,serverClockOffsetMs:0,serverTimeZone:'Africa/Cairo',error:''};
 const L={en:{dashboard:'Dashboard',students:'Students',teachers:'Teachers',subjects:'Subjects',schedule:'Schedule',assignments:'Assignments',resources:'Resources',exams:'Exam Center',announcements:'Announcements',chat:'Class Chat',teacherChat:'Teacher Chat',admin:'Admin Center',teacherCenter:'Teacher Center',settings:'Settings',developers:'Developers',reportBug:'Report Bug',login:'Login',logout:'Log out',activate:'Activation Key',ai:'B4 AI',search:'Search everything...',guest:'Guest',save:'Save',add:'Add',edit:'Edit',delete:'Delete',open:'Open resource',light:'Light mode',dark:'Dark mode',english:'English',arabic:'Arabic',administrator:'Administrator — all permissions',superAdmin:'Super Admin',classRole:'Class role',systemAccess:'System access'},ar:{dashboard:'الرئيسية',students:'الطلاب',teachers:'المدرسين',subjects:'المواد',schedule:'الجدول',assignments:'الواجبات',resources:'المصادر',exams:'الامتحانات',announcements:'الإعلانات',chat:'شات الفصل',teacherChat:'شات المدرسين',admin:'مركز الإدارة',teacherCenter:'مركز المدرس',settings:'الإعدادات',developers:'المطورون',reportBug:'الإبلاغ عن مشكلة',login:'تسجيل الدخول',logout:'تسجيل الخروج',activate:'مفتاح التفعيل',ai:'مساعد B4',search:'ابحث...',guest:'زائر',save:'حفظ',add:'إضافة',edit:'تعديل',delete:'حذف',open:'فتح المصدر',light:'الوضع النهاري',dark:'الوضع الليلي',english:'الإنجليزية',arabic:'العربية',administrator:'Administrator — كل الصلاحيات',superAdmin:'Super Admin',classRole:'دور الحساب',systemAccess:'صلاحية النظام'}};
