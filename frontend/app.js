@@ -382,6 +382,12 @@ function installExamExitGuard(){
   window.addEventListener('pagehide',()=>{
     if(S.view==='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
   });
+  document.addEventListener('fullscreenchange',()=>{
+    if(S.view==='exam-run'&&!document.fullscreenElement&&!window.examExitAllowed){
+      lockActiveExam('FULLSCREEN_EXIT');
+      showExamLockedIfNeeded();
+    }
+  });
   // Detect split-screen and floating/pop-up windows by comparing both inner and outer dimensions.
   // Use outerHeight rather than innerHeight to avoid treating the on-screen keyboard as a resize.
   const checkWindowDimensions=()=>{
@@ -852,7 +858,7 @@ function render(){
     if(!window.b4LogsLiveTimer)window.b4LogsLiveTimer=setInterval(()=>{if(S.view==='admin:logs'&&!document.hidden)loadLogs({silent:true})},5000);
   }else if(window.b4LogsLiveTimer){clearInterval(window.b4LogsLiveTimer);window.b4LogsLiveTimer=null}
   morphHtml($('#nav'),buildNav());
-  let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
+  let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-fullscreen'?examFullscreenV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
   morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
   if(v==='dashboard')animateDashboardStats();
   applySuperAdminCrown();
@@ -1903,16 +1909,51 @@ async function saveExam(e,id){
 }
 async function startExam(id){
   window.examExitAllowed=false;
+  S.pendingExamId=Number(id);
+  S.view='exam-fullscreen';
+  render();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+async function enterExamFullscreen(){
+  const id=Number(S.pendingExamId||0);
+  if(!id)return;
+  const root=document.documentElement;
+  try{
+    if(!document.fullscreenElement){
+      if(!root.requestFullscreen)throw new Error('Fullscreen is not supported in this browser. Open the exam in Chrome or the installed app.');
+      await root.requestFullscreen({navigationUI:'hide'});
+    }
+  }catch(e){
+    toast(e.message||'Please allow Full Screen to start the exam.');
+    return;
+  }
+  const screenWidth=Number(window.screen?.width||0);
+  const screenHeight=Number(window.screen?.height||0);
+  const width=Number(window.innerWidth||0);
+  const height=Number(window.innerHeight||0);
+  if((screenWidth&&width<screenWidth*0.78)||(screenHeight&&height<screenHeight*0.68)){
+    try{if(document.fullscreenElement)await document.exitFullscreen()}catch{}
+    toast('Exit Split Screen / Pop-up View, then press Full Screen again.');
+    return;
+  }
+  window.examExitAllowed=false;
   captureExamViewport();
   try{
     const d=await api('/api/exams/'+id+'/start',{method:'POST'});
+    S.pendingExamId=null;
     S.examRun={id,exam:d.exam,attempt:d.attempt,questions:d.questions||[]};
     S.view='exam-run';render();window.scrollTo({top:0,behavior:'smooth'});startExamTimer(d.attempt?.deadline,id);
   }catch(e){
-    if(/already submitted/i.test(e.message)){loadStudentExamAnswers(id);return}
-    if(/Exam Locked/i.test(e.message)){toast('🔒 Exam Locked — your attempt was locked because you left the exam. A Teacher can unlock it from Submissions.');return}
+    try{if(document.fullscreenElement)await document.exitFullscreen()}catch{}
+    if(/already submitted/i.test(e.message)){S.pendingExamId=null;loadStudentExamAnswers(id);return}
+    if(/Exam Locked/i.test(e.message)){S.pendingExamId=null;toast('🔒 Exam Locked — your attempt was locked because you left the exam. A Teacher can unlock it from Submissions.');return}
     toast(e.message);
   }
+}
+function examFullscreenV(){
+  const id=Number(S.pendingExamId||0);
+  return title('Prepare Exam','Enter Full Screen before starting your attempt.')+
+    '<div class="exam-fullscreen-card"><div class="exam-lock-icon">⛶</div><span class="eyebrow">EXAM CENTER</span><h2>Ready to start?</h2><p class="muted">Press the button below to show the exam in Full Screen. Close any floating windows and leave Split Screen before continuing.</p><div class="exam-fullscreen-actions"><button class="btn primary" onclick="enterExamFullscreen()">⛶ Full Screen &amp; Start Exam</button><button class="btn ghost" onclick="S.pendingExamId=null;go(\'exams\')">Cancel</button></div></div>';
 }
 function examRunV(){
   const r=S.examRun||{};
