@@ -2851,3 +2851,5 @@ body.schedule-modal-open{overflow:hidden!important}
   .schedule-modal-landscape{width:100%!important;height:100%!important;padding:12px!important;border-radius:16px!important}
   .schedule-modal-close{top:7px!important;right:7px!important;width:36px!important;height:36px!important;min-width:36px!important}
 }
+
+.b4-time-ampm{align-self:center;min-width:58px;height:40px;border:1px solid var(--line)!important;border-radius:10px!important;background:var(--s2)!important;color:#c084fc!important;font-size:14px!important;font-weight:900!important;cursor:pointer!important;transition:background .18s,border-color .18s,transform .18s!important}.b4-time-ampm:hover{border-color:var(--p)!important;background:linear-gradient(135deg,#7c3aed,#a855f7)!important;color:#fff!important;transform:translateY(-1px)}@media(max-width:420px){.b4-time-controls{gap:6px}.b4-time-unit{width:min(25vw,86px)}.b4-time-ampm{min-width:48px;padding:0 8px!important}}
