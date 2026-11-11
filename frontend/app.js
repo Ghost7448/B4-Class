@@ -108,6 +108,38 @@ async function installB4(){
   openInstallModal('ready');
 }
 let activeConfirmCancel=null;
+const modalDrafts=new Map();
+let activeModalDraftKey='';
+function getModalDraftKey(html){
+  const submit=(html.match(/onsubmit="([^"]+)"/)||[])[1]||'';
+  const heading=(html.match(/<h[12][^>]*>([\\s\\S]*?)<\\/h[12]>/i)||[])[1]||'';
+  const title=heading.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').trim();
+  return submit||title?submit+'|'+title:'';
+}
+function captureModalDraft(){
+  const root=$('#modal');
+  if(!root||!activeModalDraftKey)return;
+  if(activeModalDraftKey.includes('saveExam')&&typeof collectExamQuestions==='function'){
+    collectExamQuestions();
+    modalDrafts.set(activeModalDraftKey,{examDraft:JSON.parse(JSON.stringify(examDraft||[]))});
+  }
+  const fields=[...root.querySelectorAll('input,textarea,select')].filter(el=>el.type!=='password'&&el.type!=='file');
+  const old=modalDrafts.get(activeModalDraftKey)||{};
+  old.fields=fields.map(el=>({value:el.value,checked:!!el.checked}));
+  modalDrafts.set(activeModalDraftKey,old);
+}
+function restoreModalDraft(key){
+  if(!key)return;
+  const saved=modalDrafts.get(key);
+  if(!saved)return;
+  if(saved.examDraft&&key.includes('saveExam'))examDraft=JSON.parse(JSON.stringify(saved.examDraft));
+  const fields=[...$('#modal').querySelectorAll('input,textarea,select')].filter(el=>el.type!=='password'&&el.type!=='file');
+  (saved.fields||[]).forEach((item,i)=>{
+    const el=fields[i];if(!el)return;
+    if(el.type==='checkbox'||el.type==='radio')el.checked=item.checked;
+    else el.value=item.value;
+  });
+}
 const close=(fromPopstate=false)=>{
   if(activeConfirmCancel){
     const cancel=activeConfirmCancel;
@@ -115,14 +147,35 @@ const close=(fromPopstate=false)=>{
     cancel();
     return
   }
+  const form=$('#modal form');
+  if(form?.dataset.b4Submitted==='1')modalDrafts.delete(activeModalDraftKey);
+  else captureModalDraft();
   $('#back')?.classList.remove('show');
+  activeModalDraftKey='';
   if(!fromPopstate&&history.state?.b4Modal)history.back()
 };
 window.b4Close=close;
 document.addEventListener('click',e=>{const back=$('#back');if(back?.classList.contains('show')&&e.target===back)close()});
+document.addEventListener('input',e=>{
+  if(!$('#back')?.classList.contains('show')||!$('#modal')?.contains(e.target))return;
+  const form=e.target.closest('form');if(form)delete form.dataset.b4Submitted;
+  captureModalDraft();
+});
+document.addEventListener('change',e=>{
+  if(!$('#back')?.classList.contains('show')||!$('#modal')?.contains(e.target))return;
+  const form=e.target.closest('form');if(form)delete form.dataset.b4Submitted;
+  captureModalDraft();
+});
+document.addEventListener('submit',e=>{
+  if(!$('#modal')?.contains(e.target))return;
+  e.target.dataset.b4Submitted='1';
+});
 const modal=h=>{
-  if(!$('#back')?.classList.contains('show'))history.pushState({...history.state,b4View:S.view,b4Modal:true},'',location.href);
+  if($('#back')?.classList.contains('show'))captureModalDraft();
+  else history.pushState({...history.state,b4View:S.view,b4Modal:true},'',location.href);
   $('#modal').innerHTML='<div class="modal">'+h+'</div>';
+  activeModalDraftKey=getModalDraftKey(h);
+  restoreModalDraft(activeModalDraftKey);
   $('#back').classList.add('show')
 };
 function confirmAction(message,options={}){
@@ -2394,7 +2447,7 @@ setupMobileDockAutoHide();showInitialSkeleton();document.documentElement.dataset
         pop.querySelectorAll('[data-month]').forEach(b=>b.addEventListener('click',()=>{month+=Number(b.dataset.month);if(month<0){month=11;year--}if(month>11){month=0;year++}saveDraft();render()}));
         pop.querySelectorAll('[data-year]').forEach(b=>b.addEventListener('click',()=>{year+=Number(b.dataset.year);saveDraft();render()}));
         pop.querySelectorAll('[data-day]').forEach(b=>b.addEventListener('click',()=>{selectedDate=b.dataset.day;saveDraft();if(type==='date'){input.value=selectedDate;pickerDrafts.delete(key);emit(input);close()}else{pop.querySelectorAll('[data-day]').forEach(x=>x.classList.toggle('selected',x===b))}}));
-        pop.querySelectorAll('[data-time]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.time,step=Number(b.dataset.step);if(k==='hour')hour=from12((hour12(hour)-1+step+12)%12+1,hour>=12);else minute=(minute+step+60)%60;saveDraft();render()}));
+        pop.querySelectorAll('[data-time]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.time,step=Number(b.dataset.step);if(k==='hour')hour=(hour+step+24)%24;else minute=(minute+step+60)%60;saveDraft();render()}));
         pop.querySelector('.b4-time-hour')?.addEventListener('change',e=>{const v=Math.max(1,Math.min(12,Number(e.target.value)||12));hour=from12(v,hour>=12);e.target.value=pad(v);saveDraft()});
         pop.querySelector('.b4-time-minute')?.addEventListener('change',e=>{minute=Math.max(0,Math.min(59,Number(e.target.value)||0));e.target.value=pad(minute);saveDraft()});
         pop.querySelector('.b4-time-ampm')?.addEventListener('click',()=>{hour=(hour+12)%24;saveDraft();render()});
