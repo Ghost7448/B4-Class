@@ -342,9 +342,12 @@ window.examViewportBaseline=null;
 function captureExamViewport(){
   window.examViewportBaseline={
     width:Number(window.innerWidth||0),
+    outerWidth:Number(window.outerWidth||window.innerWidth||0),
     height:Number(window.outerHeight||window.innerHeight||0),
     screenWidth:Number(window.screen?.width||0),
-    screenHeight:Number(window.screen?.height||0)
+    screenHeight:Number(window.screen?.height||0),
+    availWidth:Number(window.screen?.availWidth||0),
+    availHeight:Number(window.screen?.availHeight||0)
   };
 }
 function lockActiveExam(reason='LEFT_EXAM'){
@@ -379,27 +382,35 @@ function installExamExitGuard(){
   window.addEventListener('pagehide',()=>{
     if(S.view==='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
   });
-  // Compare the live window dimensions with the dimensions recorded when this exam began.
-  // outerHeight is preferred so the on-screen keyboard does not look like a split-screen resize.
+  // Detect split-screen and floating/pop-up windows by comparing both inner and outer dimensions.
+  // Use outerHeight rather than innerHeight to avoid treating the on-screen keyboard as a resize.
   const checkWindowDimensions=()=>{
     if(S.view!=='exam-run'||window.examExitAllowed)return;
     const base=window.examViewportBaseline;
     if(!base)return;
     const width=Number(window.innerWidth||0);
+    const outerWidth=Number(window.outerWidth||width);
     const height=Number(window.outerHeight||window.innerHeight||0);
-    const widthReduced=base.width>0&&width>0&&width<=base.width*0.82;
-    const heightReduced=base.height>0&&height>0&&height<=base.height*0.72;
+    const widthReduced=(base.width>0&&width>0&&width<=base.width*0.90)||
+      (base.outerWidth>0&&outerWidth>0&&outerWidth<=base.outerWidth*0.90);
+    const heightReduced=base.height>0&&height>0&&height<=base.height*0.82;
     const screenWidth=Number(window.screen?.width||base.screenWidth||0);
     const screenHeight=Number(window.screen?.height||base.screenHeight||0);
-    const alreadyInNarrowWindow=(screenWidth>0&&width>0&&width<=screenWidth*0.72);
-    const alreadyInShortWindow=(screenHeight>0&&height>0&&height<=screenHeight*0.62);
+    const availWidth=Number(window.screen?.availWidth||base.availWidth||screenWidth);
+    const availHeight=Number(window.screen?.availHeight||base.availHeight||screenHeight);
+    const alreadyInNarrowWindow=(screenWidth>0&&width>0&&width<=screenWidth*0.86)||
+      (availWidth>0&&outerWidth>0&&outerWidth<=availWidth*0.86);
+    const alreadyInShortWindow=(screenHeight>0&&height>0&&height<=screenHeight*0.76)||
+      (availHeight>0&&height>0&&height<=availHeight*0.76);
     if(!widthReduced&&!heightReduced&&!alreadyInNarrowWindow&&!alreadyInShortWindow)return;
     lockActiveExam('WINDOW_RESIZED');
     showExamLockedIfNeeded();
   };
   window.addEventListener('resize',checkWindowDimensions,{passive:true});
+  window.visualViewport?.addEventListener('resize',checkWindowDimensions,{passive:true});
   window.addEventListener('orientationchange',()=>{setTimeout(checkWindowDimensions,300)});
   window.addEventListener('pageshow',checkWindowDimensions);
+  window.addEventListener('focus',checkWindowDimensions);
   checkWindowDimensions();
 }
 installExamExitGuard();
