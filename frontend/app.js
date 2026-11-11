@@ -468,6 +468,7 @@ async function syncLiveData(){
     if(!changed)return;
     if(S.view==='admin:logs'){loadLogs({silent:true});return}
     if(S.view==='admin:reports'){loadReports({silent:true});return}
+    if(S.view==='admin:accounts'){loadAccounts({silent:true});return}
     if($('#back')?.classList.contains('show'))return;
     if(S.view==='chat'||S.view==='teacherChat')return;
     if(S.view==='exam-run'||S.view==='exam-result'||S.view==='exam-answers'||S.view==='exam-review')return;
@@ -1553,12 +1554,17 @@ async function saveRoleLink(e,id,role){
   }catch(e){toast(e.message)}
 }
 async function savePermissions(id){try{const card=[...document.querySelectorAll('.permission-user')].find(x=>x.dataset.userId===String(id));const codes=card?[...card.querySelectorAll('[data-perm]:checked')].map(x=>x.dataset.perm):[];await api('/api/admin/users/'+id+'/permissions',{method:'PUT',body:JSON.stringify({permissionCodes:codes})});toast('Permissions saved ✓');loadPermissions()}catch(e){toast(e.message)}}
-async function loadAccounts(){
+async function loadAccounts(options={}){
   const r=$('#adminRoot');
   if(!r)return;
+  const silent=!!options.silent;
   try{
     const d=await api('/api/admin/accounts');
     const accounts=d.accounts||[];
+    const signature=JSON.stringify(accounts);
+    if(window.accountsRenderedRoot===r&&window.accountsRenderedSignature===signature)return;
+    window.accountsRenderedRoot=r;
+    window.accountsRenderedSignature=signature;
     r.innerHTML='<div class="accounts-toolbar"><div><div class="eyebrow">ACCOUNT MANAGEMENT</div><b>'+accounts.length+'</b><span class="muted"> accounts</span></div><span class="muted">Manage passwords, sessions and access</span></div>'+
       '<div class="account-list">'+(accounts.length?accounts.map((a,i)=>{
         const roleTone=Number(a.is_super_admin)===1?'super':String(a.role||'').toLowerCase();
@@ -1568,7 +1574,7 @@ async function loadAccounts(){
         const identity=a.activation_key_preview||a.identity_code||'—';
         return '<article class="account-row" style="--i:'+i+'"><div class="account-avatar-wrap"><img class="avatar account-avatar" src="'+esc(a.avatar_url||'/assets/logo.svg')+'" onerror="this.src=\'/assets/logo.svg\'"><span class="account-status '+(String(a.status)==='ACTIVE'?'active':'inactive')+'"></span></div><div class="account-main"><div class="account-head"><div><div class="account-name">'+esc(a.display_name||'Unnamed account')+'</div><div class="account-sub">'+esc(a.official_name||'')+'</div></div><span class="account-role '+roleTone+'">'+(Number(a.is_super_admin)===1?'SUPER ADMIN':esc(a.role||'ACCOUNT'))+'</span></div><div class="account-meta"><span><small>Identity</small><b>'+esc(identity)+'</b></span><span><small>Google</small>'+google+'</span><span><small>Status</small><b>'+esc(a.status||'—')+'</b></span></div><div class="account-actions"><button class="btn primary" onclick="resetAccount('+a.id+')">🔑 Reset Password</button><button class="btn ghost" onclick="endSession('+a.id+')">↻ End Session</button><button class="btn danger" onclick="deleteAccount('+a.id+')">Delete</button></div></div></article>';
       }).join(''):'<div class="card empty">No accounts found.</div>')+'</div>';
-  }catch(e){r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
+  }catch(e){if(!silent)r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
 }
 async function deleteAccount(id){
   if(!await confirmAction('Delete this account permanently?'))return;
