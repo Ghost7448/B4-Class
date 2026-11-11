@@ -2319,6 +2319,11 @@ setupMobileDockAutoHide();showInitialSkeleton();document.documentElement.dataset
 (function(){
   const $one=(root,sel)=>root.querySelector(sel);
   const pad=n=>String(n).padStart(2,'0');
+  // Preserve uncommitted edits when the picker or its parent form is closed.
+  const pickerDrafts=new Map();
+  const draftKey=input=>input.id||input.name||input.dataset.b4DraftKey||(input.dataset.b4DraftKey='picker-'+Math.random().toString(36).slice(2));
+  const hour12=h=>h%12||12;
+  const from12=(h,pm)=>(h%12)+(pm?12:0);
   const isRTL=()=>document.documentElement.dir==='rtl'||document.body.classList.contains('ar');
   const theme=()=>document.documentElement.dataset.theme||document.body.dataset.theme||(document.documentElement.classList.contains('dark')||document.body.classList.contains('dark')?'dark':'light');
   const monthNames=()=>new Intl.DateTimeFormat(S.lang==='ar'?'ar-EG':'en-US',{month:'long'}); 
@@ -2327,11 +2332,11 @@ setupMobileDockAutoHide();showInitialSkeleton();document.documentElement.dataset
     const d=new Date(iso.length===10?iso+'T12:00:00':iso);
     if(Number.isNaN(d.getTime()))return iso;
     const date=new Intl.DateTimeFormat(S.lang==='ar'?'ar-EG':'en-GB',{day:'2-digit',month:'short',year:'numeric'}).format(d);
-    return withTime?date+' · '+pad(d.getHours())+':'+pad(d.getMinutes()):date;
+    return withTime?date+' · '+hour12(d.getHours())+':'+pad(d.getMinutes())+' '+(d.getHours()>=12?'PM':'AM'):date;
   };
   const timeLabel=iso=>{
     if(!iso)return S.lang==='ar'?'اختار الوقت':'Choose time';
-    const p=iso.split(':');return (p[0]||'00')+':'+(p[1]||'00');
+    const p=iso.split(':'),h=Number(p[0]||0);return hour12(h)+':'+(p[1]||'00')+' '+(h>=12?'PM':'AM');
   };
   function emit(input){
     input.dispatchEvent(new Event('input',{bubbles:true}));
@@ -2371,32 +2376,34 @@ setupMobileDockAutoHide();showInitialSkeleton();document.documentElement.dataset
       const existing=document.querySelector('.b4-picker-popover');
       if(existing&&button.classList.contains('b4-picker-open')){close();return}
       removePopup();button.classList.add('b4-picker-open');
-      const current=input.value||'';
+      const current=input.value||'',key=draftKey(input),saved=pickerDrafts.get(key);
       let date=current?(type==='time'?new Date():new Date(current.length===10?current+'T12:00:00':current)):new Date();
       if(Number.isNaN(date.getTime()))date=new Date();
-      let year=date.getFullYear(),month=date.getMonth(),selectedDate=current?(type==='time'?'':current.slice(0,10)):(type==='datetime-local'?date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate()):'');
-      let hour=current&&type!=='date'?Number((type==='time'?current:current.slice(11,16)).slice(0,2)):date.getHours();
-      let minute=current&&type!=='date'?Number((type==='time'?current:current.slice(11,16)).slice(3,5)):Math.ceil(date.getMinutes()/5)*5%60;
+      let year=saved?.year??date.getFullYear(),month=saved?.month??date.getMonth(),selectedDate=saved?.selectedDate??(current?(type==='time'?'':current.slice(0,10)):(type==='datetime-local'?date.getFullYear()+'-'+pad(date.getMonth()+1)+'-'+pad(date.getDate()):''));
+      let hour=saved?.hour??(current&&type!=='date'?Number((type==='time'?current:current.slice(11,16)).slice(0,2)):date.getHours());
+      let minute=saved?.minute??(current&&type!=='date'?Number((type==='time'?current:current.slice(11,16)).slice(3,5)):Math.ceil(date.getMinutes()/5)*5%60);
+      const saveDraft=()=>pickerDrafts.set(key,{year,month,selectedDate,hour,minute});
       const pop=document.createElement('div');pop.className='b4-picker-popover';pop.setAttribute('role','dialog');pop.setAttribute('aria-label',type==='time'?'Time picker':'Date and time picker');pop.addEventListener('click',e=>e.stopPropagation());
       const render=()=>{
         const first=new Date(year,month,1),start=first.getDay(),days=new Date(year,month+1,0).getDate();
         const week=S.lang==='ar'?['ح','ن','ث','ر','خ','ج','س']:['Su','Mo','Tu','We','Th','Fr','Sa'];
         const title=new Intl.DateTimeFormat(S.lang==='ar'?'ar-EG':'en-US',{month:'long',year:'numeric'}).format(first);
         const calendar=type==='time'?'':('<div class="b4-cal-head"><button type="button" class="b4-cal-nav year-nav" data-year="-1" aria-label="Previous year">«</button><button type="button" class="b4-cal-nav" data-month="-1" aria-label="Previous month"><span aria-hidden="true">‹</span></button><b>'+title+'</b><button type="button" class="b4-cal-nav" data-month="1" aria-label="Next month"><span aria-hidden="true">›</span></button><button type="button" class="b4-cal-nav year-nav" data-year="1" aria-label="Next year">»</button></div><div class="b4-cal-week">'+week.map(x=>'<span>'+x+'</span>').join('')+'</div><div class="b4-cal-days">'+Array.from({length:42},(_,i)=>{const day=i-start+1;if(day<1||day>days)return '<span class="b4-cal-blank"></span>';const iso=year+'-'+pad(month+1)+'-'+pad(day);return '<button type="button" class="b4-cal-day'+(iso===selectedDate?' selected':'')+(iso===new Date().getFullYear()+'-'+pad(new Date().getMonth()+1)+'-'+pad(new Date().getDate())?' today':'')+'" data-day="'+iso+'">'+day+'</button>'}).join('')+'</div>');
-        const time=(type==='date'?'':'<div class="b4-time-block"><div class="b4-time-title">'+(S.lang==='ar'?'الوقت':'Time')+'</div><div class="b4-time-controls"><div class="b4-time-unit"><button type="button" data-time="hour" data-step="1" aria-label="Increase hour"><span aria-hidden="true">▲</span></button><input aria-label="Hour" class="b4-time-hour" type="number" min="0" max="23" value="'+pad(hour)+'"><button type="button" data-time="hour" data-step="-1" aria-label="Decrease hour"><span aria-hidden="true">▼</span></button></div><span class="b4-time-colon">:</span><div class="b4-time-unit"><button type="button" data-time="minute" data-step="5" aria-label="Increase minute"><span aria-hidden="true">▲</span></button><input aria-label="Minute" class="b4-time-minute" type="number" min="0" max="59" step="1" value="'+pad(minute)+'"><button type="button" data-time="minute" data-step="-5" aria-label="Decrease minute"><span aria-hidden="true">▼</span></button></div></div></div>');
+        const time=(type==='date'?'':'<div class="b4-time-block"><div class="b4-time-title">'+(S.lang==='ar'?'الوقت':'Time')+'</div><div class="b4-time-controls"><div class="b4-time-unit"><button type="button" data-time="hour" data-step="1" aria-label="Increase hour"><span aria-hidden="true">▲</span></button><input aria-label="Hour" class="b4-time-hour" type="number" min="1" max="12" value="'+pad(hour12(hour))+'"><button type="button" data-time="hour" data-step="-1" aria-label="Decrease hour"><span aria-hidden="true">▼</span></button></div><span class="b4-time-colon">:</span><div class="b4-time-unit"><button type="button" data-time="minute" data-step="5" aria-label="Increase minute"><span aria-hidden="true">▲</span></button><input aria-label="Minute" class="b4-time-minute" type="number" min="0" max="59" step="1" value="'+pad(minute)+'"><button type="button" data-time="minute" data-step="-5" aria-label="Decrease minute"><span aria-hidden="true">▼</span></button></div><button type="button" class="b4-time-ampm" aria-label="Toggle AM or PM">'+(hour>=12?'PM':'AM')+'</button></div></div>');
         pop.innerHTML=calendar+time+'<div class="b4-picker-actions"><button type="button" class="b4-picker-clear">'+(S.lang==='ar'?'مسح':'Clear')+'</button><span></span><button type="button" class="b4-picker-today">'+(S.lang==='ar'?'الآن':'Now')+'</button><button type="button" class="b4-picker-done">'+(S.lang==='ar'?'تم':'Done')+'</button></div>';
-        pop.querySelectorAll('[data-month]').forEach(b=>b.addEventListener('click',()=>{month+=Number(b.dataset.month);if(month<0){month=11;year--}if(month>11){month=0;year++}render()}));
-        pop.querySelectorAll('[data-year]').forEach(b=>b.addEventListener('click',()=>{year+=Number(b.dataset.year);render()}));
-        pop.querySelectorAll('[data-day]').forEach(b=>b.addEventListener('click',()=>{selectedDate=b.dataset.day;if(type==='date'){input.value=selectedDate;emit(input);close()}else{pop.querySelectorAll('[data-day]').forEach(x=>x.classList.toggle('selected',x===b))}}));
-        pop.querySelectorAll('[data-time]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.time,step=Number(b.dataset.step);if(k==='hour')hour=(hour+step+24)%24;else minute=(minute+step+60)%60;render()}));
-        pop.querySelector('.b4-time-hour')?.addEventListener('change',e=>{hour=Math.max(0,Math.min(23,Number(e.target.value)||0));e.target.value=pad(hour)});
-        pop.querySelector('.b4-time-minute')?.addEventListener('change',e=>{minute=Math.max(0,Math.min(59,Number(e.target.value)||0));e.target.value=pad(minute)});
-        pop.querySelector('.b4-picker-clear').addEventListener('click',()=>{input.value='';emit(input);close()});
-        pop.querySelector('.b4-picker-today').addEventListener('click',()=>{const now=new Date();year=now.getFullYear();month=now.getMonth();selectedDate=year+'-'+pad(month+1)+'-'+pad(now.getDate());hour=now.getHours();minute=now.getMinutes();if(type==='date'){input.value=selectedDate;emit(input);close()}else{render()}});
+        pop.querySelectorAll('[data-month]').forEach(b=>b.addEventListener('click',()=>{month+=Number(b.dataset.month);if(month<0){month=11;year--}if(month>11){month=0;year++}saveDraft();render()}));
+        pop.querySelectorAll('[data-year]').forEach(b=>b.addEventListener('click',()=>{year+=Number(b.dataset.year);saveDraft();render()}));
+        pop.querySelectorAll('[data-day]').forEach(b=>b.addEventListener('click',()=>{selectedDate=b.dataset.day;saveDraft();if(type==='date'){input.value=selectedDate;pickerDrafts.delete(key);emit(input);close()}else{pop.querySelectorAll('[data-day]').forEach(x=>x.classList.toggle('selected',x===b))}}));
+        pop.querySelectorAll('[data-time]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.time,step=Number(b.dataset.step);if(k==='hour')hour=from12((hour12(hour)-1+step+12)%12+1,hour>=12);else minute=(minute+step+60)%60;saveDraft();render()}));
+        pop.querySelector('.b4-time-hour')?.addEventListener('change',e=>{const v=Math.max(1,Math.min(12,Number(e.target.value)||12));hour=from12(v,hour>=12);e.target.value=pad(v);saveDraft()});
+        pop.querySelector('.b4-time-minute')?.addEventListener('change',e=>{minute=Math.max(0,Math.min(59,Number(e.target.value)||0));e.target.value=pad(minute);saveDraft()});
+        pop.querySelector('.b4-time-ampm')?.addEventListener('click',()=>{hour=(hour+12)%24;saveDraft();render()});
+        pop.querySelector('.b4-picker-clear').addEventListener('click',()=>{input.value='';pickerDrafts.delete(key);emit(input);close()});
+        pop.querySelector('.b4-picker-today').addEventListener('click',()=>{const now=new Date();year=now.getFullYear();month=now.getMonth();selectedDate=year+'-'+pad(month+1)+'-'+pad(now.getDate());hour=now.getHours();minute=now.getMinutes();saveDraft();if(type==='date'){input.value=selectedDate;pickerDrafts.delete(key);emit(input);close()}else{render()}});
         pop.querySelector('.b4-picker-done').addEventListener('click',()=>{
           if(type==='time')input.value=pad(hour)+':'+pad(minute);
           else if(type==='datetime-local')input.value=(selectedDate||year+'-'+pad(month+1)+'-'+pad(date.getDate()))+'T'+pad(hour)+':'+pad(minute);
-          emit(input);close();
+          pickerDrafts.delete(key);emit(input);close();
         });
       };
       document.body.appendChild(pop);render();positionPopup(pop,button);
