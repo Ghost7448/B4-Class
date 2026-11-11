@@ -338,6 +338,15 @@ function liveDataSignature(){
 }
 let examExitGuardInstalled=false;
 window.examExitAllowed=false;
+window.examViewportBaseline=null;
+function captureExamViewport(){
+  window.examViewportBaseline={
+    width:Number(window.innerWidth||0),
+    height:Number(window.outerHeight||window.innerHeight||0),
+    screenWidth:Number(window.screen?.width||0),
+    screenHeight:Number(window.screen?.height||0)
+  };
+}
 function lockActiveExam(reason='LEFT_EXAM'){
   const id=Number(S.examRun?.id||0);
   if(!id||window.examExitAllowed||S.view!=='exam-run')return;
@@ -351,6 +360,12 @@ function lockActiveExam(reason='LEFT_EXAM'){
     else fetch('/api/exams/'+id+'/lock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason}),credentials:'include',keepalive:true});
   }catch{}
 }
+function showExamLockedIfNeeded(){
+  if(S.view!=='exam-run'||!S.examRun?.locked)return;
+  S.view='exam-locked';
+  render();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
 function installExamExitGuard(){
   if(examExitGuardInstalled)return;
   examExitGuardInstalled=true;
@@ -359,33 +374,33 @@ function installExamExitGuard(){
       lockActiveExam('LEFT_EXAM');
       return;
     }
-    if(document.visibilityState==='visible'&&S.view==='exam-run'&&S.examRun?.locked){
-      S.view='exam-locked';
-      render();
-      window.scrollTo({top:0,behavior:'smooth'});
-    }
+    if(document.visibilityState==='visible')showExamLockedIfNeeded();
   });
   window.addEventListener('pagehide',()=>{
     if(S.view==='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
   });
-  // On phones/tablets, a split-screen window is substantially narrower than the physical display.
-  // Watch width only: the on-screen keyboard changes height and must not trigger an exam lock.
-  const checkSplitScreen=()=>{
+  // Compare the live window dimensions with the dimensions recorded when this exam began.
+  // outerHeight is preferred so the on-screen keyboard does not look like a split-screen resize.
+  const checkWindowDimensions=()=>{
     if(S.view!=='exam-run'||window.examExitAllowed)return;
-    const mobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||window.matchMedia?.('(pointer: coarse)').matches;
-    const displayWidth=Number(window.screen?.width||0);
-    if(!mobile||!displayWidth||window.innerWidth>=displayWidth*0.78)return;
-    lockActiveExam('SPLIT_SCREEN');
-    if(S.examRun?.locked){
-      S.view='exam-locked';
-      render();
-      window.scrollTo({top:0,behavior:'smooth'});
-    }
+    const base=window.examViewportBaseline;
+    if(!base)return;
+    const width=Number(window.innerWidth||0);
+    const height=Number(window.outerHeight||window.innerHeight||0);
+    const widthReduced=base.width>0&&width>0&&width<=base.width*0.82;
+    const heightReduced=base.height>0&&height>0&&height<=base.height*0.72;
+    const screenWidth=Number(window.screen?.width||base.screenWidth||0);
+    const screenHeight=Number(window.screen?.height||base.screenHeight||0);
+    const alreadyInNarrowWindow=(screenWidth>0&&width>0&&width<=screenWidth*0.72);
+    const alreadyInShortWindow=(screenHeight>0&&height>0&&height<=screenHeight*0.62);
+    if(!widthReduced&&!heightReduced&&!alreadyInNarrowWindow&&!alreadyInShortWindow)return;
+    lockActiveExam('WINDOW_RESIZED');
+    showExamLockedIfNeeded();
   };
-  window.addEventListener('resize',checkSplitScreen,{passive:true});
-  window.addEventListener('orientationchange',()=>{setTimeout(checkSplitScreen,250)});
-  // Also catch a split-screen window that was already active before the exam started.
-  checkSplitScreen();
+  window.addEventListener('resize',checkWindowDimensions,{passive:true});
+  window.addEventListener('orientationchange',()=>{setTimeout(checkWindowDimensions,300)});
+  window.addEventListener('pageshow',checkWindowDimensions);
+  checkWindowDimensions();
 }
 installExamExitGuard();
 
@@ -1871,6 +1886,7 @@ async function saveExam(e,id){
 }
 async function startExam(id){
   window.examExitAllowed=false;
+  captureExamViewport();
   try{
     const d=await api('/api/exams/'+id+'/start',{method:'POST'});
     S.examRun={id,exam:d.exam,attempt:d.attempt,questions:d.questions||[]};
