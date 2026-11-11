@@ -368,6 +368,24 @@ function installExamExitGuard(){
   window.addEventListener('pagehide',()=>{
     if(S.view==='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
   });
+  // On phones/tablets, a split-screen window is substantially narrower than the physical display.
+  // Watch width only: the on-screen keyboard changes height and must not trigger an exam lock.
+  const checkSplitScreen=()=>{
+    if(S.view!=='exam-run'||window.examExitAllowed)return;
+    const mobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||window.matchMedia?.('(pointer: coarse)').matches;
+    const displayWidth=Number(window.screen?.width||0);
+    if(!mobile||!displayWidth||window.innerWidth>=displayWidth*0.78)return;
+    lockActiveExam('SPLIT_SCREEN');
+    if(S.examRun?.locked){
+      S.view='exam-locked';
+      render();
+      window.scrollTo({top:0,behavior:'smooth'});
+    }
+  };
+  window.addEventListener('resize',checkSplitScreen,{passive:true});
+  window.addEventListener('orientationchange',()=>{setTimeout(checkSplitScreen,250)});
+  // Also catch a split-screen window that was already active before the exam started.
+  checkSplitScreen();
 }
 installExamExitGuard();
 
