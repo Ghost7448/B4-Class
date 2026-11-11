@@ -4,7 +4,7 @@ const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'light',view
 const L={en:{dashboard:'Dashboard',students:'Students',teachers:'Teachers',subjects:'Subjects',schedule:'Schedule',assignments:'Assignments',resources:'Resources',exams:'Exam Center',announcements:'Announcements',chat:'Class Chat',teacherChat:'Teacher Chat',admin:'Admin Center',teacherCenter:'Teacher Center',settings:'Settings',developers:'Developers',reportBug:'Report Bug',login:'Login',logout:'Log out',activate:'Activation Key',ai:'B4 AI',search:'Search everything...',guest:'Guest',save:'Save',add:'Add',edit:'Edit',delete:'Delete',open:'Open resource',light:'Light mode',dark:'Dark mode',english:'English',arabic:'Arabic',administrator:'Administrator — all permissions',superAdmin:'Super Admin',classRole:'Class role',systemAccess:'System access'},ar:{dashboard:'الرئيسية',students:'الطلاب',teachers:'المدرسين',subjects:'المواد',schedule:'الجدول',assignments:'الواجبات',resources:'المصادر',exams:'الامتحانات',announcements:'الإعلانات',chat:'شات الفصل',teacherChat:'شات المدرسين',admin:'مركز الإدارة',teacherCenter:'مركز المدرس',settings:'الإعدادات',developers:'المطورون',reportBug:'الإبلاغ عن مشكلة',login:'تسجيل الدخول',logout:'تسجيل الخروج',activate:'مفتاح التفعيل',ai:'مساعد B4',search:'ابحث...',guest:'زائر',save:'حفظ',add:'إضافة',edit:'تعديل',delete:'حذف',open:'فتح المصدر',light:'الوضع النهاري',dark:'الوضع الليلي',english:'الإنجليزية',arabic:'العربية',administrator:'Administrator — كل الصلاحيات',superAdmin:'Super Admin',classRole:'دور الحساب',systemAccess:'صلاحية النظام'}};
 const t=k=>L[S.lang][k]||k;
 const PERMS=[['MANAGE_CHAT','Manage Chat / Moderate messages'],['MANAGE_ACCOUNTS','Manage Accounts'],['MANAGE_PERMISSIONS','Manage Permissions'],['VIEW_LOGS','View Logs'],['VIEW_ADMIN_CENTER','View Admin Center'],['MANAGE_STUDENTS','Manage Students'],['MANAGE_TEACHERS','Manage Teachers'],['MANAGE_ROLES','Manage Roles'],['MANAGE_ADMINS','Manage Admins'],['MANAGE_KEYS','Manage Activation Keys'],['MANAGE_BADGES','Manage Badges'],['MANAGE_SUBJECTS','Manage Subjects'],['MANAGE_SCHEDULE','Manage Schedule'],['MANAGE_ASSIGNMENTS','Manage Assignments'],['MANAGE_RESOURCES','Manage Resources / PDFs'],['MANAGE_EXAMS','Manage Exams'],['MANAGE_ANNOUNCEMENTS','Manage Announcements'],['MANAGE_TEACHER_CHAT','Teacher Chat'],['MANAGE_SITE','Manage Site'],['USE_AI','Use AI'],['MANAGE_DEVELOPERS','Manage Developers'],['MANAGE_REPORTS','Manage Bug Reports'],['VIEW_CLASS','View Class'],['ADMINISTRATOR','Administrator — ALL permissions']];
-const api=async(path,opt={})=>{const r=await fetch(API+path,{credentials:'include',...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Request failed');return d};
+const api=async(path,opt={})=>{const r=await fetch(API+path,{credentials:'include',...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Request failed');const submittedForm=$('#modal form');if(submittedForm?.dataset.b4Submitted==='1')submittedForm.dataset.b4SubmitSucceeded='1';return d};
 const toast=m=>{const e=document.createElement('div');e.className='toast';e.textContent=m;document.body.append(e);setTimeout(()=>e.remove(),2500)};
 let deferredInstallPrompt=null;
 let b4InstallState='unknown';
@@ -112,7 +112,7 @@ const modalDrafts=new Map();
 let activeModalDraftKey='';
 function getModalDraftKey(html){
   const submit=(html.match(/onsubmit="([^"]+)"/)||[])[1]||'';
-  const heading=(html.match(/<h[12][^>]*>([\\s\\S]*?)<\\/h[12]>/i)||[])[1]||'';
+  const heading=(html.match(/<h[12][^>]*>([\s\S]*?)<\/h[12]>/i)||[])[1]||'';
   const title=heading.replace(/<[^>]*>/g,'').replace(/&amp;/g,'&').trim();
   return submit||title?submit+'|'+title:'';
 }
@@ -123,7 +123,7 @@ function captureModalDraft(){
     collectExamQuestions();
     modalDrafts.set(activeModalDraftKey,{examDraft:JSON.parse(JSON.stringify(examDraft||[]))});
   }
-  const fields=[...root.querySelectorAll('input,textarea,select')].filter(el=>el.type!=='password'&&el.type!=='file');
+  const fields=[...root.querySelectorAll('input,textarea,select')].filter(el=>el.type!=='password'&&el.type!=='file'&&(!activeModalDraftKey.includes('saveExam')||!el.closest('[data-qindex]')));
   const old=modalDrafts.get(activeModalDraftKey)||{};
   old.fields=fields.map(el=>({value:el.value,checked:!!el.checked}));
   modalDrafts.set(activeModalDraftKey,old);
@@ -133,7 +133,7 @@ function restoreModalDraft(key){
   const saved=modalDrafts.get(key);
   if(!saved)return;
   if(saved.examDraft&&key.includes('saveExam'))examDraft=JSON.parse(JSON.stringify(saved.examDraft));
-  const fields=[...$('#modal').querySelectorAll('input,textarea,select')].filter(el=>el.type!=='password'&&el.type!=='file');
+  const fields=[...$('#modal').querySelectorAll('input,textarea,select')].filter(el=>el.type!=='password'&&el.type!=='file'&&(!key.includes('saveExam')||!el.closest('[data-qindex]')));
   (saved.fields||[]).forEach((item,i)=>{
     const el=fields[i];if(!el)return;
     if(el.type==='checkbox'||el.type==='radio')el.checked=item.checked;
@@ -148,7 +148,7 @@ const close=(fromPopstate=false)=>{
     return
   }
   const form=$('#modal form');
-  if(form?.dataset.b4Submitted==='1')modalDrafts.delete(activeModalDraftKey);
+  if(form?.dataset.b4SubmitSucceeded==='1')modalDrafts.delete(activeModalDraftKey);
   else captureModalDraft();
   $('#back')?.classList.remove('show');
   activeModalDraftKey='';
