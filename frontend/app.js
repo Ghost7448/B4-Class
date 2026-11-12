@@ -1977,8 +1977,12 @@ function examRunV(){
       body=`<div class="exam-choice-list">${opts.map((o,j)=>`<label class="exam-choice"><input type="radio" name="q${q.id}" value="${esc(o)}" ${savedAnswer===String(o)?'checked':''} onchange="queueExamAnswerSave(${Number(r.id)})"><span class="choice-letter">${String.fromCharCode(65+j)}</span><span>${esc(o)}</span></label>`).join('')}</div>`;
     }else if(type==='TRUE_FALSE'){
       body=`<div class="exam-choice-list tf-list"><label class="exam-choice true"><input type="radio" name="q${q.id}" value="TRUE" ${savedAnswer==='TRUE'?'checked':''} onchange="queueExamAnswerSave(${Number(r.id)})"><span class="choice-icon">✓</span><span>True</span></label><label class="exam-choice false"><input type="radio" name="q${q.id}" value="FALSE" ${savedAnswer==='FALSE'?'checked':''} onchange="queueExamAnswerSave(${Number(r.id)})"><span class="choice-icon">✕</span><span>False</span></label></div>`;
+    }else if(type==='LONG'){
+      const hasPhoto=(r.imageQuestionIds||[]).map(String).includes(String(q.id));
+      const photoUrl=API+'/api/exams/'+Number(r.id)+'/questions/'+Number(q.id)+'/image';
+      body=`<div class="exam-photo-answer"><span class="exam-photo-label">Your handwritten answer</span><p class="muted">Write your answer on paper, then take a clear photo. The image will be compressed automatically before upload.</p><input id="examLongPhoto${q.id}" class="exam-photo-input" type="file" accept="image/*" capture="environment" onchange="uploadLongAnswerPhoto(event,${Number(r.id)},${Number(q.id)})"><label class="btn primary exam-photo-button" for="examLongPhoto${q.id}">📷 ${hasPhoto?'Retake answer photo':'Open camera & take photo'}</label><div id="examLongPhotoStatus${q.id}" class="muted exam-photo-status">${hasPhoto?'Photo saved ✓':'No photo uploaded yet'}</div><img id="examLongPhotoPreview${q.id}" class="exam-photo-preview" ${hasPhoto?'src="'+photoUrl+'"':'hidden'} alt="Your answer photo"></div>`;
     }else{
-      body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="${type==='LONG'?9:4}" placeholder="${type==='LONG'?'Write your detailed answer here…':'Write your short answer here…'}" oninput="queueExamAnswerSave(${Number(r.id)})">${esc(savedAnswer)}</textarea></label>`;
+      body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="4" placeholder="Write your short answer here…">${esc(savedAnswer)}</textarea></label>`;
     }
     return `<article class="exam-run-question"><div class="exam-question-top"><span class="question-number">Question ${i+1}</span><span class="badge">${esc(type==='TRUE_FALSE'?'TRUE / FALSE':type)}</span></div><h3>${esc(q.question_text)}</h3>${body}</article>`;
   }).join('');
@@ -2008,6 +2012,36 @@ function startExamTimer(deadline,id){
   };
   tick();
   window.examTimer=setInterval(tick,1000);
+}
+async function compressExamPhoto(file){
+  const bitmap=await createImageBitmap(file);
+  const scale=Math.min(1,1600/Math.max(bitmap.width,bitmap.height));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+  canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+  canvas.getContext('2d',{alpha:false}).drawImage(bitmap,0,0,canvas.width,canvas.height);
+  bitmap.close?.();
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.72));
+  if(!blob)throw new Error('Could not compress this photo');
+  return new File([blob],'exam-answer.jpg',{type:'image/jpeg',lastModified:Date.now()});
+}
+async function uploadLongAnswerPhoto(event,examId,questionId){
+  const input=event.target,file=input.files?.[0];if(!file)return;
+  const status=$('#examLongPhotoStatus'+questionId),preview=$('#examLongPhotoPreview'+questionId);
+  if(status)status.textContent='Compressing photo…';
+  try{
+    const compressed=await compressExamPhoto(file);
+    const fd=new FormData();fd.append('image',compressed);
+    const response=await fetch(API+'/api/exams/'+examId+'/questions/'+questionId+'/image',{method:'POST',credentials:'include',body:fd});
+    let data={};try{data=await response.json()}catch{}
+    if(!response.ok)throw new Error(data.error||'Photo upload failed');
+    const ids=new Set((S.examRun?.imageQuestionIds||[]).map(String));ids.add(String(questionId));
+    S.examRun.imageQuestionIds=[...ids];
+    if(preview){preview.src=API+'/api/exams/'+examId+'/questions/'+questionId+'/image?t='+Date.now();preview.hidden=false}
+    if(status)status.textContent='Photo saved ✓ ('+Math.max(1,Math.round(data.sizeBytes/1024))+' KB)';
+    const label=document.querySelector('label[for="examLongPhoto'+questionId+'"]');if(label)label.textContent='📷 Retake answer photo';
+  }catch(e){if(status)status.textContent=e.message;toast(e.message)}
+  finally{input.value=''}
 }
 let examSaveTimer=null;
 let examSaveInFlight=false;
@@ -2114,7 +2148,7 @@ function examAnswersV(){
     const state=pending?'pending':(q.is_correct?'correct':'incorrect');
     const status=pending?(manual?'Pending teacher review':'Not graded'):(q.is_correct?'✓ Correct':'✕ Incorrect');
     const answerToShow=manual?(pending?'Not graded yet':(q.teacher_correct_answer||'Correct — no correction needed')):(q.correct_answer||q.auto_correct_answer||'Correct answer was not saved');
-    return '<article class="exam-answer-review '+state+'"><div class="head"><div><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div><h3>'+esc(q.question_text)+'</h3></div><span class="answer-status">'+status+'</span></div><div class="answer-review-grid"><div class="answer-review-box"><small>Your answer</small><p>'+esc(q.answer_text||'No answer')+'</p></div><div class="answer-review-box"><small>'+((!manual)?'Correct answer':'Teacher answer')+'</small><p>'+esc(answerToShow)+'</p></div></div></article>';
+    return '<article class="exam-answer-review '+state+'"><div class="head"><div><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div><h3>'+esc(q.question_text)+'</h3></div><span class="answer-status">'+status+'</span></div><div class="answer-review-grid"><div class="answer-review-box"><small>Your answer</small><p>'+esc(q.answer_text||((q.question_type==='LONG'&&Number(q.image_size_bytes)>0)?'Photo answer attached':'No answer'))+'</p>'+(q.question_type==='LONG'&&Number(q.image_size_bytes)>0?'<img class="exam-review-photo" src="'+API+'/api/exams/'+Number(r.examId)+'/questions/'+q.id+'/image" alt="Your submitted answer">':'')+'</div><div class="answer-review-box"><small>'+((!manual)?'Correct answer':'Teacher answer')+'</small><p>'+esc(answerToShow)+'</p></div></div></article>';
   }).join('')+'</div>';
 }
 async function submissions(id){try{const d=await api('/api/admin/exams/'+id+'/submissions');S.examReview={examId:id,submissions:d.submissions||[]};S.view='exam-review';render();}catch(e){toast(e.message)}}
@@ -2156,7 +2190,7 @@ function examReviewV(){
       const type=q.question_type==='TRUE_FALSE'?'TRUE/FALSE':(q.question_type||'MCQ');
       const answer=manual?(pending?'Awaiting teacher grading':(q.teacher_correct_answer||'Correct — no correction needed')):(q.correct_answer||q.auto_correct_answer||'Correct answer was not saved');
       const result=pending?'• Awaiting teacher grading':(q.is_correct?'✓ Correct':'✕ Incorrect')+' • '+Number(q.points_awarded||0)+' / '+Number(q.points||0);
-      return '<article class="card review-question"><div class="head"><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div></div><h3>'+esc(q.question_text)+'</h3><div class="answer-block"><small>Student answer</small><p>'+esc(q.answer_text||'No answer')+'</p></div><div class="answer-block"><small>Correct answer</small><p>'+esc(answer)+'</p></div>'+ (manual?'<div class="manual-grade-panel"><div class="answer-result '+(pending?'not-graded':(q.is_correct?'correct':'incorrect'))+'">'+result+'</div><button class="btn primary" onclick="examGradeModal('+examId+','+attemptId+','+q.id+')">Grade Answer</button></div>':'<div class="answer-result '+(q.is_correct?'correct':'incorrect')+'">'+(q.is_correct?'✓ Correct':'✕ Incorrect')+' • '+Number(q.points_awarded||0)+' / '+Number(q.points||0)+'</div>')+'</article>';
+      return '<article class="card review-question"><div class="head"><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div></div><h3>'+esc(q.question_text)+'</h3><div class="answer-block"><small>Student answer</small><p>'+esc(q.answer_text||((q.question_type==='LONG'&&Number(q.image_size_bytes)>0)?'Photo answer attached':'No answer'))+'</p>'+(q.question_type==='LONG'&&Number(q.image_size_bytes)>0?'<img class="exam-review-photo" src="'+API+'/api/admin/exams/'+examId+'/submissions/'+attemptId+'/questions/'+q.id+'/image" alt="Student handwritten answer">':'')+'</div><div class="answer-block"><small>Correct answer</small><p>'+esc(answer)+'</p></div>'+ (manual?'<div class="manual-grade-panel"><div class="answer-result '+(pending?'not-graded':(q.is_correct?'correct':'incorrect'))+'">'+result+'</div><button class="btn primary" onclick="examGradeModal('+examId+','+attemptId+','+q.id+')">Grade Answer</button></div>':'<div class="answer-result '+(q.is_correct?'correct':'incorrect')+'">'+(q.is_correct?'✓ Correct':'✕ Incorrect')+' • '+Number(q.points_awarded||0)+' / '+Number(q.points||0)+'</div>')+'</article>';
     }).join('')+'</div>';;
   }
   return title('Exam submissions','Choose a student to review their full answers.',`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
