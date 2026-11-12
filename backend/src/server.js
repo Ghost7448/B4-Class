@@ -338,6 +338,11 @@ async function ensurePermissionSchema() {
   if(!examTeacherAnswerCol.length) await q("ALTER TABLE exam_answers ADD COLUMN teacher_correct_answer TEXT NULL AFTER answer_text");
   const [examLockReasonCol]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='exam_attempts' AND COLUMN_NAME='lock_reason' LIMIT 1");
   if(!examLockReasonCol.length) await q("ALTER TABLE exam_attempts ADD COLUMN lock_reason VARCHAR(60) NULL AFTER status");
+  const [examImageCols]=await q("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='exam_answers' AND COLUMN_NAME IN ('image_data','image_mime_type','image_size_bytes')");
+  const examImageNames=new Set(examImageCols.map(x=>x.COLUMN_NAME));
+  if(!examImageNames.has('image_data')) await q("ALTER TABLE exam_answers ADD COLUMN image_data LONGBLOB NULL");
+  if(!examImageNames.has('image_mime_type')) await q("ALTER TABLE exam_answers ADD COLUMN image_mime_type VARCHAR(40) NULL");
+  if(!examImageNames.has('image_size_bytes')) await q("ALTER TABLE exam_answers ADD COLUMN image_size_bytes INT UNSIGNED NULL");
 
   for(const [name,definition] of Object.entries({type:"VARCHAR(50) NOT NULL DEFAULT 'system'",entity_id:'BIGINT UNSIGNED NULL',target_url:'VARCHAR(500) NULL'})){
     const [col]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='notifications' AND COLUMN_NAME=? LIMIT 1",[name]);
@@ -1290,7 +1295,7 @@ app.get('/api/admin/exams/:id/submissions/:attemptId',requirePermission('MANAGE_
   const [attemptRows]=await q(`SELECT a.id,a.exam_id,a.user_id,a.status,a.score,a.started_at,a.submitted_at,u.display_name,u.official_name,e.title,e.subject_id
     FROM exam_attempts a JOIN users u ON u.id=a.user_id JOIN exams e ON e.id=a.exam_id WHERE a.id=? AND a.exam_id=? LIMIT 1`,[attemptId,examId]);
   if(!attemptRows[0]) return res.status(404).json({error:'Submission not found'});
-  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points, ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer, CASE WHEN ans.is_correct IS NULL THEN 0 ELSE 1 END AS graded FROM exam_questions q
+  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points, ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer,ans.image_size_bytes, CASE WHEN ans.is_correct IS NULL THEN 0 ELSE 1 END AS graded FROM exam_questions q
     LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptId,examId]);
   const total=questions.reduce((n,x)=>n+((x.question_type==='MCQ'||x.question_type==='TRUE_FALSE'||x.is_correct!==null)?Number(x.points||0):0),0);
@@ -1635,9 +1640,10 @@ async function sendExamStart(res,exam,attempt){
   const endDeadline=cairoEpoch(exam.ends_at);
   const deadlines=[durationDeadline,endDeadline].filter(Boolean);
   const deadline=deadlines.length?new Date(Math.min(...deadlines)).toISOString():null;
-  const [savedRows]=await q('SELECT question_id,answer_text FROM exam_answers WHERE attempt_id=?',[attempt.id]);
+  const [savedRows]=await q('SELECT question_id,answer_text,image_size_bytes FROM exam_answers WHERE attempt_id=?',[attempt.id]);
   const savedAnswers=Object.fromEntries(savedRows.map(x=>[String(x.question_id),String(x.answer_text??'')]));
-  res.json({exam,attempt:{id:attempt.id,started_at:attempt.started_at,deadline},answers:savedAnswers,questions:questions.map(q=>({...q,options_json:typeof q.options_json==='string'?(JSON.parse(q.options_json||'[]')):(q.options_json||[])}))});
+  const savedImageIds=savedRows.filter(x=>Number(x.image_size_bytes)>0).map(x=>String(x.question_id));
+  res.json({exam,attempt:{id:attempt.id,started_at:attempt.started_at,deadline},answers:savedAnswers,imageQuestionIds:savedImageIds,questions:questions.map(q=>({...q,options_json:typeof q.options_json==='string'?(JSON.parse(q.options_json||'[]')):(q.options_json||[])}))});
 }
 
 app.post('/api/exams/:id/lock', requireAuth, async(req,res)=>{
@@ -1651,6 +1657,31 @@ app.post('/api/exams/:id/lock', requireAuth, async(req,res)=>{
   await audit(req,'EXAM_LOCKED','exam',id,{attemptId:attempt.id,reason:String(req.body?.reason||'LEFT_EXAM')});
   if(Number(locked?.affectedRows||0))pushGlobalEvent('data-changed',{path:'/api/exams/'+id+'/lock',method:'POST',examId:id,attemptId:attempt.id});
   res.json({ok:true,status:'LOCKED'});
+});
+
+const examPhotoUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:2*1024*1024},fileFilter:(req,file,cb)=>cb(null,['image/jpeg','image/webp','image/png'].includes(file.mimetype))});
+app.post('/api/exams/:id/questions/:questionId/image',requireAuth,examPhotoUpload.single('image'),async(req,res)=>{
+  const examId=Number(req.params.id),questionId=Number(req.params.questionId);
+  if(!req.file)return res.status(400).json({error:'Please take or choose a photo'});
+  const [attemptRows]=await q("SELECT a.id,a.status FROM exam_attempts a WHERE a.exam_id=? AND a.user_id=? LIMIT 1",[examId,req.session.userId]);
+  const attempt=attemptRows[0];
+  if(!attempt||!['STARTED','LOCKED'].includes(attempt.status))return res.status(403).json({error:'Exam attempt is not editable'});
+  const [questionRows]=await q("SELECT id FROM exam_questions WHERE id=? AND exam_id=? AND question_type='LONG' LIMIT 1",[questionId,examId]);
+  if(!questionRows[0])return res.status(404).json({error:'Long-answer question not found'});
+  await q("INSERT INTO exam_answers(attempt_id,question_id,answer_text,image_data,image_mime_type,image_size_bytes,is_correct,points_awarded) VALUES(?,?,NULL,?,?,?,NULL,0) ON DUPLICATE KEY UPDATE image_data=VALUES(image_data),image_mime_type=VALUES(image_mime_type),image_size_bytes=VALUES(image_size_bytes)",[attempt.id,questionId,req.file.buffer,req.file.mimetype,req.file.size]);
+  res.json({ok:true,sizeBytes:req.file.size});
+});
+app.get('/api/exams/:id/questions/:questionId/image',requireAuth,async(req,res)=>{
+  const [rows]=await q("SELECT ea.image_data,ea.image_mime_type FROM exam_answers ea JOIN exam_attempts a ON a.id=ea.attempt_id JOIN exam_questions qn ON qn.id=ea.question_id WHERE a.exam_id=? AND a.user_id=? AND qn.id=? LIMIT 1",[Number(req.params.id),req.session.userId,Number(req.params.questionId)]);
+  if(!rows[0]?.image_data)return res.status(404).end();
+  res.setHeader('Content-Type',rows[0].image_mime_type||'image/jpeg');res.setHeader('Cache-Control','private,no-store');res.send(rows[0].image_data);
+});
+app.get('/api/admin/exams/:examId/submissions/:attemptId/questions/:questionId/image',requirePermission('MANAGE_EXAMS'),async(req,res)=>{
+  const examId=Number(req.params.examId),attemptId=Number(req.params.attemptId),questionId=Number(req.params.questionId);
+  try{await assertTeacherOwner(req,'exams',examId)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}
+  const [rows]=await q("SELECT ea.image_data,ea.image_mime_type FROM exam_answers ea JOIN exam_attempts a ON a.id=ea.attempt_id WHERE a.exam_id=? AND a.id=? AND ea.question_id=? LIMIT 1",[examId,attemptId,questionId]);
+  if(!rows[0]?.image_data)return res.status(404).end();
+  res.setHeader('Content-Type',rows[0].image_mime_type||'image/jpeg');res.setHeader('Cache-Control','private,no-store');res.send(rows[0].image_data);
 });
 
 app.put('/api/exams/:id/save',requireAuth,async(req,res)=>{
