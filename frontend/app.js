@@ -1916,6 +1916,15 @@ async function restoreExamBuilderDraft(){
     const data=await api('/api/admin/exam-draft');
     const d=data?.draft;
     if(d&&Array.isArray(d.questions)&&d.questions.length)return d;
+    // One-time migration of drafts saved by the previous browser-only version.
+    try{
+      const legacy=JSON.parse(localStorage.getItem('b4_exam_builder_draft_v1')||'null');
+      if(legacy&&Array.isArray(legacy.questions)&&legacy.questions.length){
+        await api('/api/admin/exam-draft',{method:'PUT',body:JSON.stringify({draft:legacy})});
+        localStorage.removeItem('b4_exam_builder_draft_v1');
+        return legacy;
+      }
+    }catch{}
   }catch(e){console.warn('Could not restore server exam draft:',e.message)}
   return null;
 }
