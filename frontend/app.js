@@ -373,7 +373,7 @@ function installExamExitGuard(){
   if(examExitGuardInstalled)return;
   examExitGuardInstalled=true;
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='hidden'&&S.view==='exam-run'&&!window.examExitAllowed){
+    if(document.visibilityState==='hidden'&&S.view==='exam-run'&&!window.examExitAllowed&&!window.examCameraCapturePending){
       const id=Number(S.examRun?.id||0);
       if(id){
         try{fetch('/api/exams/'+id+'/save',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:collectExamAnswers()}),credentials:'include',keepalive:true})}catch{}
@@ -384,7 +384,7 @@ function installExamExitGuard(){
     if(document.visibilityState==='visible')showExamLockedIfNeeded();
   });
   window.addEventListener('pagehide',()=>{
-    if(S.view==='exam-run'&&!window.examExitAllowed){
+    if(S.view==='exam-run'&&!window.examExitAllowed&&!window.examCameraCapturePending){
       const id=Number(S.examRun?.id||0);
       if(id){
         try{fetch('/api/exams/'+id+'/save',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:collectExamAnswers()}),credentials:'include',keepalive:true})}catch{}
@@ -401,7 +401,7 @@ function installExamExitGuard(){
   // Detect split-screen and floating/pop-up windows by comparing both inner and outer dimensions.
   // Use outerHeight rather than innerHeight to avoid treating the on-screen keyboard as a resize.
   const checkWindowDimensions=()=>{
-    if(S.view!=='exam-run'||window.examExitAllowed)return;
+    if(S.view!=='exam-run'||window.examExitAllowed||window.examCameraCapturePending)return;
     const base=window.examViewportBaseline;
     if(!base)return;
     const width=Number(window.innerWidth||0);
@@ -426,7 +426,20 @@ function installExamExitGuard(){
   window.visualViewport?.addEventListener('resize',checkWindowDimensions,{passive:true});
   window.addEventListener('orientationchange',()=>{setTimeout(checkWindowDimensions,300)});
   window.addEventListener('pageshow',checkWindowDimensions);
-  window.addEventListener('focus',checkWindowDimensions);
+  window.addEventListener('focus',()=>{
+    if(window.examCameraCapturePending){
+      clearTimeout(window.examCameraCaptureReturnTimer);
+      window.examCameraCaptureReturnTimer=setTimeout(()=>{
+        if(!window.examCameraCapturePending)return;
+        window.examCameraCapturePending=false;
+        if(S.view==='exam-run'&&!window.examExitAllowed){
+          lockActiveExam('CAMERA_CANCELLED');
+          showExamLockedIfNeeded();
+        }
+      },1800);
+    }
+    checkWindowDimensions();
+  });
   checkWindowDimensions();
 }
 installExamExitGuard();
@@ -1980,7 +1993,7 @@ function examRunV(){
     }else if(type==='LONG'){
       const hasPhoto=(r.imageQuestionIds||[]).map(String).includes(String(q.id));
       const photoUrl=API+'/api/exams/'+Number(r.id)+'/questions/'+Number(q.id)+'/image';
-      body=`<div class="exam-photo-answer"><span class="exam-photo-label">Your handwritten answer</span><p class="muted">Write your answer on paper, then take a clear photo. The image will be compressed automatically before upload.</p><input id="examLongPhoto${q.id}" class="exam-photo-input" type="file" accept="image/*" capture="environment" onchange="uploadLongAnswerPhoto(event,${Number(r.id)},${Number(q.id)})"><label class="btn primary exam-photo-button" for="examLongPhoto${q.id}">📷 ${hasPhoto?'Retake answer photo':'Open camera & take photo'}</label><div id="examLongPhotoStatus${q.id}" class="muted exam-photo-status">${hasPhoto?'Photo saved ✓':'No photo uploaded yet'}</div><img id="examLongPhotoPreview${q.id}" class="exam-photo-preview" ${hasPhoto?'src="'+photoUrl+'"':'hidden'} alt="Your answer photo"></div>`;
+      body=`<div class="exam-photo-answer"><span class="exam-photo-label">Your handwritten answer</span><p class="muted">Write your answer on paper, then take a clear photo.</p><input id="examLongPhoto${q.id}" class="exam-photo-input" type="file" accept="image/*" capture="environment" onclick="beginExamCameraCapture()" onchange="uploadLongAnswerPhoto(event,${Number(r.id)},${Number(q.id)})"><label class="btn primary exam-photo-button" for="examLongPhoto${q.id}">📷 ${hasPhoto?'Retake answer photo':'Open camera & take photo'}</label><div id="examLongPhotoStatus${q.id}" class="muted exam-photo-status">${hasPhoto?'Photo saved ✓':'No photo uploaded yet'}</div><img id="examLongPhotoPreview${q.id}" class="exam-photo-preview" ${hasPhoto?'src="'+photoUrl+'"':'hidden'} alt="Your answer photo"></div>`;
     }else{
       body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="4" placeholder="Write your short answer here…">${esc(savedAnswer)}</textarea></label>`;
     }
@@ -2013,6 +2026,16 @@ function startExamTimer(deadline,id){
   tick();
   window.examTimer=setInterval(tick,1000);
 }
+function beginExamCameraCapture(){
+  window.examCameraCapturePending=true;
+  clearTimeout(window.examCameraCaptureReturnTimer);
+}
+function finishExamCameraCapture(hasFile){
+  if(hasFile){
+    window.examCameraCapturePending=false;
+    clearTimeout(window.examCameraCaptureReturnTimer);
+  }
+}
 async function compressExamPhoto(file){
   const bitmap=await createImageBitmap(file);
   let maxSide=1600,quality=0.72,blob=null;
@@ -2031,7 +2054,9 @@ async function compressExamPhoto(file){
   return new File([blob],'exam-answer.jpg',{type:'image/jpeg',lastModified:Date.now()});
 }
 async function uploadLongAnswerPhoto(event,examId,questionId){
-  const input=event.target,file=input.files?.[0];if(!file)return;
+  const input=event.target,file=input.files?.[0];
+  finishExamCameraCapture(!!file);
+  if(!file)return;
   const status=$('#examLongPhotoStatus'+questionId),preview=$('#examLongPhotoPreview'+questionId);
   if(status)status.textContent='Compressing photo…';
   try{
