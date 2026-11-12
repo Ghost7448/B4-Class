@@ -319,6 +319,7 @@ const PERMISSION_DEFS = [
 ];
 
 async function ensurePermissionSchema() {
+  await q("CREATE TABLE IF NOT EXISTS b4_exam_drafts(user_id BIGINT UNSIGNED PRIMARY KEY,draft_json LONGTEXT NOT NULL,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_bug_reports(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NULL,reporter_name VARCHAR(120) NOT NULL,reporter_role VARCHAR(20) NOT NULL,description TEXT NOT NULL,status ENUM('OPEN','IN_PROGRESS','RESOLVED') NOT NULL DEFAULT 'OPEN',resolved_by BIGINT UNSIGNED NULL,resolved_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_bug_reports_status(status),INDEX idx_bug_reports_created(created_at),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,FOREIGN KEY(resolved_by) REFERENCES users(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_bug_report_files(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,report_id BIGINT UNSIGNED NOT NULL,filename VARCHAR(255) NOT NULL,mime_type VARCHAR(120) NOT NULL,data LONGBLOB NOT NULL,size_bytes BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(report_id) REFERENCES b4_bug_reports(id) ON DELETE CASCADE,INDEX idx_bug_report_files_report(report_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS profile_images(entity_type VARCHAR(20) NOT NULL,entity_id BIGINT UNSIGNED NOT NULL,mime_type VARCHAR(120) NOT NULL,data MEDIUMBLOB NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,PRIMARY KEY(entity_type,entity_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -1579,6 +1580,25 @@ app.post('/api/admin/resources/:id/pdf', requirePermission('MANAGE_RESOURCES'), 
   res.json({ok:true,fileUrl:'/api/resources/files/'+fileRow.insertId});
 });
 
+app.get('/api/admin/exam-draft',requirePermission('MANAGE_EXAMS'),async(req,res)=>{
+  const [rows]=await q('SELECT draft_json,updated_at FROM b4_exam_drafts WHERE user_id=? LIMIT 1',[req.session.userId]);
+  if(!rows[0])return res.json({draft:null});
+  try{return res.json({draft:JSON.parse(rows[0].draft_json),updatedAt:rows[0].updated_at})}
+  catch{await q('DELETE FROM b4_exam_drafts WHERE user_id=?',[req.session.userId]);return res.json({draft:null})}
+});
+app.put('/api/admin/exam-draft',requirePermission('MANAGE_EXAMS'),async(req,res)=>{
+  const draft=req.body?.draft;
+  if(!draft||!Array.isArray(draft.questions)||!draft.questions.length)return res.status(400).json({error:'Invalid exam draft'});
+  const json=JSON.stringify(draft);
+  if(Buffer.byteLength(json,'utf8')>2*1024*1024)return res.status(413).json({error:'Exam draft is too large'});
+  await q('INSERT INTO b4_exam_drafts(user_id,draft_json) VALUES(?,?) ON DUPLICATE KEY UPDATE draft_json=VALUES(draft_json),updated_at=CURRENT_TIMESTAMP',[req.session.userId,json]);
+  res.json({ok:true});
+});
+app.delete('/api/admin/exam-draft',requirePermission('MANAGE_EXAMS'),async(req,res)=>{
+  await q('DELETE FROM b4_exam_drafts WHERE user_id=?',[req.session.userId]);
+  res.json({ok:true});
+});
+
 app.post('/api/admin/exams', requirePermission('MANAGE_EXAMS'), async(req,res)=>{
   const {title,description='',subjectId=null,endsAt=null,durationMinutes=null,questions=[]}=req.body||{};
   if(!title?.trim()) return res.status(400).json({error:'Exam title is required'});
@@ -1599,6 +1619,7 @@ app.post('/api/admin/exams', requirePermission('MANAGE_EXAMS'), async(req,res)=>
       await conn.execute('INSERT INTO exam_questions(exam_id,question_text,question_type,options_json,correct_answer,points,sort_order) VALUES(?,?,?,?,?,?,?)',[e.insertId,text,type,opts?JSON.stringify(opts):null,correct,Math.max(.5,Number(qn.points)||1),inserted++]);
     }
     if(!inserted) throw new Error('Add at least one valid question');
+    await conn.execute('DELETE FROM b4_exam_drafts WHERE user_id=?',[req.session.userId]);
     await conn.commit();await audit(req,'EXAM_CREATED','exam',e.insertId,{title:title.trim()});await notifyClassExcept(req.session.userId,{type:'exam',title:'New Exam',body:title.trim(),entityId:e.insertId,url:'/?view=exams&id='+e.insertId});res.json({ok:true,id:e.insertId});
   }catch(e){await conn.rollback();res.status(400).json({error:e.message})}finally{conn.release();}
 });
