@@ -216,7 +216,7 @@ const can=p=>{if(!S.me)return false;if(Number(S.me.is_super_admin)===1)return tr
 const nav=[['dashboard','⌂'],['students','♙'],['teachers','♟'],['subjects','▣'],['schedule','◫'],['assignments','✓'],['resources','▤'],['exams','⌁'],['announcements','◈'],['chat','◌'],];
 function go(v){
   if(!S.me&&!['students','teachers','subjects','schedule','developers','reportBug'].includes(v)){loginModal();return}
-  if(S.view==='exam-run'&&v!=='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
+  if(S.view==='exam-run'&&v!=='exam-run'&&!window.examExitAllowed&&!isExamCameraCaptureActive())lockActiveExam('LEFT_EXAM');
   const changeView=()=>{S.view=v;window.b4SaveView?.(v);render()};
   if(S.view!==v&&document.startViewTransition&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
     document.startViewTransition(changeView);
@@ -350,9 +350,27 @@ function captureExamViewport(){
     availHeight:Number(window.screen?.availHeight||0)
   };
 }
+function isExamCameraCaptureActive(){
+  if(window.examCameraCapturePending)return true;
+  try{
+    const until=Number(sessionStorage.getItem('b4ExamCameraCaptureUntil')||0);
+    return until>Date.now();
+  }catch{return false}
+}
+function beginExamCameraCapture(){
+  window.examCameraCapturePending=true;
+  try{sessionStorage.setItem('b4ExamCameraCaptureUntil',String(Date.now()+10*60*1000))}catch{}
+  clearTimeout(window.examCameraCaptureReturnTimer);
+}
+function finishExamCameraCapture(hasFile){
+  clearTimeout(window.examCameraCaptureReturnTimer);
+  window.examCameraCapturePending=false;
+  try{sessionStorage.removeItem('b4ExamCameraCaptureUntil')}catch{}
+  if(S.view==='exam-run'&&!window.examExitAllowed)captureExamViewport();
+}
 function lockActiveExam(reason='LEFT_EXAM'){
   const id=Number(S.examRun?.id||0);
-  if(!id||window.examExitAllowed||S.view!=='exam-run')return;
+  if(!id||window.examExitAllowed||S.view!=='exam-run'||isExamCameraCaptureActive())return;
   window.examExitAllowed=true;
   if(S.examRun)S.examRun.locked=true;
   const local=S.exams.find(x=>Number(x.id)===id);
@@ -373,7 +391,7 @@ function installExamExitGuard(){
   if(examExitGuardInstalled)return;
   examExitGuardInstalled=true;
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='hidden'&&S.view==='exam-run'&&!window.examExitAllowed&&!window.examCameraCapturePending){
+    if(document.visibilityState==='hidden'&&S.view==='exam-run'&&!window.examExitAllowed&&!isExamCameraCaptureActive()){
       const id=Number(S.examRun?.id||0);
       if(id){
         try{fetch('/api/exams/'+id+'/save',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:collectExamAnswers()}),credentials:'include',keepalive:true})}catch{}
@@ -384,7 +402,7 @@ function installExamExitGuard(){
     if(document.visibilityState==='visible')showExamLockedIfNeeded();
   });
   window.addEventListener('pagehide',()=>{
-    if(S.view==='exam-run'&&!window.examExitAllowed&&!window.examCameraCapturePending){
+    if(S.view==='exam-run'&&!window.examExitAllowed&&!isExamCameraCaptureActive()){
       const id=Number(S.examRun?.id||0);
       if(id){
         try{fetch('/api/exams/'+id+'/save',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:collectExamAnswers()}),credentials:'include',keepalive:true})}catch{}
@@ -393,7 +411,7 @@ function installExamExitGuard(){
     }
   });
   document.addEventListener('fullscreenchange',()=>{
-    if(S.view==='exam-run'&&!document.fullscreenElement&&!window.examExitAllowed&&!window.examCameraCapturePending){
+    if(S.view==='exam-run'&&!document.fullscreenElement&&!window.examExitAllowed&&!isExamCameraCaptureActive()){
       lockActiveExam('FULLSCREEN_EXIT');
       showExamLockedIfNeeded();
     }
@@ -401,7 +419,7 @@ function installExamExitGuard(){
   // Detect split-screen and floating/pop-up windows by comparing both inner and outer dimensions.
   // Use outerHeight rather than innerHeight to avoid treating the on-screen keyboard as a resize.
   const checkWindowDimensions=()=>{
-    if(S.view!=='exam-run'||window.examExitAllowed||window.examCameraCapturePending)return;
+    if(S.view!=='exam-run'||window.examExitAllowed||isExamCameraCaptureActive())return;
     const base=window.examViewportBaseline;
     if(!base)return;
     const width=Number(window.innerWidth||0);
@@ -427,15 +445,15 @@ function installExamExitGuard(){
   window.addEventListener('orientationchange',()=>{setTimeout(checkWindowDimensions,300)});
   window.addEventListener('pageshow',checkWindowDimensions);
   const resumeAfterCameraClosed=()=>{
-    if(!window.examCameraCapturePending)return;
+    if(!isExamCameraCaptureActive())return;
     clearTimeout(window.examCameraCaptureReturnTimer);
-    // Returning focus means the Android camera/file chooser has closed. Give the
-    // browser time to dispatch the file input change event before resuming protection.
+    // Android can restore/reload the page while the camera is active. Keep the
+    // persisted camera guard until the chooser has returned and its input event settles.
     window.examCameraCaptureReturnTimer=setTimeout(()=>{
-      if(!window.examCameraCapturePending)return;
+      if(!isExamCameraCaptureActive())return;
       finishExamCameraCapture(false);
       if(S.view==='exam-run'&&!window.examExitAllowed)checkWindowDimensions();
-    },2500);
+    },5000);
   };
   window.addEventListener('focus',resumeAfterCameraClosed);
   document.addEventListener('visibilitychange',()=>{
@@ -1994,7 +2012,7 @@ function examRunV(){
     }else if(type==='LONG'){
       const hasPhoto=(r.imageQuestionIds||[]).map(String).includes(String(q.id));
       const photoUrl=API+'/api/exams/'+Number(r.id)+'/questions/'+Number(q.id)+'/image';
-      body=`<div class="exam-photo-answer"><span class="exam-photo-label">Your handwritten answer</span><p class="muted">Write your answer on paper, then take a clear photo.</p><input id="examLongPhoto${q.id}" class="exam-photo-input" type="file" accept="image/*" capture="environment" onclick="beginExamCameraCapture()" onchange="uploadLongAnswerPhoto(event,${Number(r.id)},${Number(q.id)})" oncancel="cancelExamCameraCapture()"><label class="btn primary exam-photo-button" for="examLongPhoto${q.id}" onpointerdown="beginExamCameraCapture()" ontouchstart="beginExamCameraCapture()" onclick="beginExamCameraCapture()">📷 ${hasPhoto?'Retake answer photo':'Open camera & take photo'}</label><div id="examLongPhotoStatus${q.id}" class="muted exam-photo-status">${hasPhoto?'Photo saved ✓':'No photo uploaded yet'}</div><img id="examLongPhotoPreview${q.id}" class="exam-photo-preview" ${hasPhoto?'src="'+photoUrl+'"':'hidden'} alt="Your answer photo"></div>`;
+      body=`<div class="exam-photo-answer"><span class="exam-photo-label">Your handwritten answer</span><p class="muted">Write your answer on paper, then take a clear photo.</p><input id="examLongPhoto${q.id}" class="exam-photo-input" type="file" accept="image/*" capture="environment" onpointerdown="beginExamCameraCapture()" ontouchstart="beginExamCameraCapture()" onclick="beginExamCameraCapture()" onchange="uploadLongAnswerPhoto(event,${Number(r.id)},${Number(q.id)})" oncancel="cancelExamCameraCapture()"><label class="btn primary exam-photo-button" for="examLongPhoto${q.id}" onpointerdown="beginExamCameraCapture()" ontouchstart="beginExamCameraCapture()" onclick="beginExamCameraCapture()">📷 ${hasPhoto?'Retake answer photo':'Open camera & take photo'}</label><div id="examLongPhotoStatus${q.id}" class="muted exam-photo-status">${hasPhoto?'Photo saved ✓':'No photo uploaded yet'}</div><img id="examLongPhotoPreview${q.id}" class="exam-photo-preview" ${hasPhoto?'src="'+photoUrl+'"':'hidden'} alt="Your answer photo"></div>`;
     }else{
       body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="4" placeholder="Write your short answer here…">${esc(savedAnswer)}</textarea></label>`;
     }
@@ -2026,15 +2044,6 @@ function startExamTimer(deadline,id){
   };
   tick();
   window.examTimer=setInterval(tick,1000);
-}
-function beginExamCameraCapture(){
-  clearTimeout(window.examCameraCaptureReturnTimer);
-  window.examCameraCapturePending=true;
-}
-function finishExamCameraCapture(hasFile){
-  clearTimeout(window.examCameraCaptureReturnTimer);
-  window.examCameraCapturePending=false;
-  if(S.view==='exam-run'&&!window.examExitAllowed)captureExamViewport();
 }
 function cancelExamCameraCapture(){
   finishExamCameraCapture(false);
@@ -2275,7 +2284,7 @@ window.addEventListener('popstate',event=>{
   if($('#back')?.classList.contains('show')){close(true);return}
   const target=event.state?.b4View;
   if(typeof target!=='string')return;
-  if(S.view==='exam-run'&&target!=='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
+  if(S.view==='exam-run'&&target!=='exam-run'&&!window.examExitAllowed&&!isExamCameraCaptureActive())lockActiveExam('LEFT_EXAM');
   window.b4HandlingPopState=true;
   try{S.view=target;window.b4SaveView?.(target);render();window.scrollTo({top:0,behavior:'smooth'});}
   finally{window.b4HandlingPopState=false;}
