@@ -1716,13 +1716,15 @@ app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
   const started=new Date(attempt.started_at).getTime(),deadline=Math.min(...[attempt.ends_at?cairoEpoch(attempt.ends_at):Infinity,attempt.duration_minutes?started+Number(attempt.duration_minutes)*60000:Infinity]);
   if(Date.now()>deadline){await q('UPDATE exam_attempts SET status=\'SUBMITTED\',submitted_at=NOW() WHERE id=?',[attempt.id]);return res.status(403).json({error:'Time is over. The exam was closed automatically.'});}
   const [questions]=await q('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[id]);
-  const [savedRows]=await q('SELECT question_id,answer_text FROM exam_answers WHERE attempt_id=?',[attempt.id]);
+  const [savedRows]=await q('SELECT question_id,answer_text,image_size_bytes FROM exam_answers WHERE attempt_id=?',[attempt.id]);
   const mergedAnswers=Object.fromEntries(savedRows.map(x=>[String(x.question_id),String(x.answer_text??'')]));
+  const photoAnswerIds=new Set(savedRows.filter(x=>Number(x.image_size_bytes)>0).map(x=>Number(x.question_id)));
   Object.assign(mergedAnswers,answers);
   let score=0;
   for(const qn of questions){
     const answer=String(mergedAnswers[String(qn.id)]??'').trim(); let correct=null,awarded=0;
-    if(!answer)correct=false;
+    const hasAnswer=!!answer||(qn.question_type==='LONG'&&photoAnswerIds.has(Number(qn.id)));
+    if(!hasAnswer)correct=false;
     if((qn.question_type==='MCQ'||qn.question_type==='TRUE_FALSE')&&qn.correct_answer!==null){
       correct=answer?answer.toLowerCase()===String(qn.correct_answer).trim().toLowerCase():false;
       awarded=correct?Number(qn.points):0;
@@ -1745,7 +1747,7 @@ app.get('/api/exams/:id/answers',requireAuth,async(req,res)=>{
   const [attemptRows]=await q('SELECT a.id,a.status,a.score,a.submitted_at,e.title FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? ORDER BY a.submitted_at DESC,a.started_at DESC,a.id DESC LIMIT 1',[id,req.session.userId]);
   if(!attemptRows[0])return res.status(404).json({error:'No exam submission yet'});
   if(attemptRows[0].status!=='SUBMITTED')return res.status(400).json({error:'Exam has not been submitted yet'});
-  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points, ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer, CASE WHEN ans.is_correct IS NULL THEN 0 ELSE 1 END AS graded
+  const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points, ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer,ans.image_size_bytes, CASE WHEN ans.is_correct IS NULL THEN 0 ELSE 1 END AS graded
     FROM exam_questions q LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptRows[0].id,id]);
   const total=questions.reduce((n,x)=>n+((x.question_type==='MCQ'||x.question_type==='TRUE_FALSE'||x.is_correct!==null)?Number(x.points||0):0),0);
