@@ -201,7 +201,7 @@ CREATE TABLE IF NOT EXISTS exam_attempts(
 
 CREATE TABLE IF NOT EXISTS exam_answers(
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,attempt_id BIGINT UNSIGNED NOT NULL,
- question_id BIGINT UNSIGNED NOT NULL,answer_text TEXT,teacher_correct_answer TEXT NULL,is_correct BOOLEAN NULL,
+ question_id BIGINT UNSIGNED NOT NULL,answer_text TEXT,image_data LONGBLOB NULL,image_mime_type VARCHAR(40) NULL,image_size_bytes INT UNSIGNED NULL,teacher_correct_answer TEXT NULL,is_correct BOOLEAN NULL,
  points_awarded DECIMAL(8,2) NULL,
  FOREIGN KEY(attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,
  FOREIGN KEY(question_id) REFERENCES exam_questions(id) ON DELETE CASCADE,
