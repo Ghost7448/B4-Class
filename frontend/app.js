@@ -427,17 +427,8 @@ function installExamExitGuard(){
   window.addEventListener('orientationchange',()=>{setTimeout(checkWindowDimensions,300)});
   window.addEventListener('pageshow',checkWindowDimensions);
   window.addEventListener('focus',()=>{
-    if(window.examCameraCapturePending){
-      clearTimeout(window.examCameraCaptureReturnTimer);
-      window.examCameraCaptureReturnTimer=setTimeout(()=>{
-        if(!window.examCameraCapturePending)return;
-        window.examCameraCapturePending=false;
-        if(S.view==='exam-run'&&!window.examExitAllowed){
-          lockActiveExam('CAMERA_CANCELLED');
-          showExamLockedIfNeeded();
-        }
-      },1800);
-    }
+    // Android may return focus before the camera/file picker dispatches the input change event.
+    // Keep the exam guard paused until a photo is selected or the picker is explicitly cancelled.
     checkWindowDimensions();
   });
   checkWindowDimensions();
@@ -1993,7 +1984,7 @@ function examRunV(){
     }else if(type==='LONG'){
       const hasPhoto=(r.imageQuestionIds||[]).map(String).includes(String(q.id));
       const photoUrl=API+'/api/exams/'+Number(r.id)+'/questions/'+Number(q.id)+'/image';
-      body=`<div class="exam-photo-answer"><span class="exam-photo-label">Your handwritten answer</span><p class="muted">Write your answer on paper, then take a clear photo.</p><input id="examLongPhoto${q.id}" class="exam-photo-input" type="file" accept="image/*" capture="environment" onclick="beginExamCameraCapture()" onchange="uploadLongAnswerPhoto(event,${Number(r.id)},${Number(q.id)})"><label class="btn primary exam-photo-button" for="examLongPhoto${q.id}">📷 ${hasPhoto?'Retake answer photo':'Open camera & take photo'}</label><div id="examLongPhotoStatus${q.id}" class="muted exam-photo-status">${hasPhoto?'Photo saved ✓':'No photo uploaded yet'}</div><img id="examLongPhotoPreview${q.id}" class="exam-photo-preview" ${hasPhoto?'src="'+photoUrl+'"':'hidden'} alt="Your answer photo"></div>`;
+      body=`<div class="exam-photo-answer"><span class="exam-photo-label">Your handwritten answer</span><p class="muted">Write your answer on paper, then take a clear photo.</p><input id="examLongPhoto${q.id}" class="exam-photo-input" type="file" accept="image/*" capture="environment" onclick="beginExamCameraCapture()" onchange="uploadLongAnswerPhoto(event,${Number(r.id)},${Number(q.id)})" oncancel="cancelExamCameraCapture()"><label class="btn primary exam-photo-button" for="examLongPhoto${q.id}" onclick="beginExamCameraCapture()">📷 ${hasPhoto?'Retake answer photo':'Open camera & take photo'}</label><div id="examLongPhotoStatus${q.id}" class="muted exam-photo-status">${hasPhoto?'Photo saved ✓':'No photo uploaded yet'}</div><img id="examLongPhotoPreview${q.id}" class="exam-photo-preview" ${hasPhoto?'src="'+photoUrl+'"':'hidden'} alt="Your answer photo"></div>`;
     }else{
       body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="4" placeholder="Write your short answer here…">${esc(savedAnswer)}</textarea></label>`;
     }
@@ -2031,10 +2022,23 @@ function beginExamCameraCapture(){
   clearTimeout(window.examCameraCaptureReturnTimer);
 }
 function finishExamCameraCapture(hasFile){
-  if(hasFile){
-    window.examCameraCapturePending=false;
-    clearTimeout(window.examCameraCaptureReturnTimer);
+  window.examCameraCapturePending=false;
+  clearTimeout(window.examCameraCaptureReturnTimer);
+  if(S.view==='exam-run'&&!window.examExitAllowed) {
+    // Re-baseline after Android's camera activity so its temporary viewport changes
+    // are not mistaken for split-screen or pop-up mode.
+    window.examViewportBaseline={
+      width:window.innerWidth,outerWidth:window.outerWidth,
+      height:window.outerHeight||window.innerHeight,
+      screenWidth:Number(window.screen?.width||0),
+      screenHeight:Number(window.screen?.height||0),
+      availWidth:Number(window.screen?.availWidth||0),
+      availHeight:Number(window.screen?.availHeight||0)
+    };
   }
+}
+function cancelExamCameraCapture(){
+  finishExamCameraCapture(false);
 }
 async function compressExamPhoto(file){
   const bitmap=await createImageBitmap(file);
