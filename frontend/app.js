@@ -426,10 +426,20 @@ function installExamExitGuard(){
   window.visualViewport?.addEventListener('resize',checkWindowDimensions,{passive:true});
   window.addEventListener('orientationchange',()=>{setTimeout(checkWindowDimensions,300)});
   window.addEventListener('pageshow',checkWindowDimensions);
-  window.addEventListener('focus',()=>{
-    // Android may return focus before the camera/file picker dispatches the input change event.
-    // Keep the exam guard paused until a photo is selected or the picker is explicitly cancelled.
-    checkWindowDimensions();
+  const resumeAfterCameraClosed=()=>{
+    if(!window.examCameraCapturePending)return;
+    clearTimeout(window.examCameraCaptureReturnTimer);
+    // Returning focus means the Android camera/file chooser has closed. Give the
+    // browser time to dispatch the file input change event before resuming protection.
+    window.examCameraCaptureReturnTimer=setTimeout(()=>{
+      if(!window.examCameraCapturePending)return;
+      finishExamCameraCapture(false);
+      if(S.view==='exam-run'&&!window.examExitAllowed)checkWindowDimensions();
+    },2500);
+  };
+  window.addEventListener('focus',resumeAfterCameraClosed);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible')resumeAfterCameraClosed();
   });
   checkWindowDimensions();
 }
@@ -1984,7 +1994,7 @@ function examRunV(){
     }else if(type==='LONG'){
       const hasPhoto=(r.imageQuestionIds||[]).map(String).includes(String(q.id));
       const photoUrl=API+'/api/exams/'+Number(r.id)+'/questions/'+Number(q.id)+'/image';
-      body=`<div class="exam-photo-answer"><span class="exam-photo-label">Your handwritten answer</span><p class="muted">Write your answer on paper, then take a clear photo.</p><input id="examLongPhoto${q.id}" class="exam-photo-input" type="file" accept="image/*" capture="environment" onclick="beginExamCameraCapture()" onchange="uploadLongAnswerPhoto(event,${Number(r.id)},${Number(q.id)})" oncancel="cancelExamCameraCapture()"><label class="btn primary exam-photo-button" for="examLongPhoto${q.id}" onclick="beginExamCameraCapture()">📷 ${hasPhoto?'Retake answer photo':'Open camera & take photo'}</label><div id="examLongPhotoStatus${q.id}" class="muted exam-photo-status">${hasPhoto?'Photo saved ✓':'No photo uploaded yet'}</div><img id="examLongPhotoPreview${q.id}" class="exam-photo-preview" ${hasPhoto?'src="'+photoUrl+'"':'hidden'} alt="Your answer photo"></div>`;
+      body=`<div class="exam-photo-answer"><span class="exam-photo-label">Your handwritten answer</span><p class="muted">Write your answer on paper, then take a clear photo.</p><input id="examLongPhoto${q.id}" class="exam-photo-input" type="file" accept="image/*" capture="environment" onclick="beginExamCameraCapture()" onchange="uploadLongAnswerPhoto(event,${Number(r.id)},${Number(q.id)})" oncancel="cancelExamCameraCapture()"><label class="btn primary exam-photo-button" for="examLongPhoto${q.id}" onpointerdown="beginExamCameraCapture()" ontouchstart="beginExamCameraCapture()" onclick="beginExamCameraCapture()">📷 ${hasPhoto?'Retake answer photo':'Open camera & take photo'}</label><div id="examLongPhotoStatus${q.id}" class="muted exam-photo-status">${hasPhoto?'Photo saved ✓':'No photo uploaded yet'}</div><img id="examLongPhotoPreview${q.id}" class="exam-photo-preview" ${hasPhoto?'src="'+photoUrl+'"':'hidden'} alt="Your answer photo"></div>`;
     }else{
       body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="4" placeholder="Write your short answer here…">${esc(savedAnswer)}</textarea></label>`;
     }
@@ -2018,24 +2028,13 @@ function startExamTimer(deadline,id){
   window.examTimer=setInterval(tick,1000);
 }
 function beginExamCameraCapture(){
-  window.examCameraCapturePending=true;
   clearTimeout(window.examCameraCaptureReturnTimer);
+  window.examCameraCapturePending=true;
 }
 function finishExamCameraCapture(hasFile){
-  window.examCameraCapturePending=false;
   clearTimeout(window.examCameraCaptureReturnTimer);
-  if(S.view==='exam-run'&&!window.examExitAllowed) {
-    // Re-baseline after Android's camera activity so its temporary viewport changes
-    // are not mistaken for split-screen or pop-up mode.
-    window.examViewportBaseline={
-      width:window.innerWidth,outerWidth:window.outerWidth,
-      height:window.outerHeight||window.innerHeight,
-      screenWidth:Number(window.screen?.width||0),
-      screenHeight:Number(window.screen?.height||0),
-      availWidth:Number(window.screen?.availWidth||0),
-      availHeight:Number(window.screen?.availHeight||0)
-    };
-  }
+  window.examCameraCapturePending=false;
+  if(S.view==='exam-run'&&!window.examExitAllowed)captureExamViewport();
 }
 function cancelExamCameraCapture(){
   finishExamCameraCapture(false);
