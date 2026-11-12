@@ -2123,16 +2123,28 @@ function queueExamAnswerSave(id){
   examSaveTimer=setTimeout(()=>saveExamAnswers(id),350);
 }
 async function submitExam(e,id,auto=false){
+  if(window.examSubmitInProgress)return;
+  window.examSubmitInProgress=true;
   e.preventDefault?.();window.examExitAllowed=true;clearInterval(window.examTimer);
   clearTimeout(examSaveTimer);
   const answers=collectExamAnswers();
+  const submitBtn=$('#examSubmitBtn');if(submitBtn)submitBtn.disabled=true;
   try{
     await saveExamAnswers(id);
     const d=await api('/api/exams/'+id+'/submit',{method:'POST',body:JSON.stringify({answers})});
-    S.examResult={...d,examId:id,auto};S.examRun=null;S.view='exam-result';render();window.scrollTo({top:0,behavior:'smooth'});
+    S.examRun=null;
+    if(auto){
+      toast('Time is up — your exam was submitted.');
+      await loadStudentExamAnswers(id);
+    }else{
+      S.examResult={...d,examId:id,auto:false};S.view='exam-result';render();window.scrollTo({top:0,behavior:'smooth'});
+    }
   }catch(x){
     if(/exam is locked/i.test(x.message)){S.examRun={id,locked:true,lockMessage:x.message};S.view='exam-locked';render();window.scrollTo({top:0,behavior:'smooth'});return}
-    toast(x.message)
+    toast(x.message);
+    if(submitBtn)submitBtn.disabled=false;
+  }finally{
+    window.examSubmitInProgress=false;
   }
 }
 function examLockedV(){
