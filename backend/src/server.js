@@ -1293,9 +1293,16 @@ app.get('/api/admin/exams/:id/submissions/:attemptId',requirePermission('MANAGE_
   const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points, ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer, CASE WHEN ans.is_correct IS NULL THEN 0 ELSE 1 END AS graded FROM exam_questions q
     LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptId,examId]);
-  const total=questions.reduce((n,x)=>n+((x.question_type==='MCQ'||x.question_type==='TRUE_FALSE'||x.is_correct!==null)?Number(x.points||0):0),0);
-  res.json({attempt:attemptRows[0],total,percent:total?Math.round(Number(attemptRows[0].score||0)/total*100):0,
-    questions:questions.map(x=>({...x,options_json:typeof x.options_json==='string'?(JSON.parse(x.options_json||'[]')):(x.options_json||[])}))});
+  const isSubmitted=['SUBMITTED','REVIEWED'].includes(String(attemptRows[0].status||''));
+  const total=isSubmitted?questions.reduce((n,x)=>n+((x.question_type==='MCQ'||x.question_type==='TRUE_FALSE'||x.is_correct!==null)?Number(x.points||0):0),0):0;
+  res.json({attempt:attemptRows[0],submitted:isSubmitted,total,percent:isSubmitted&&total?Math.round(Number(attemptRows[0].score||0)/total*100):0,
+    questions:questions.map(x=>({...x,
+      correct_answer:isSubmitted?x.correct_answer:null,
+      auto_correct_answer:isSubmitted?x.auto_correct_answer:null,
+      is_correct:isSubmitted?x.is_correct:null,
+      points_awarded:isSubmitted?x.points_awarded:null,
+      options_json:typeof x.options_json==='string'?(JSON.parse(x.options_json||'[]')):(x.options_json||[])
+    }))});
 });
 
 app.patch('/api/admin/exams/:examId/submissions/:attemptId/questions/:questionId',requirePermission('MANAGE_EXAMS'),async(req,res)=>{const examId=Number(req.params.examId),attemptId=Number(req.params.attemptId),questionId=Number(req.params.questionId);if(![examId,attemptId,questionId].every(Number.isSafeInteger))return res.status(400).json({error:'Invalid grading request'});const [graderRows]=await q('SELECT role,is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);if(graderRows[0]?.role!=='TEACHER'&&Number(graderRows[0]?.is_super_admin)!==1)return res.status(403).json({error:'Only Teachers can grade submissions'});try{await assertTeacherOwner(req,'exams',examId)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const correct=!!req.body?.correct,correctAnswer=String(req.body?.correctAnswer||'').trim();const [rows]=await q('SELECT q.id,q.question_type,q.points,ea.id answer_id FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=? WHERE q.id=? AND q.exam_id=? LIMIT 1',[attemptId,questionId,examId]);const qn=rows[0];if(!qn)return res.status(404).json({error:'Question answer not found'});if(!['SHORT','LONG'].includes(qn.question_type))return res.status(400).json({error:'Only Short and Long answers can be manually graded'});if(!qn.answer_id)return res.status(404).json({error:'Student did not submit an answer'});if(!correct&&!correctAnswer)return res.status(400).json({error:'Please enter the correct answer'});const savedTeacherAnswer=correct?(correctAnswer||String((await q('SELECT answer_text FROM exam_answers WHERE id=? LIMIT 1',[qn.answer_id]))[0][0]?.answer_text||'Correct')):correctAnswer;
