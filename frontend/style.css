@@ -2901,3 +2901,7 @@ body.schedule-modal-open{overflow:hidden!important}
 
 /* Universal broken-image fallback: consistent dark violet profile tile */
 img.b4-image-fallback{display:block!important;object-fit:cover!important;object-position:center!important;background:#4c1d95!important;border:1px solid rgba(196,181,253,.28)!important;box-shadow:0 3px 12px rgba(76,29,149,.18)!important;}
+
+/* Keep fallback avatar geometry consistent wherever a profile photo is absent or broken. */
+img.avatar, img.person-avatar, img.account-avatar, img[data-user-avatar]{min-width:38px;min-height:38px;flex-shrink:0;background:#4c1d95;object-fit:cover;object-position:center;}
+img.b4-image-fallback{aspect-ratio:1/1;}
