@@ -2015,14 +2015,19 @@ function startExamTimer(deadline,id){
 }
 async function compressExamPhoto(file){
   const bitmap=await createImageBitmap(file);
-  const scale=Math.min(1,1600/Math.max(bitmap.width,bitmap.height));
-  const canvas=document.createElement('canvas');
-  canvas.width=Math.max(1,Math.round(bitmap.width*scale));
-  canvas.height=Math.max(1,Math.round(bitmap.height*scale));
-  canvas.getContext('2d',{alpha:false}).drawImage(bitmap,0,0,canvas.width,canvas.height);
+  let maxSide=1600,quality=0.72,blob=null;
+  for(let attempt=0;attempt<3;attempt++){
+    const scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.max(1,Math.round(bitmap.width*scale));
+    canvas.height=Math.max(1,Math.round(bitmap.height*scale));
+    canvas.getContext('2d',{alpha:false}).drawImage(bitmap,0,0,canvas.width,canvas.height);
+    blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',quality));
+    if(blob&&blob.size<=1800*1024)break;
+    maxSide=attempt===0?1440:1200;quality=attempt===0?0.64:0.56;
+  }
   bitmap.close?.();
-  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.72));
-  if(!blob)throw new Error('Could not compress this photo');
+  if(!blob||blob.size>2*1024*1024)throw new Error('Photo is still too large. Try taking it again in better lighting.');
   return new File([blob],'exam-answer.jpg',{type:'image/jpeg',lastModified:Date.now()});
 }
 async function uploadLongAnswerPhoto(event,examId,questionId){
