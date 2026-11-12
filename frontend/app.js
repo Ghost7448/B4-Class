@@ -393,7 +393,7 @@ function installExamExitGuard(){
     }
   });
   document.addEventListener('fullscreenchange',()=>{
-    if(S.view==='exam-run'&&!document.fullscreenElement&&!window.examExitAllowed){
+    if(S.view==='exam-run'&&!document.fullscreenElement&&!window.examExitAllowed&&!window.examCameraCapturePending){
       lockActiveExam('FULLSCREEN_EXIT');
       showExamLockedIfNeeded();
     }
