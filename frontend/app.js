@@ -216,7 +216,8 @@ const can=p=>{if(!S.me)return false;if(Number(S.me.is_super_admin)===1)return tr
 const nav=[['dashboard','⌂'],['students','♙'],['teachers','♟'],['subjects','▣'],['schedule','◫'],['assignments','✓'],['resources','▤'],['exams','⌁'],['announcements','◈'],['chat','◌'],];
 function go(v){
   if(!S.me&&!['students','teachers','subjects','schedule','developers','reportBug'].includes(v)){loginModal();return}
-  if(S.view==='exam-run'&&v!=='exam-run'&&!window.examExitAllowed&&!isExamCameraCaptureActive())lockActiveExam('LEFT_EXAM');
+  if(S.view==='exam-run'&&v!=='exam-run'&&isExamCameraCaptureActive())return;
+  if(S.view==='exam-run'&&v!=='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
   const changeView=()=>{S.view=v;window.b4SaveView?.(v);render()};
   if(S.view!==v&&document.startViewTransition&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
     document.startViewTransition(changeView);
@@ -2284,7 +2285,11 @@ window.addEventListener('popstate',event=>{
   if($('#back')?.classList.contains('show')){close(true);return}
   const target=event.state?.b4View;
   if(typeof target!=='string')return;
-  if(S.view==='exam-run'&&target!=='exam-run'&&!window.examExitAllowed&&!isExamCameraCaptureActive())lockActiveExam('LEFT_EXAM');
+  if(S.view==='exam-run'&&target!=='exam-run'&&isExamCameraCaptureActive()){
+    history.pushState({...(history.state||{}),b4View:'exam-run'},'',location.href);
+    return;
+  }
+  if(S.view==='exam-run'&&target!=='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
   window.b4HandlingPopState=true;
   try{S.view=target;window.b4SaveView?.(target);render();window.scrollTo({top:0,behavior:'smooth'});}
   finally{window.b4HandlingPopState=false;}
