@@ -380,7 +380,13 @@ function installExamExitGuard(){
     if(document.visibilityState==='visible')showExamLockedIfNeeded();
   });
   window.addEventListener('pagehide',()=>{
-    if(S.view==='exam-run'&&!window.examExitAllowed)lockActiveExam('LEFT_EXAM');
+    if(S.view==='exam-run'&&!window.examExitAllowed){
+      const id=Number(S.examRun?.id||0);
+      if(id){
+        try{fetch('/api/exams/'+id+'/save',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:collectExamAnswers()}),credentials:'include',keepalive:true})}catch{}
+      }
+      lockActiveExam('LEFT_EXAM');
+    }
   });
   document.addEventListener('fullscreenchange',()=>{
     if(S.view==='exam-run'&&!document.fullscreenElement&&!window.examExitAllowed){
@@ -1941,7 +1947,7 @@ async function enterExamFullscreen(){
   try{
     const d=await api('/api/exams/'+id+'/start',{method:'POST'});
     S.pendingExamId=null;
-    S.examRun={id,exam:d.exam,attempt:d.attempt,questions:d.questions||[]};
+    S.examRun={id,exam:d.exam,attempt:d.attempt,questions:d.questions||[],answers:d.answers||{}};
     S.view='exam-run';render();window.scrollTo({top:0,behavior:'smooth'});startExamTimer(d.attempt?.deadline,id);
   }catch(e){
     try{if(document.fullscreenElement)await document.exitFullscreen()}catch{}
@@ -1962,12 +1968,13 @@ function examRunV(){
     const type=q.question_type||'MCQ';
     const opts=q.options_json||[];
     let body='';
+    const savedAnswer=String((r.answers||{})[String(q.id)]??'');
     if(type==='MCQ'){
-      body=`<div class="exam-choice-list">${opts.map((o,j)=>`<label class="exam-choice"><input type="radio" name="q${q.id}" value="${esc(o)}"><span class="choice-letter">${String.fromCharCode(65+j)}</span><span>${esc(o)}</span></label>`).join('')}</div>`;
+      body=`<div class="exam-choice-list">${opts.map((o,j)=>`<label class="exam-choice"><input type="radio" name="q${q.id}" value="${esc(o)}" ${savedAnswer===String(o)?'checked':''} onchange="queueExamAnswerSave(${Number(r.id)})"><span class="choice-letter">${String.fromCharCode(65+j)}</span><span>${esc(o)}</span></label>`).join('')}</div>`;
     }else if(type==='TRUE_FALSE'){
-      body=`<div class="exam-choice-list tf-list"><label class="exam-choice true"><input type="radio" name="q${q.id}" value="TRUE"><span class="choice-icon">✓</span><span>True</span></label><label class="exam-choice false"><input type="radio" name="q${q.id}" value="FALSE"><span class="choice-icon">✕</span><span>False</span></label></div>`;
+      body=`<div class="exam-choice-list tf-list"><label class="exam-choice true"><input type="radio" name="q${q.id}" value="TRUE" ${savedAnswer==='TRUE'?'checked':''} onchange="queueExamAnswerSave(${Number(r.id)})"><span class="choice-icon">✓</span><span>True</span></label><label class="exam-choice false"><input type="radio" name="q${q.id}" value="FALSE" ${savedAnswer==='FALSE'?'checked':''} onchange="queueExamAnswerSave(${Number(r.id)})"><span class="choice-icon">✕</span><span>False</span></label></div>`;
     }else{
-      body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="${type==='LONG'?9:4}" placeholder="${type==='LONG'?'Write your detailed answer here…':'Write your short answer here…'}"></textarea></label>`;
+      body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="${type==='LONG'?9:4}" placeholder="${type==='LONG'?'Write your detailed answer here…':'Write your short answer here…'}" oninput="queueExamAnswerSave(${Number(r.id)})">${esc(savedAnswer)}</textarea></label>`;
     }
     return `<article class="exam-run-question"><div class="exam-question-top"><span class="question-number">Question ${i+1}</span><span class="badge">${esc(type==='TRUE_FALSE'?'TRUE / FALSE':type)}</span></div><h3>${esc(q.question_text)}</h3>${body}</article>`;
   }).join('');
@@ -1998,11 +2005,41 @@ function startExamTimer(deadline,id){
   tick();
   window.examTimer=setInterval(tick,1000);
 }
+let examSaveTimer=null;
+let examSaveInFlight=false;
+let examSavePending=null;
+function collectExamAnswers(){
+  const form=$('#examRunForm'),answers={};
+  if(!form)return answers;
+  form.querySelectorAll('[name^="q"]').forEach(x=>{
+    if(x.type==='radio'){if(x.checked)answers[x.name.slice(1)]=x.value;}
+    else if(x.tagName==='TEXTAREA')answers[x.name.slice(1)]=x.value;
+  });
+  return answers;
+}
+async function saveExamAnswers(id,keepalive=false){
+  const answers=collectExamAnswers();
+  examSavePending={id,answers};
+  if(examSaveInFlight)return;
+  examSaveInFlight=true;
+  try{
+    while(examSavePending){
+      const current=examSavePending;examSavePending=null;
+      await api('/api/exams/'+current.id+'/save',{method:'PUT',body:JSON.stringify({answers:current.answers}),keepalive});
+    }
+  }catch(e){if(!keepalive)console.warn('Exam autosave failed:',e.message);}
+  finally{examSaveInFlight=false;}
+}
+function queueExamAnswerSave(id){
+  clearTimeout(examSaveTimer);
+  examSaveTimer=setTimeout(()=>saveExamAnswers(id),350);
+}
 async function submitExam(e,id,auto=false){
   e.preventDefault?.();window.examExitAllowed=true;clearInterval(window.examTimer);
-  const form=$('#examRunForm'),answers={};
-  if(form)form.querySelectorAll('[name^="q"]').forEach(x=>{if((x.type==='radio'&&x.checked)||x.tagName==='TEXTAREA')answers[x.name.slice(1)]=x.value.trim()});
+  clearTimeout(examSaveTimer);
+  const answers=collectExamAnswers();
   try{
+    await saveExamAnswers(id);
     const d=await api('/api/exams/'+id+'/submit',{method:'POST',body:JSON.stringify({answers})});
     S.examResult={...d,examId:id,auto};S.examRun=null;S.view='exam-result';render();window.scrollTo({top:0,behavior:'smooth'});
   }catch(x){
