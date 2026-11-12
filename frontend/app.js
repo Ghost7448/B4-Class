@@ -1951,6 +1951,7 @@ async function saveExam(e,id){
   try{await api(id?'/api/admin/exams/'+id:'/api/admin/exams',{method:id?'PATCH':'POST',body:JSON.stringify(b)});close();await loadData();render();toast('Exam saved ✓')}catch(x){toast(x.message)}
 }
 async function startExam(id){
+  if(!S.me){S.pendingExamId=Number(id);loginModal();return}
   window.examExitAllowed=false;
   S.pendingExamId=Number(id);
   S.view='exam-fullscreen';
