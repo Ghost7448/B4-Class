@@ -2860,3 +2860,10 @@ body.schedule-modal-open{overflow:hidden!important}
 .exam-fullscreen-card p{line-height:1.8;max-width:470px;margin:0 auto 24px}
 .exam-fullscreen-actions{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
 .exam-fullscreen-actions .btn{min-height:46px;padding:13px 20px}
+
+.exam-photo-answer{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px dashed var(--line);border-radius:18px;background:var(--card)}
+.exam-photo-label{font-weight:800;font-size:15px}
+.exam-photo-input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.exam-photo-button{align-self:flex-start;cursor:pointer}
+.exam-photo-status{font-size:13px}
+.exam-photo-preview,.exam-review-photo{display:block;width:100%;max-width:680px;max-height:620px;object-fit:contain;background:var(--bg);border:1px solid var(--line);border-radius:14px;margin-top:10px}
