@@ -1893,22 +1893,37 @@ async function deleteResourceFile(id){if(!await confirmAction('Remove the attach
 function announcementEdit(id){const x=S.announcements.find(a=>Number(a.id)===Number(id))||{};modal('<div class="modalhead"><h2>Announcement</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveAnnouncement(event,'+(id||'null')+')"><input id="nt" value="'+esc(x.title||'')+'" placeholder="Title" required><input id="nc" value="'+esc(x.category||'General')+'" placeholder="Category"><textarea id="nb" required>'+esc(x.body||'')+'</textarea><button class="btn primary">Publish</button></form>')}
 async function saveAnnouncement(e,id){e.preventDefault();try{await api(id?'/api/admin/announcements/'+id:'/api/admin/announcements',{method:id?'PATCH':'POST',body:JSON.stringify({title:$('#nt').value,category:$('#nc').value,body:$('#nb').value})});close();await loadData();render()}catch(x){toast(x.message)}}
 let examDraft=[];
-const EXAM_DRAFT_STORAGE_KEY='b4_exam_builder_draft_v1';
 let examDraftSaveTimer=null;
-function saveExamBuilderDraft(){
-  if(!$('#et'))return;
+let examDraftSavePromise=Promise.resolve();
+let examDraftRestoreCache=null;
+function currentExamBuilderDraft(){
+  if(!$('#et'))return null;
   collectExamQuestions();
-  const draft={title:$('#et')?.value||'',subjectId:$('#es')?.value||'',description:$('#ed')?.value||'',endsAt:$('#een')?.value||'',duration:$('#dur')?.value||'',questions:examDraft,updatedAt:Date.now()};
-  try{localStorage.setItem(EXAM_DRAFT_STORAGE_KEY,JSON.stringify(draft));}catch{}
+  return {title:$('#et')?.value||'',subjectId:$('#es')?.value||'',description:$('#ed')?.value||'',endsAt:$('#een')?.value||'',duration:$('#dur')?.value||'',questions:examDraft,updatedAt:Date.now()};
+}
+function saveExamBuilderDraft(){
+  const draft=currentExamBuilderDraft();
+  if(!draft)return Promise.resolve();
+  examDraftSavePromise=examDraftSavePromise.catch(()=>{}).then(()=>api('/api/admin/exam-draft',{method:'PUT',body:JSON.stringify({draft})}));
+  return examDraftSavePromise;
 }
 function queueExamBuilderDraftSave(){
   clearTimeout(examDraftSaveTimer);
-  examDraftSaveTimer=setTimeout(saveExamBuilderDraft,250);
+  examDraftSaveTimer=setTimeout(()=>saveExamBuilderDraft().catch(()=>{}),500);
 }
-function restoreExamBuilderDraft(){
-  try{const raw=localStorage.getItem(EXAM_DRAFT_STORAGE_KEY);if(!raw)return null;const d=JSON.parse(raw);if(!d||!Array.isArray(d.questions)||!d.questions.length)return null;return d}catch{return null}
+async function restoreExamBuilderDraft(){
+  try{
+    const data=await api('/api/admin/exam-draft');
+    const d=data?.draft;
+    if(d&&Array.isArray(d.questions)&&d.questions.length)return d;
+  }catch(e){console.warn('Could not restore server exam draft:',e.message)}
+  return null;
 }
-function clearExamBuilderDraft(){clearTimeout(examDraftSaveTimer);try{localStorage.removeItem(EXAM_DRAFT_STORAGE_KEY)}catch{}}
+async function clearExamBuilderDraft(){
+  clearTimeout(examDraftSaveTimer);
+  try{await examDraftSavePromise}catch{}
+  try{await api('/api/admin/exam-draft',{method:'DELETE'})}catch(e){console.warn('Could not clear server exam draft:',e.message)}
+}
 function bindExamBuilderDraftAutosave(){
   const form=$('#et')?.closest('form');if(!form)return;
   form.addEventListener('input',queueExamBuilderDraftSave);
@@ -1933,9 +1948,9 @@ function renderExamQuestions(){
   root.innerHTML=questions||'<div class="empty">No questions yet. Add one.</div>';
   root.insertAdjacentHTML('beforeend','<div class="exam-add-question-bottom"><button type="button" class="btn ghost exam-add-question-btn" onclick="addExamQuestion()">＋ Add question</button></div>');
 }
-function addExamQuestion(){collectExamQuestions();examDraft.push({questionText:'',questionType:'MCQ',options:['','','',''],correctAnswer:'',points:1});renderExamQuestions()}
-function removeExamQuestion(i){collectExamQuestions();if(examDraft.length<=1)return toast('An exam needs at least one question');examDraft.splice(i,1);renderExamQuestions()}
-function setExamCorrect(i,j){collectExamQuestions();examDraft[i].correctAnswer=String(examDraft[i].options[j]||'').trim();renderExamQuestions()}
+function addExamQuestion(){collectExamQuestions();examDraft.push({questionText:'',questionType:'MCQ',options:['','','',''],correctAnswer:'',points:1});renderExamQuestions();queueExamBuilderDraftSave()}
+function removeExamQuestion(i){collectExamQuestions();if(examDraft.length<=1)return toast('An exam needs at least one question');examDraft.splice(i,1);renderExamQuestions();queueExamBuilderDraftSave()}
+function setExamCorrect(i,j){collectExamQuestions();examDraft[i].correctAnswer=String(examDraft[i].options[j]||'').trim();renderExamQuestions();queueExamBuilderDraftSave()}
 function examTypeChanged(i,type){
   collectExamQuestions();
   examDraft[i].questionType=type;
@@ -1943,6 +1958,7 @@ function examTypeChanged(i,type){
   if(type==='MCQ')examDraft[i].options=['','','',''];
   else examDraft[i].options=[];
   renderExamQuestions();
+  queueExamBuilderDraftSave();
 }
 function collectExamQuestions(){
   document.querySelectorAll('[data-qindex]').forEach(card=>{
@@ -1962,7 +1978,7 @@ function collectExamQuestions(){
 async function examEdit(id){
   let x=S.exams.find(a=>Number(a.id)===Number(id))||{}, questions=[];
   if(id){try{const d=await api('/api/exams/'+id+'/edit');x=d.exam;questions=(d.questions||[]).map(examDraftFromQuestion)}catch(e){return toast(e.message)}}
-  const savedDraft=!id?restoreExamBuilderDraft():null;
+  const savedDraft=!id?await restoreExamBuilderDraft():null;
   if(savedDraft){x={...x,title:savedDraft.title,description:savedDraft.description,subject_id:savedDraft.subjectId,ends_at:savedDraft.endsAt,duration_minutes:savedDraft.duration};questions=savedDraft.questions}
   examDraft=questions.length?questions:[{questionText:'',questionType:'MCQ',options:['','','',''],correctAnswer:'',points:1}];
   modal('<div class="modalhead"><h2>'+(id?'Edit exam':'Create exam')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveExam(event,'+(id||'null')+')"><label>Title<input id="et" value="'+esc(x.title||'')+'" required></label><label>Subject<select id="es">'+S.subjects.map(s=>'<option value="'+s.id+'" '+(Number(s.id)===Number(x.subject_id)?'selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></label><label>Description<textarea id="ed" rows="3">'+esc(x.description||'')+'</textarea></label><label>Deadline<input id="een" type="datetime-local" value="'+examInputDate(x.ends_at)+'"></label><label>Time limit (minutes)<input id="dur" type="number" min="1" value="'+esc(x.duration_minutes||'')+'" placeholder="Optional"></label><div class="head"><h3>Questions</h3><span class="muted">Add questions from the bottom</span></div><div id="examQuestions"></div><button class="btn primary">Save exam</button></form>');
@@ -1976,7 +1992,7 @@ async function saveExam(e,id){
   if(qs.some(q=>q.questionType==='MCQ'&&(!q.options||q.options.length<2||!q.correctAnswer)))return toast('Each MCQ needs at least 2 options and a correct answer');
   if(qs.some(q=>q.questionType==='TRUE_FALSE'&&!q.correctAnswer))return toast('Choose TRUE or FALSE for every true/false question');
   const b={title:$('#et').value.trim(),description:$('#ed').value,subjectId:Number($('#es').value)||null,endsAt:$('#een').value||null,durationMinutes:Number($('#dur').value)||null,questions:qs};
-  try{await api(id?'/api/admin/exams/'+id:'/api/admin/exams',{method:id?'PATCH':'POST',body:JSON.stringify(b)});if(!id)clearExamBuilderDraft();close();await loadData();render();toast('Exam saved ✓')}catch(x){toast(x.message)}
+  try{await api(id?'/api/admin/exams/'+id:'/api/admin/exams',{method:id?'PATCH':'POST',body:JSON.stringify(b)});if(!id)await clearExamBuilderDraft();close();await loadData();render();toast('Exam saved ✓')}catch(x){toast(x.message)}
 }
 async function startExam(id){
   if(!S.me){S.pendingExamId=Number(id);loginModal();return}
