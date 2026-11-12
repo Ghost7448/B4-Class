@@ -1899,11 +1899,10 @@ function saveExamBuilderDraft(){
   if(!$('#et'))return;
   collectExamQuestions();
   const draft={title:$('#et')?.value||'',subjectId:$('#es')?.value||'',description:$('#ed')?.value||'',endsAt:$('#een')?.value||'',duration:$('#dur')?.value||'',questions:examDraft,updatedAt:Date.now()};
-  try{localStorage.setItem(EXAM_DRAFT_STORAGE_KEY,JSON.stringify(draft));const note=$('#examDraftStatus');if(note)note.textContent='Draft saved automatically';}catch{}
+  try{localStorage.setItem(EXAM_DRAFT_STORAGE_KEY,JSON.stringify(draft));}catch{}
 }
 function queueExamBuilderDraftSave(){
   clearTimeout(examDraftSaveTimer);
-  const note=$('#examDraftStatus');if(note)note.textContent='Saving draft…';
   examDraftSaveTimer=setTimeout(saveExamBuilderDraft,250);
 }
 function restoreExamBuilderDraft(){
@@ -1915,7 +1914,6 @@ function bindExamBuilderDraftAutosave(){
   form.addEventListener('input',queueExamBuilderDraftSave);
   form.addEventListener('change',queueExamBuilderDraftSave);
   form.addEventListener('focusout',queueExamBuilderDraftSave);
-  const note=$('#examDraftStatus');if(note)note.textContent='Draft saved automatically';
 }
 
 function examInputDate(v){return v?String(v).replace(' ','T').slice(0,16):''}
@@ -1967,7 +1965,7 @@ async function examEdit(id){
   const savedDraft=!id?restoreExamBuilderDraft():null;
   if(savedDraft){x={...x,title:savedDraft.title,description:savedDraft.description,subject_id:savedDraft.subjectId,ends_at:savedDraft.endsAt,duration_minutes:savedDraft.duration};questions=savedDraft.questions}
   examDraft=questions.length?questions:[{questionText:'',questionType:'MCQ',options:['','','',''],correctAnswer:'',points:1}];
-  modal('<div class="modalhead"><h2>'+(id?'Edit exam':'Create exam')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveExam(event,'+(id||'null')+')"><label>Title<input id="et" value="'+esc(x.title||'')+'" required></label><label>Subject<select id="es">'+S.subjects.map(s=>'<option value="'+s.id+'" '+(Number(s.id)===Number(x.subject_id)?'selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></label><label>Description<textarea id="ed" rows="3">'+esc(x.description||'')+'</textarea></label><label>Deadline<input id="een" type="datetime-local" value="'+examInputDate(x.ends_at)+'"></label><label>Time limit (minutes)<input id="dur" type="number" min="1" value="'+esc(x.duration_minutes||'')+'" placeholder="Optional"></label><div class="head"><h3>Questions</h3><span class="muted">Add questions from the bottom</span></div><div id="examQuestions"></div><div id="examDraftStatus" class="muted">Draft saved automatically</div><button class="btn primary">Save exam</button></form>');
+  modal('<div class="modalhead"><h2>'+(id?'Edit exam':'Create exam')+'</h2><button class="close" onclick="b4Close()">×</button></div><form class="form" onsubmit="saveExam(event,'+(id||'null')+')"><label>Title<input id="et" value="'+esc(x.title||'')+'" required></label><label>Subject<select id="es">'+S.subjects.map(s=>'<option value="'+s.id+'" '+(Number(s.id)===Number(x.subject_id)?'selected':'')+'>'+esc(s.name)+'</option>').join('')+'</select></label><label>Description<textarea id="ed" rows="3">'+esc(x.description||'')+'</textarea></label><label>Deadline<input id="een" type="datetime-local" value="'+examInputDate(x.ends_at)+'"></label><label>Time limit (minutes)<input id="dur" type="number" min="1" value="'+esc(x.duration_minutes||'')+'" placeholder="Optional"></label><div class="head"><h3>Questions</h3><span class="muted">Add questions from the bottom</span></div><div id="examQuestions"></div><button class="btn primary">Save exam</button></form>');
   renderExamQuestions();
   if(!id)bindExamBuilderDraftAutosave();
 }
