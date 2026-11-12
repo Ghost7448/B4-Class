@@ -374,6 +374,10 @@ function installExamExitGuard(){
   examExitGuardInstalled=true;
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden'&&S.view==='exam-run'&&!window.examExitAllowed){
+      const id=Number(S.examRun?.id||0);
+      if(id){
+        try{fetch('/api/exams/'+id+'/save',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:collectExamAnswers()}),credentials:'include',keepalive:true})}catch{}
+      }
       lockActiveExam('LEFT_EXAM');
       return;
     }
