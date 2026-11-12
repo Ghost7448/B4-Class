@@ -2148,15 +2148,19 @@ function examReviewV(){
   const r=S.examReview||{};
   if(r.detail){
     const d=r.detail,examId=Number(r.examId||0),attemptId=Number(d.attempt?.id||0);
-    return title('Submission review','Answers submitted by '+esc(d.attempt?.display_name||'Student'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`+(d.attempt?.status==='LOCKED'?'<button class="btn primary" onclick="unlockExamSubmission('+examId+','+attemptId+')">🔓 Unlock</button>':''))+
-    '<div class="grid c3 review-summary"><div class="card"><small>Student</small><b>'+esc(d.attempt?.display_name||'—')+'</b></div><div class="card"><small>Score</small><b>'+Number(d.attempt?.score||0)+' / '+Number(d.total||0)+'</b></div><div class="card"><small>Percentage</small><b>'+Number(d.percent||0)+'%</b></div></div>'+
+    const submitted=['SUBMITTED','REVIEWED'].includes(String(d.attempt?.status||''));
+    return title(submitted?'Submission review':'Live exam monitor',submitted?'Answers submitted by '+esc(d.attempt?.display_name||'Student'):'Current answers by '+esc(d.attempt?.display_name||'Student'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`+(d.attempt?.status==='LOCKED'?'<button class="btn primary" onclick="unlockExamSubmission('+examId+','+attemptId+')">🔓 Unlock</button>':''))+
+    (!submitted?'<div class="card notice">🟡 Exam in progress — answers are being saved. Grading and correct answers will appear after the student submits.</div>':'')+
+    '<div class="grid c3 review-summary"><div class="card"><small>Student</small><b>'+esc(d.attempt?.display_name||'—')+'</b></div><div class="card"><small>Score</small><b>'+(submitted?Number(d.attempt?.score||0)+' / '+Number(d.total||0):'Not submitted')+'</b></div><div class="card"><small>Percentage</small><b>'+(submitted?Number(d.percent||0)+'%':'—')+'</b></div></div>'+
     '<div class="grid review-questions">'+(d.questions||[]).map((q,i)=>{
       const manual=q.question_type==='SHORT'||q.question_type==='LONG';
-      const pending=q.is_correct===null||q.is_correct===undefined;
+      const pending=!submitted||q.is_correct===null||q.is_correct===undefined;
       const type=q.question_type==='TRUE_FALSE'?'TRUE/FALSE':(q.question_type||'MCQ');
-      const answer=manual?(pending?'Awaiting teacher grading':(q.teacher_correct_answer||'Correct — no correction needed')):(q.correct_answer||q.auto_correct_answer||'Correct answer was not saved');
-      const result=pending?'• Awaiting teacher grading':(q.is_correct?'✓ Correct':'✕ Incorrect')+' • '+Number(q.points_awarded||0)+' / '+Number(q.points||0);
-      return '<article class="card review-question"><div class="head"><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div></div><h3>'+esc(q.question_text)+'</h3><div class="answer-block"><small>Student answer</small><p>'+esc(q.answer_text||'No answer')+'</p></div><div class="answer-block"><small>Correct answer</small><p>'+esc(answer)+'</p></div>'+ (manual?'<div class="manual-grade-panel"><div class="answer-result '+(pending?'not-graded':(q.is_correct?'correct':'incorrect'))+'">'+result+'</div><button class="btn primary" onclick="examGradeModal('+examId+','+attemptId+','+q.id+')">Grade Answer</button></div>':'<div class="answer-result '+(q.is_correct?'correct':'incorrect')+'">'+(q.is_correct?'✓ Correct':'✕ Incorrect')+' • '+Number(q.points_awarded||0)+' / '+Number(q.points||0)+'</div>')+'</article>';
+      const answer=!submitted?'Hidden until submission':(manual?(pending?'Awaiting teacher grading':(q.teacher_correct_answer||'Correct — no correction needed')):(q.correct_answer||q.auto_correct_answer||'Correct answer was not saved'));
+      const result=!submitted?'• Waiting for student submission':(pending?'• Awaiting teacher grading':(q.is_correct?'✓ Correct':'✕ Incorrect')+' • '+Number(q.points_awarded||0)+' / '+Number(q.points||0));
+      const statusClass=!submitted||pending?'not-graded':(q.is_correct?'correct':'incorrect');
+      const grading=!submitted?'<div class="answer-result not-graded">'+result+'</div>':(manual?'<div class="manual-grade-panel"><div class="answer-result '+statusClass+'">'+result+'</div><button class="btn primary" onclick="examGradeModal('+examId+','+attemptId+','+q.id+')">Grade Answer</button></div>':'<div class="answer-result '+statusClass+'">'+result+'</div>');
+      return '<article class="card review-question"><div class="head"><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div></div><h3>'+esc(q.question_text)+'</h3><div class="answer-block"><small>Student answer</small><p>'+esc(q.answer_text||'No answer yet')+'</p></div><div class="answer-block"><small>'+(submitted?(manual?'Teacher answer':'Correct answer'):'Correct answer')+'</small><p>'+esc(answer)+'</p></div>'+grading+'</article>';
     }).join('')+'</div>';
   }
   return title('Exam submissions','Choose a student to review their full answers.',`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
