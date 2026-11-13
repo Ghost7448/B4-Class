@@ -1369,7 +1369,7 @@ function passwordModal(){modal('<div class="modalhead"><h2>Change password</h2><
 async function changePassword(e){e.preventDefault();try{await api('/api/auth/password',{method:'POST',body:JSON.stringify({currentPassword:$('#oldPw').value,newPassword:$('#newPw').value})});close();toast('Password changed ✓')}catch(x){toast(x.message)}}
 async function compressAvatarFile(file){
   if(!file)return file;
-  if(!/^image\\/(png|jpe?g|webp)$/i.test(file.type))throw Error('Choose a PNG, JPG or WEBP image');
+  if(!/^image\/(png|jpe?g|webp)$/i.test(file.type))throw Error('Choose a PNG, JPG or WEBP image');
   if(!('createImageBitmap' in window))return file;
   let bitmap;
   try{bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});}
@@ -1381,7 +1381,7 @@ async function compressAvatarFile(file){
     const ctx=canvas.getContext('2d',{alpha:false});
     ctx.drawImage(bitmap,0,0,width,height);
     const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('Could not compress image')),'image/webp',0.78));
-    const base=(file.name||'profile').replace(/\\.[^.]+$/,'');
+    const base=(file.name||'profile').replace(/\.[^.]+$/,'');
     return new File([blob],base+'.webp',{type:'image/webp',lastModified:Date.now()});
   }finally{bitmap.close?.();}
 }
