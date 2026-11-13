@@ -1283,6 +1283,7 @@ app.post('/api/admin/exams/:examId/submissions/:attemptId/unlock',requirePermiss
   if(!rows[0])return res.status(404).json({error:'Submission not found'});
   if(rows[0].status!=='LOCKED')return res.status(400).json({error:'This attempt is not locked'});
   const [updated]=await q("UPDATE exam_attempts SET status='STARTED',lock_reason=NULL WHERE id=? AND exam_id=? AND status='LOCKED'",[attemptId,examId]);
+  await q('DELETE FROM exam_attempt_devices WHERE attempt_id=?',[attemptId]);
   if(!Number(updated?.affectedRows||0))return res.status(409).json({error:'This attempt is no longer locked'});
   await audit(req,'EXAM_UNLOCKED','exam',examId,{attemptId,userId:rows[0].user_id});
   pushGlobalEvent('data-changed',{path:'/api/admin/exams/'+examId+'/submissions/'+attemptId+'/unlock',method:'POST',examId,attemptId,userId:rows[0].user_id});
@@ -1788,6 +1789,8 @@ app.put('/api/exams/:id/save',requireAuth,async(req,res)=>{
   const [rows]=await q('SELECT id,status FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
   const attempt=rows[0];
   if(!attempt)return res.status(404).json({error:'Exam attempt not found'});
+  const [device]=await q('SELECT session_id FROM exam_attempt_devices WHERE attempt_id=? LIMIT 1',[attempt.id]);
+  if(device[0]&&device[0].session_id!==String(req.sessionID||''))return res.status(409).json({error:'This exam is active on another device.',examInUse:true});
   if(!['STARTED','LOCKED'].includes(attempt.status))return res.status(403).json({error:'This exam is no longer editable'});
   const [questions]=await q('SELECT id FROM exam_questions WHERE exam_id=?',[id]);
   const validIds=new Set(questions.map(x=>String(x.id)));
@@ -1810,6 +1813,8 @@ app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
   const id=Number(req.params.id),answers=req.body?.answers||{};
   const [rows]=await q('SELECT a.*,e.ends_at,e.duration_minutes FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);
   const attempt=rows[0]; if(!attempt)return res.status(404).json({error:'Exam attempt not found'});
+  const [device]=await q('SELECT session_id FROM exam_attempt_devices WHERE attempt_id=? LIMIT 1',[attempt.id]);
+  if(device[0]&&device[0].session_id!==String(req.sessionID||''))return res.status(409).json({error:'This exam is active on another device.',examInUse:true});
   if(attempt.status==='LOCKED')return res.status(423).json({error:'Exam is locked. Reopen the exam to resume your saved answers.',examLocked:true});
   if(attempt.status!=='STARTED')return res.status(400).json({error:'Exam already submitted'});
   const started=new Date(attempt.started_at).getTime(),deadline=Math.min(...[attempt.ends_at?cairoEpoch(attempt.ends_at):Infinity,attempt.duration_minutes?started+Number(attempt.duration_minutes)*60000:Infinity]);
