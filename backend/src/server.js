@@ -1669,7 +1669,7 @@ async function gradeAndMaybeFinalizeExamAttempt(attemptId,forceSubmit=false){
     const deadline=Math.min(...deadlines);
     const expired=forceSubmit||Date.now()>=deadline;
     const [questions]=await conn.execute('SELECT id,question_type,correct_answer,points FROM exam_questions WHERE exam_id=?',[attempt.exam_id]);
-    const [answers]=await conn.execute('SELECT question_id,answer_text,image_size_bytes FROM exam_answers WHERE attempt_id=?',[attempt.id]);
+    const [answers]=await conn.execute('SELECT question_id,answer_text,image_size_bytes,is_correct,points_awarded FROM exam_answers WHERE attempt_id=?',[attempt.id]);
     const byQuestion=new Map(answers.map(x=>[Number(x.question_id),x]));
     let score=0,total=0;
     for(const question of questions){
@@ -1682,6 +1682,8 @@ async function gradeAndMaybeFinalizeExamAttempt(attemptId,forceSubmit=false){
         await conn.execute(`INSERT INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded)
           VALUES(?,?,?, ?,?) ON DUPLICATE KEY UPDATE is_correct=VALUES(is_correct),points_awarded=VALUES(points_awarded)`,
           [attempt.id,question.id,answer,correct?1:0,points]);
+      }else if(saved&&saved.is_correct!==null){
+        total+=Number(question.points||0);score+=Number(saved.points_awarded||0);
       }else if(expired&&!saved){
         await conn.execute('INSERT IGNORE INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded) VALUES(?,?,NULL,NULL,0)',[attempt.id,question.id]);
       }
