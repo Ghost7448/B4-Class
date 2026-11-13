@@ -2204,6 +2204,7 @@ async function submitExam(e,id,auto=false){
       S.examResult={...d,examId:id,auto:false};S.view='exam-result';render();window.scrollTo({top:0,behavior:'smooth'});
     }
   }catch(x){
+    if(auto&&/already submitted|no longer editable|time is over|submitted automatically/i.test(String(x?.message||''))){S.examRun=null;await loadStudentExamAnswers(id);return}
     if(/exam is locked/i.test(x.message)){S.examRun={id,locked:true,lockMessage:x.message};S.view='exam-locked';render();window.scrollTo({top:0,behavior:'smooth'});return}
     toast(x.message);
     if(submitBtn)submitBtn.disabled=false;
