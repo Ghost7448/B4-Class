@@ -2457,7 +2457,7 @@ function examReviewV(){
   const r=S.examReview||{};
   if(r.detail){
     const d=r.detail,examId=Number(r.examId||0),attemptId=Number(d.attempt?.id||0);
-    return title('Submission review','Answers submitted by '+esc(d.attempt?.display_name||'Student'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`+(d.attempt?.status==='LOCKED'?'<button class="btn primary" onclick="unlockExamSubmission('+examId+','+attemptId+')">🔓 Unlock</button>':''))+
+    return title('Submission review','Answers submitted by '+esc(d.attempt?.display_name||'Student'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`+(d.attempt?.status==='LOCKED'?'<button class="btn primary" onclick="unlockExamSubmission('+examId+','+attemptId+')">🔓 Unlock</button>':'')+(Number(S.me?.is_super_admin)===1?'<button class="btn danger" onclick="deleteExamSubmission('+examId+','+attemptId+')">Delete Submission</button>':''))+
     '<div class="grid c3 review-summary"><div class="card"><small>Student</small><b>'+esc(d.attempt?.display_name||'—')+'</b></div><div class="card"><small>Score</small><b>'+Number(d.attempt?.score||0)+' / '+Number(d.total||0)+'</b></div><div class="card"><small>Percentage</small><b>'+Number(d.percent||0)+'%</b></div></div>'+
     '<div class="grid review-questions">'+(d.questions||[]).map((q,i)=>{
       const manual=q.question_type==='SHORT'||q.question_type==='LONG';
@@ -2469,8 +2469,22 @@ function examReviewV(){
     }).join('')+'</div>';;
   }
   return title('Exam submissions','Choose a student to review their full answers.',`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
-  '<div class="grid review-submissions">'+(r.submissions||[]).map(x=>'<article class="card review-student"><button class="review-student-main" onclick="openExamSubmission('+r.examId+','+x.id+')"><div><b>'+esc(x.display_name)+'</b><small>'+esc(x.status||'')+'</small></div><span class="badge">'+Number(x.percent||0)+'%</span></button>'+(x.status==='LOCKED'?'<button class="btn primary review-unlock" onclick="unlockExamSubmission('+r.examId+','+x.id+')">🔓 Unlock</button>':'')+'</article>').join('')||'<div class="card empty">No submissions yet.</div>'+'</div>';
+  '<div class="grid review-submissions">'+(r.submissions||[]).map(x=>'<article class="card review-student"><button class="review-student-main" onclick="openExamSubmission('+r.examId+','+x.id+')"><div><b>'+esc(x.display_name)+'</b><small>'+esc(x.status||'')+'</small></div><span class="badge">'+Number(x.percent||0)+'%</span></button>'+(x.status==='LOCKED'?'<button class="btn primary review-unlock" onclick="unlockExamSubmission('+r.examId+','+x.id+')">🔓 Unlock</button>':'')+(Number(S.me?.is_super_admin)===1?'<button class="btn danger" onclick="deleteExamSubmission('+r.examId+','+x.id+')">Delete Submission</button>':'')+'</article>').join('')||'<div class="card empty">No submissions yet.</div>'+'</div>';
 }
+
+async function deleteExamSubmission(examId,attemptId){
+  if(Number(S.me?.is_super_admin)!==1)return toast('Only Super Admin can delete submissions');
+  if(!await confirmAction('Permanently delete this student submission and its saved answers? This cannot be undone.'))return;
+  try{
+    await api('/api/admin/exams/'+examId+'/submissions/'+attemptId,{method:'DELETE'});
+    toast('Submission deleted ✓');
+    const d=await api('/api/admin/exams/'+examId+'/submissions?_='+Date.now(),{cache:'no-store'});
+    S.examReview={examId,submissions:d.submissions||[]};
+    render();
+    startExamTeacherRefresh(examId);
+  }catch(e){toast(e.message)}
+}
+
 async function delAPI(path,msg){if(!await confirmAction('Are you sure?'))return;try{await api(path,{method:'DELETE'});await loadData();render();toast(msg+' ✓')}catch(e){toast(e.message)}}
 function searchBind(){const i=$('#search');if(i)i.oninput=()=>{const q=i.value.toLowerCase().trim();if(!q)return;const all=[...S.students,...S.teachers,...S.subjects,...S.assignments,...S.resources];const x=all.find(a=>String(a.display_name||a.name||a.title||'').toLowerCase().includes(q));if(x)toast('Found: '+(x.display_name||x.name||x.title))}}
 function applyTheme(){render()}
