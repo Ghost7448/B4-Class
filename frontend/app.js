@@ -375,6 +375,8 @@ function lockActiveExam(reason='LEFT_EXAM'){
   const id=Number(S.examRun?.id||0);
   if(!id||window.examExitAllowed||S.view!=='exam-run'||isExamCameraCaptureActive())return;
   window.examExitAllowed=true;
+  clearInterval(window.examTimer);
+  clearTimeout(examSaveTimer);
   if(S.examRun)S.examRun.locked=true;
   const local=S.exams.find(x=>Number(x.id)===id);
   if(local)local.attempt_status='LOCKED';
@@ -467,8 +469,24 @@ function installExamExitGuard(){
 installExamExitGuard();
 
 let liveSyncBusy=false;
-async function syncLiveData(){
+let examCenterSyncBusy=false;
+async function syncExamCenter(){
+  if(!S.me||S.view!=='exams'||examCenterSyncBusy)return;
+  examCenterSyncBusy=true;
+  try{
+    const data=await api('/api/exams/live',{cache:'no-store'});
+    const next=Array.isArray(data.exams)?data.exams:[];
+    if(JSON.stringify(next)===JSON.stringify(S.exams||[]))return;
+    S.exams=next;
+    patchLiveCards('#content > .grid.exam-cards',S.exams,examCard);
+    updateExamCountdowns();
+  }catch(e){
+    console.warn('Live Exam Center sync failed:',e.message);
+  }finally{examCenterSyncBusy=false}
+}
+async function syncLiveData(forceFull=false){
   if(liveSyncBusy||!S.me)return;
+  if(!forceFull&&S.view==='exams'){await syncExamCenter();return;}
   liveSyncBusy=true;
   try{
     const before=liveDataSignature();
@@ -555,18 +573,19 @@ function ensureGlobalRealtime(){
       clearInterval(window.liveFallbackTimer);
     });
     window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
-    window.globalRealtimeStream.addEventListener('permissions-changed',()=>syncLiveData());
+    window.globalRealtimeStream.addEventListener('permissions-changed',()=>syncLiveData(true));
     window.globalRealtimeStream.addEventListener('exam-unlocked',async(event)=>{
       try{
         const data=JSON.parse(event.data||'{}');
-        await syncLiveData();
         const examId=Number(data.examId||0);
-        if(examId&&S.view==='exam-locked'&&S.examRun?.id===examId){
-          toast('🔓 Exam unlocked — opening now…');
+        if(examId&&S.view==='exam-locked'&&Number(S.examRun?.id)===examId){
+          toast('🔓 Exam unlocked — press Full Screen to continue.');
           await startExam(examId);
-        }else if(examId){
-          toast('🔓 Your exam has been unlocked');
+          return;
         }
+        if(S.view==='exams')await syncExamCenter();
+        else await syncLiveData();
+        if(examId)toast('🔓 Your exam has been unlocked');
       }catch{}
     });
     window.globalRealtimeStream.addEventListener('notification',(event)=>{
@@ -648,14 +667,21 @@ async function deleteMySubmission(id){if(!await confirmAction('Delete your uploa
 async function deleteAssignmentFile(id){if(!await confirmAction('Remove this assignment file?'))return;try{await api('/api/admin/assignments/'+id+'/file',{method:'DELETE'});await loadData();render();assignmentEdit(id);toast('Assignment file removed ✓')}catch(e){toast(e.message)}}
 async function submitAssignment(e,id){e.preventDefault();const file=$('#submissionFile')?.files?.[0];if(!file)return;const fd=new FormData();fd.append('file',file);try{const r=await fetch(API+'/api/assignments/'+id+'/submission',{method:'POST',credentials:'include',body:fd});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Submission upload failed');await loadData();render();openAssignment(id);toast('Assignment submitted ✓')}catch(x){toast(x.message)}}
 function resourcesV(){return title(t('resources'),'Lessons, links and PDFs.',can('MANAGE_RESOURCES')?'<button class="btn primary" onclick="resourceEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid c3">'+S.resources.map(r=>'<article class="card"><span class="badge">'+esc(r.resource_type||'RESOURCE')+'</span><h3>'+esc(r.title)+'</h3><p class="muted">'+esc(r.description||'')+'</p>'+(r.subject_id?'<button class="btn primary" onclick="openSubject('+Number(r.subject_id)+')">Open subject →</button>':(r.url||r.file_url?'<a class="btn primary" href="'+esc(r.url||r.file_url)+'" target="_blank" rel="noopener">'+t('open')+' →</a>':''))+(can('MANAGE_RESOURCES')?'<div class="actions-row"><button class="btn ghost" onclick="resourceEdit('+r.id+')">Edit</button>'+(r.filename||r.file_url?'<button class="btn ghost" onclick="deleteResourceFile('+r.id+')">Remove file</button>':'')+'<button class="btn danger" onclick="delAPI(\'/api/admin/resources/'+r.id+'\',\'Resource deleted\')">Delete</button></div>':'')+'</article>').join('')||'<div class="card empty">No resources.</div>'+'</div>'}
-function examsV(){
+function examCard(e){
   const canSubmit=can('MANAGE_EXAMS')&&(S.me?.role==='TEACHER'||Number(S.me?.is_super_admin)===1);
+  const tm=examTime(e),submitted=e.attempt_status==='SUBMITTED',started=e.attempt_status==='STARTED',locked=e.attempt_status==='LOCKED';
+  const action=submitted
+    ?'<button class="btn primary" onclick="loadStudentExamAnswers('+e.id+')">View Answers</button>'
+    :locked
+      ?'<button class="btn danger" disabled>🔒 Exam Locked — waiting for Teacher</button>'
+      :started
+        ?'<button class="btn primary" onclick="startExam('+e.id+')">Continue Exam</button>'
+        :'<button class="btn primary" data-exam-open '+(tm.label==='Exam closed'?'disabled':'')+' onclick="startExam('+e.id+')">Open</button>';
+  return '<article class="card exam-card" data-live-id="'+esc(e.id)+'"><div class="head"><span class="badge">'+esc(e.status)+'</span><span class="muted">'+esc(e.subject_name||'')+'</span></div><h3>'+esc(e.title)+'</h3><p class="muted">'+esc(e.description||'')+'</p><div class="meter"><span>Exam time</span><b class="countdown '+tm.tone+'" data-exam-id="'+e.id+'">'+tm.label+'</b></div><div class="assignment-bar exam-time-bar"><span class="'+tm.tone+'" data-exam-bar="'+e.id+'" style="width:'+tm.pct+'%"></span></div><div class="actions-row">'+action+(can('MANAGE_EXAMS')?'<button class="btn ghost" onclick="copyExamLink('+e.id+')">Copy Exam Link</button><button class="btn ghost" onclick="examEdit('+e.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/exams/'+e.id+'\',\'Exam deleted\')">Delete</button>':'')+(canSubmit?'<button class="btn ghost" onclick="submissions('+e.id+')">Submissions</button>':'')+'</div></article>';
+}
+function examsV(){
   return title(t('exams'),'Exams, submissions and results.',can('MANAGE_EXAMS')?'<button class="btn primary" onclick="examEdit()">＋ '+t('add')+'</button>':'')+
-  '<div class="grid c2 exam-cards">'+S.exams.map(e=>{
-    const tm=examTime(e),submitted=e.attempt_status==='SUBMITTED',started=e.attempt_status==='STARTED',locked=e.attempt_status==='LOCKED';
-    const action=submitted?'<button class="btn primary" onclick="loadStudentExamAnswers('+e.id+')">View Answers</button>':locked?'<button class="btn danger" disabled>🔒 Exam Locked</button>':started?'<button class="btn primary" onclick="startExam('+e.id+')">Continue Exam</button>':'<button class="btn primary" data-exam-open '+(tm.label==='Exam closed'?'disabled':'')+' onclick="startExam('+e.id+')">Open</button>';
-    return '<article class="card exam-card" data-live-id="'+esc(e.id)+'"><div class="head"><span class="badge">'+esc(e.status)+'</span><span class="muted">'+esc(e.subject_name||'')+'</span></div><h3>'+esc(e.title)+'</h3><p class="muted">'+esc(e.description||'')+'</p><div class="meter"><span>Exam time</span><b class="countdown '+tm.tone+'">'+tm.label+'</b></div><div class="assignment-bar exam-time-bar"><span class="'+tm.tone+'" style="width:'+tm.pct+'%"></span></div><div class="actions-row">'+action+(can('MANAGE_EXAMS')?'<button class="btn ghost" onclick="copyExamLink('+e.id+')">Copy Exam Link</button><button class="btn ghost" onclick="examEdit('+e.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/exams/'+e.id+'\',\'Exam deleted\')">Delete</button>':'')+(canSubmit?'<button class="btn ghost" onclick="submissions('+e.id+')">Submissions</button>':'')+'</div></article>';
-  }).join('')||'<div class="card empty">No exams.</div>'+'</div>';
+  '<div class="grid c2 exam-cards">'+S.exams.map(examCard).join('')+'</div>'+(S.exams.length?'':'<div class="card empty">No exams.</div>');
 }
 function announcementTime(value){
   const d=new Date(value);
