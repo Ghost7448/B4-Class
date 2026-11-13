@@ -340,6 +340,8 @@ async function ensurePermissionSchema() {
   if(!examTeacherAnswerCol.length) await q("ALTER TABLE exam_answers ADD COLUMN teacher_correct_answer TEXT NULL AFTER answer_text");
   const [examLockReasonCol]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='exam_attempts' AND COLUMN_NAME='lock_reason' LIMIT 1");
   if(!examLockReasonCol.length) await q("ALTER TABLE exam_attempts ADD COLUMN lock_reason VARCHAR(60) NULL AFTER status");
+  const [examPausedRemainingCol]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='exam_attempts' AND COLUMN_NAME='paused_remaining_ms' LIMIT 1");
+  if(!examPausedRemainingCol.length) await q("ALTER TABLE exam_attempts ADD COLUMN paused_remaining_ms BIGINT UNSIGNED NULL AFTER lock_reason");
   const [examImageCols]=await q("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='exam_answers' AND COLUMN_NAME IN ('image_data','image_mime_type','image_size_bytes')");
   const examImageNames=new Set(examImageCols.map(x=>x.COLUMN_NAME));
   if(!examImageNames.has('image_data')) await q("ALTER TABLE exam_answers ADD COLUMN image_data LONGBLOB NULL");
@@ -1279,16 +1281,52 @@ app.post('/api/admin/exams/:examId/submissions/:attemptId/unlock',requirePermiss
   const [grader]=await q('SELECT role,is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);
   if(grader[0]?.role!=='TEACHER'&&Number(grader[0]?.is_super_admin)!==1)return res.status(403).json({error:'Only Teachers can unlock exams'});
   try{await assertTeacherOwner(req,'exams',examId)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}
-  const [rows]=await q("SELECT id,user_id,status FROM exam_attempts WHERE id=? AND exam_id=? LIMIT 1",[attemptId,examId]);
-  if(!rows[0])return res.status(404).json({error:'Submission not found'});
-  if(rows[0].status!=='LOCKED')return res.status(400).json({error:'This attempt is not locked'});
-  const [updated]=await q("UPDATE exam_attempts SET status='STARTED',lock_reason=NULL WHERE id=? AND exam_id=? AND status='LOCKED'",[attemptId,examId]);
-  await q('DELETE FROM exam_attempt_devices WHERE attempt_id=?',[attemptId]);
-  if(!Number(updated?.affectedRows||0))return res.status(409).json({error:'This attempt is no longer locked'});
-  await audit(req,'EXAM_UNLOCKED','exam',examId,{attemptId,userId:rows[0].user_id});
-  pushGlobalEvent('data-changed',{path:'/api/admin/exams/'+examId+'/submissions/'+attemptId+'/unlock',method:'POST',examId,attemptId,userId:rows[0].user_id});
-  pushUserEvent(rows[0].user_id,'exam-unlocked',{examId,attemptId,status:'STARTED'});
-  res.json({ok:true,status:'STARTED'});
+  const conn=await pool.getConnection();
+  let userId=null,remainingMs=null;
+  try{
+    await conn.beginTransaction();
+    const [rows]=await conn.execute(`
+      SELECT a.id,a.user_id,a.status,a.started_at,a.paused_remaining_ms,
+             e.duration_minutes,e.ends_at
+      FROM exam_attempts a JOIN exams e ON e.id=a.exam_id
+      WHERE a.id=? AND a.exam_id=? LIMIT 1 FOR UPDATE
+    `,[attemptId,examId]);
+    const attempt=rows[0];
+    if(!attempt){await conn.rollback();return res.status(404).json({error:'Submission not found'});}
+    if(attempt.status!=='LOCKED'){await conn.rollback();return res.status(400).json({error:'This attempt is not locked'});}
+    userId=attempt.user_id;
+    const durationMs=Number(attempt.duration_minutes||0)*60000;
+    if(durationMs>0){
+      if(attempt.paused_remaining_ms!==null&&attempt.paused_remaining_ms!==undefined){
+        remainingMs=Math.max(0,Number(attempt.paused_remaining_ms)||0);
+      }else{
+        const started=new Date(attempt.started_at).getTime();
+        remainingMs=Math.max(0,durationMs-(Date.now()-started));
+      }
+      const elapsedUs=Math.max(0,Math.round((durationMs-remainingMs)*1000));
+      await conn.execute(`
+        UPDATE exam_attempts
+        SET status='STARTED',lock_reason=NULL,
+            started_at=DATE_SUB(NOW(),INTERVAL ? MICROSECOND),
+            paused_remaining_ms=NULL
+        WHERE id=? AND exam_id=? AND status='LOCKED'
+      `,[elapsedUs,attemptId,examId]);
+    }else{
+      await conn.execute("UPDATE exam_attempts SET status='STARTED',lock_reason=NULL,paused_remaining_ms=NULL WHERE id=? AND exam_id=? AND status='LOCKED'",[attemptId,examId]);
+    }
+    await conn.execute('DELETE FROM exam_attempt_devices WHERE attempt_id=?',[attemptId]);
+    await conn.commit();
+  }catch(e){
+    try{await conn.rollback()}catch{}
+    console.error('Exam unlock failed:',e);
+    return res.status(500).json({error:'Could not unlock this exam attempt'});
+  }finally{conn.release();}
+  const finalization=await gradeAndMaybeFinalizeExamAttempt(attemptId,false);
+  const status=finalization?.status||'STARTED';
+  await audit(req,'EXAM_UNLOCKED','exam',examId,{attemptId,userId,remainingMs});
+  pushGlobalEvent('data-changed',{path:'/api/admin/exams/'+examId+'/submissions/'+attemptId+'/unlock',method:'POST',examId,attemptId,userId});
+  if(status==='STARTED')pushUserEvent(userId,'exam-unlocked',{examId,attemptId,status:'STARTED',remainingMs});
+  res.json({ok:true,status,remainingMs});
 });
 
 app.get('/api/admin/exams/:id/submissions/:attemptId',requirePermission('MANAGE_EXAMS'),async(req,res)=>{
@@ -1626,6 +1664,39 @@ app.post('/api/admin/exams', requirePermission('MANAGE_EXAMS'), async(req,res)=>
   }catch(e){await conn.rollback();res.status(400).json({error:e.message})}finally{conn.release();}
 });
 
+app.get('/api/exams/live',requireAuth,async(req,res)=>{
+  try{
+    const [exams]=await q(`
+      SELECT e.id,e.title,e.description,e.subject_id,e.created_by,
+        DATE_FORMAT(e.created_at,'%Y-%m-%d %H:%i:%s') created_at,
+        e.timer_started_ms,e.ends_at_ms,s.name subject_name,
+        DATE_FORMAT(e.starts_at,'%Y-%m-%d %H:%i:%s') starts_at,
+        DATE_FORMAT(e.ends_at,'%Y-%m-%d %H:%i:%s') ends_at,
+        e.duration_minutes,ea.status attempt_status,
+        ea.score attempt_score,ea.submitted_at attempt_submitted_at
+      FROM exams e
+      LEFT JOIN subjects s ON s.id=e.subject_id
+      LEFT JOIN exam_attempts ea ON ea.exam_id=e.id AND ea.user_id=?
+      WHERE e.class_name='B4'
+      ORDER BY e.starts_at IS NULL,e.starts_at
+    `,[req.session.userId]);
+    const nowMs=Date.now();
+    for(const exam of exams){
+      const startMs=Number(exam.timer_started_ms)||cairoEpoch(exam.created_at);
+      const endMs=Number(exam.ends_at_ms)||cairoEpoch(exam.ends_at);
+      exam.exam_start_ms=startMs;
+      exam.start_ms=startMs;
+      exam.end_ms=endMs;
+      exam.status=endMs!==null&&nowMs>=endMs?'CLOSED':'OPEN';
+    }
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({exams,server_now_ms:nowMs});
+  }catch(e){
+    console.error('Live exam center sync failed:',e);
+    res.status(500).json({error:'Could not sync the Exam Center'});
+  }
+});
+
 app.get('/api/exams/:id', requireAuth, async(req,res)=>{
   const id=Number(req.params.id); if(!Number.isSafeInteger(id)) return res.status(400).json({error:'Invalid exam'});
    const [ex]=await q("SELECT e.*,DATE_FORMAT(e.starts_at,'%Y-%m-%d %H:%i:%s') starts_at,DATE_FORMAT(e.ends_at,'%Y-%m-%d %H:%i:%s') ends_at,s.name subject_name FROM exams e LEFT JOIN subjects s ON s.id=e.subject_id WHERE e.id=? AND e.class_name='B4' LIMIT 1",[id]);
@@ -1648,10 +1719,7 @@ app.post('/api/exams/:id/start', requireAuth, async(req,res)=>{
     if(deviceRows[0]&&deviceRows[0].session_id!==String(req.sessionID||''))return res.status(409).json({error:'This exam is already open on another device. Close it there or contact your Teacher.',examInUse:true});
     await q('INSERT INTO exam_attempt_devices(attempt_id,session_id) VALUES(?,?) ON DUPLICATE KEY UPDATE session_id=VALUES(session_id)',[existing[0].id,String(req.sessionID||'')]);
     if(existing[0].status==='LOCKED'){
-      const resumableReasons=['LEFT_EXAM','WINDOW_RESIZED','SPLIT_SCREEN','FULLSCREEN_EXIT','POPUP_VIEW'];
-      if(!resumableReasons.includes(String(existing[0].lock_reason||'')))return res.status(423).json({error:'Exam Locked. A Teacher must unlock this attempt.',examLocked:true});
-      await q("UPDATE exam_attempts SET status='STARTED',lock_reason=NULL WHERE id=? AND status='LOCKED'",[existing[0].id]);
-      existing[0].status='STARTED';
+      return res.status(423).json({error:'Exam Locked. A Teacher must unlock this attempt before you can continue.',examLocked:true});
     }
     if(existing[0].status!=='STARTED')return res.status(403).json({error:'You have already submitted this exam'});
     return sendExamStart(res,exam,existing[0]);
@@ -1670,7 +1738,7 @@ async function gradeAndMaybeFinalizeExamAttempt(attemptId,forceSubmit=false){
       FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.id=? FOR UPDATE`,[attemptId]);
     const attempt=attemptRows[0];
     if(!attempt){await conn.rollback();return null;}
-    if(!['STARTED','LOCKED'].includes(attempt.status)){await conn.commit();return {status:attempt.status,alreadyFinal:true};}
+    if(attempt.status!=='STARTED'){await conn.commit();return {status:attempt.status,alreadyFinal:true};}
     const started=new Date(attempt.started_at).getTime();
     const deadlines=[attempt.ends_at?cairoEpoch(attempt.ends_at):Infinity,attempt.duration_minutes?started+Number(attempt.duration_minutes)*60000:Infinity];
     const deadline=Math.min(...deadlines);
@@ -1723,7 +1791,7 @@ setInterval(async()=>{
   examDeadlineSweepBusy=true;
   try{
     const [expired]=await q(`SELECT a.id FROM exam_attempts a JOIN exams e ON e.id=a.exam_id
-      WHERE a.status IN ('STARTED','LOCKED') AND (
+      WHERE a.status='STARTED' AND (
         (e.duration_minutes IS NOT NULL AND a.started_at + INTERVAL e.duration_minutes MINUTE <= NOW())
         OR (e.ends_at IS NOT NULL AND e.ends_at <= NOW())
       ) ORDER BY a.id LIMIT 100`);
@@ -1745,17 +1813,44 @@ async function sendExamStart(res,exam,attempt){
   res.json({exam,attempt:{id:attempt.id,started_at:attempt.started_at,deadline},answers:savedAnswers,imageQuestionIds:savedImageIds,questions:questions.map(q=>({...q,options_json:typeof q.options_json==='string'?(JSON.parse(q.options_json||'[]')):(q.options_json||[])}))});
 }
 
-app.post('/api/exams/:id/lock', requireAuth, async(req,res)=>{
+app.post('/api/exams/:id/lock',requireAuth,async(req,res)=>{
   const id=Number(req.params.id);
-  const [rows]=await q('SELECT id,status FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
-  const attempt=rows[0];
-  if(!attempt)return res.status(404).json({error:'Exam attempt not found'});
-  if(attempt.status!=='STARTED')return res.json({ok:true,status:attempt.status});
+  if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid exam'});
   const reason=String(req.body?.reason||'LEFT_EXAM').slice(0,60);
-  const [locked]=await q("UPDATE exam_attempts SET status='LOCKED',lock_reason=? WHERE id=? AND status='STARTED'",[reason,attempt.id]);
-  await audit(req,'EXAM_LOCKED','exam',id,{attemptId:attempt.id,reason:String(req.body?.reason||'LEFT_EXAM')});
-  if(Number(locked?.affectedRows||0))pushGlobalEvent('data-changed',{path:'/api/exams/'+id+'/lock',method:'POST',examId:id,attemptId:attempt.id});
-  res.json({ok:true,status:'LOCKED'});
+  const conn=await pool.getConnection();
+  try{
+    await conn.beginTransaction();
+    const [rows]=await conn.execute(`
+      SELECT a.id,a.status,e.duration_minutes
+      FROM exam_attempts a JOIN exams e ON e.id=a.exam_id
+      WHERE a.exam_id=? AND a.user_id=? LIMIT 1 FOR UPDATE
+    `,[id,req.session.userId]);
+    const attempt=rows[0];
+    if(!attempt){await conn.rollback();return res.status(404).json({error:'Exam attempt not found'});}
+    if(attempt.status!=='STARTED'){
+      await conn.commit();
+      return res.json({ok:true,status:attempt.status});
+    }
+    const [locked]=await conn.execute(`
+      UPDATE exam_attempts a JOIN exams e ON e.id=a.exam_id
+      SET a.status='LOCKED',a.lock_reason=?,
+          a.paused_remaining_ms=CASE
+            WHEN e.duration_minutes IS NULL THEN NULL
+            ELSE GREATEST(0,e.duration_minutes*60000-TIMESTAMPDIFF(MICROSECOND,a.started_at,NOW())/1000)
+          END
+      WHERE a.id=? AND a.status='STARTED'
+    `,[reason,attempt.id]);
+    await conn.commit();
+    if(Number(locked?.affectedRows||0)){
+      await audit(req,'EXAM_LOCKED','exam',id,{attemptId:attempt.id,reason});
+      pushGlobalEvent('data-changed',{path:'/api/exams/'+id+'/lock',method:'POST',examId:id,attemptId:attempt.id});
+    }
+    res.json({ok:true,status:'LOCKED'});
+  }catch(e){
+    try{await conn.rollback()}catch{}
+    console.error('Exam lock failed:',e);
+    res.status(500).json({error:'Could not lock this exam attempt'});
+  }finally{conn.release();}
 });
 
 const examPhotoUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:2*1024*1024},fileFilter:(req,file,cb)=>cb(null,['image/jpeg','image/webp','image/png'].includes(file.mimetype))});
@@ -1764,7 +1859,7 @@ app.post('/api/exams/:id/questions/:questionId/image',requireAuth,examPhotoUploa
   if(!req.file)return res.status(400).json({error:'Please take or choose a photo'});
   const [attemptRows]=await q("SELECT a.id,a.status FROM exam_attempts a WHERE a.exam_id=? AND a.user_id=? LIMIT 1",[examId,req.session.userId]);
   const attempt=attemptRows[0];
-  if(!attempt||!['STARTED','LOCKED'].includes(attempt.status))return res.status(403).json({error:'Exam attempt is not editable'});
+  if(!attempt||attempt.status!=='STARTED')return res.status(403).json({error:'Exam attempt is locked or no longer editable'});
   const [questionRows]=await q("SELECT id FROM exam_questions WHERE id=? AND exam_id=? AND question_type='LONG' LIMIT 1",[questionId,examId]);
   if(!questionRows[0])return res.status(404).json({error:'Long-answer question not found'});
   await q("INSERT INTO exam_answers(attempt_id,question_id,answer_text,image_data,image_mime_type,image_size_bytes,is_correct,points_awarded) VALUES(?,?,NULL,?,?,?,NULL,0) ON DUPLICATE KEY UPDATE image_data=VALUES(image_data),image_mime_type=VALUES(image_mime_type),image_size_bytes=VALUES(image_size_bytes)",[attempt.id,questionId,req.file.buffer,req.file.mimetype,req.file.size]);
@@ -1785,18 +1880,18 @@ app.get('/api/admin/exams/:examId/submissions/:attemptId/questions/:questionId/i
 
 app.put('/api/exams/:id/save',requireAuth,async(req,res)=>{
   const id=Number(req.params.id),answers=req.body?.answers||{};
-  if(!answers||typeof answers!=='object'||Array.isArray(answers))return res.status(400).json({error:'Invalid answers'});
-  const [rows]=await q('SELECT id,status FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
-  const attempt=rows[0];
-  if(!attempt)return res.status(404).json({error:'Exam attempt not found'});
-  const [device]=await q('SELECT session_id FROM exam_attempt_devices WHERE attempt_id=? LIMIT 1',[attempt.id]);
-  if(device[0]&&device[0].session_id!==String(req.sessionID||''))return res.status(409).json({error:'This exam is active on another device.',examInUse:true});
-  if(!['STARTED','LOCKED'].includes(attempt.status))return res.status(403).json({error:'This exam is no longer editable'});
-  const [questions]=await q('SELECT id FROM exam_questions WHERE exam_id=?',[id]);
-  const validIds=new Set(questions.map(x=>String(x.id)));
+  if(!Number.isSafeInteger(id)||!answers||typeof answers!=='object'||Array.isArray(answers))return res.status(400).json({error:'Invalid answers'});
   const conn=await pool.getConnection();
   try{
     await conn.beginTransaction();
+    const [rows]=await conn.execute('SELECT id,status FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1 FOR UPDATE',[id,req.session.userId]);
+    const attempt=rows[0];
+    if(!attempt){await conn.rollback();return res.status(404).json({error:'Exam attempt not found'});}
+    const [device]=await conn.execute('SELECT session_id FROM exam_attempt_devices WHERE attempt_id=? LIMIT 1',[attempt.id]);
+    if(device[0]&&device[0].session_id!==String(req.sessionID||'')){await conn.rollback();return res.status(409).json({error:'This exam is active on another device.',examInUse:true});}
+    if(attempt.status!=='STARTED'){await conn.rollback();return res.status(403).json({error:'This exam is locked or no longer editable',examLocked:attempt.status==='LOCKED'});}
+    const [questions]=await conn.execute('SELECT id FROM exam_questions WHERE exam_id=?',[id]);
+    const validIds=new Set(questions.map(x=>String(x.id)));
     for(const [questionId,value] of Object.entries(answers)){
       if(!validIds.has(String(questionId)))continue;
       const answer=String(value??'').slice(0,20000);
@@ -1805,43 +1900,75 @@ app.put('/api/exams/:id/save',requireAuth,async(req,res)=>{
     await conn.commit();
     const grading=await gradeAndMaybeFinalizeExamAttempt(attempt.id,false);
     res.json({ok:true,savedAt:new Date().toISOString(),status:grading?.status||attempt.status,score:grading?.score??null,autoSubmitted:!!grading?.auto});
-  }catch(e){await conn.rollback();res.status(500).json({error:'Could not save exam answers'});}
-  finally{conn.release();}
+  }catch(e){
+    try{await conn.rollback()}catch{}
+    console.error('Exam autosave failed:',e);
+    res.status(500).json({error:'Could not save exam answers'});
+  }finally{conn.release();}
 });
 
-app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
+app.post('/api/exams/:id/submit',requireAuth,async(req,res)=>{
   const id=Number(req.params.id),answers=req.body?.answers||{};
-  const [rows]=await q('SELECT a.*,e.ends_at,e.duration_minutes FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);
-  const attempt=rows[0]; if(!attempt)return res.status(404).json({error:'Exam attempt not found'});
-  const [device]=await q('SELECT session_id FROM exam_attempt_devices WHERE attempt_id=? LIMIT 1',[attempt.id]);
-  if(device[0]&&device[0].session_id!==String(req.sessionID||''))return res.status(409).json({error:'This exam is active on another device.',examInUse:true});
-  if(attempt.status==='LOCKED')return res.status(423).json({error:'Exam is locked. Reopen the exam to resume your saved answers.',examLocked:true});
-  if(attempt.status!=='STARTED')return res.status(400).json({error:'Exam already submitted'});
-  const started=new Date(attempt.started_at).getTime(),deadline=Math.min(...[attempt.ends_at?cairoEpoch(attempt.ends_at):Infinity,attempt.duration_minutes?started+Number(attempt.duration_minutes)*60000:Infinity]);
-  if(Date.now()>deadline){await gradeAndMaybeFinalizeExamAttempt(attempt.id,false);return res.status(403).json({error:'Time is over. The exam was submitted automatically.'});}
-  const [questions]=await q('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[id]);
-  const [savedRows]=await q('SELECT question_id,answer_text,image_size_bytes FROM exam_answers WHERE attempt_id=?',[attempt.id]);
-  const mergedAnswers=Object.fromEntries(savedRows.map(x=>[String(x.question_id),String(x.answer_text??'')]));
-  const photoAnswerIds=new Set(savedRows.filter(x=>Number(x.image_size_bytes)>0).map(x=>Number(x.question_id)));
-  Object.assign(mergedAnswers,answers);
-  let score=0;
-  for(const qn of questions){
-    const answer=String(mergedAnswers[String(qn.id)]??'').trim(); let correct=null,awarded=0;
-    const hasAnswer=!!answer||(qn.question_type==='LONG'&&photoAnswerIds.has(Number(qn.id)));
-    if(!hasAnswer)correct=false;
-    if((qn.question_type==='MCQ'||qn.question_type==='TRUE_FALSE')&&qn.correct_answer!==null){
-      correct=answer?answer.toLowerCase()===String(qn.correct_answer).trim().toLowerCase():false;
-      awarded=correct?Number(qn.points):0;
+  if(!Number.isSafeInteger(id)||!answers||typeof answers!=='object'||Array.isArray(answers))return res.status(400).json({error:'Invalid submission'});
+  const conn=await pool.getConnection();
+  let attempt=null,score=0,total=0,percent=0;
+  try{
+    await conn.beginTransaction();
+    const [rows]=await conn.execute(`
+      SELECT a.*,e.ends_at,e.duration_minutes
+      FROM exam_attempts a JOIN exams e ON e.id=a.exam_id
+      WHERE a.exam_id=? AND a.user_id=? LIMIT 1 FOR UPDATE
+    `,[id,req.session.userId]);
+    attempt=rows[0];
+    if(!attempt){await conn.rollback();return res.status(404).json({error:'Exam attempt not found'});}
+    const [device]=await conn.execute('SELECT session_id FROM exam_attempt_devices WHERE attempt_id=? LIMIT 1',[attempt.id]);
+    if(device[0]&&device[0].session_id!==String(req.sessionID||'')){await conn.rollback();return res.status(409).json({error:'This exam is active on another device.',examInUse:true});}
+    if(attempt.status==='LOCKED'){await conn.rollback();return res.status(423).json({error:'Exam is locked. A Teacher must unlock it before submission.',examLocked:true});}
+    if(attempt.status!=='STARTED'){await conn.rollback();return res.status(400).json({error:'Exam already submitted'});}
+    const started=new Date(attempt.started_at).getTime();
+    const deadline=Math.min(...[
+      attempt.ends_at?cairoEpoch(attempt.ends_at):Infinity,
+      attempt.duration_minutes?started+Number(attempt.duration_minutes)*60000:Infinity
+    ]);
+    if(Date.now()>=deadline){
+      await conn.rollback();
+      await gradeAndMaybeFinalizeExamAttempt(attempt.id,false);
+      return res.status(403).json({error:'Time is over. The exam was submitted automatically.'});
     }
-    await q('INSERT INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE answer_text=VALUES(answer_text),is_correct=VALUES(is_correct),points_awarded=VALUES(points_awarded)',[attempt.id,qn.id,answer,correct,awarded]);
-    score+=awarded;
-  }
-  const total=questions.filter(x=>x.question_type==='MCQ'||x.question_type==='TRUE_FALSE').reduce((n,x)=>n+Number(x.points||0),0);
-  const percent=total?Math.round(score/total*100):0;
-  await q('UPDATE exam_attempts SET status=\'SUBMITTED\',score=?,submitted_at=NOW() WHERE id=?',[score,attempt.id]);
+    const [questions]=await conn.execute('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[id]);
+    const [savedRows]=await conn.execute('SELECT question_id,answer_text,image_size_bytes FROM exam_answers WHERE attempt_id=?',[attempt.id]);
+    const mergedAnswers=Object.fromEntries(savedRows.map(x=>[String(x.question_id),String(x.answer_text??'')]));
+    const photoAnswerIds=new Set(savedRows.filter(x=>Number(x.image_size_bytes)>0).map(x=>Number(x.question_id)));
+    Object.assign(mergedAnswers,answers);
+    for(const qn of questions){
+      const answer=String(mergedAnswers[String(qn.id)]??'').trim();
+      let correct=null,awarded=0;
+      const hasAnswer=!!answer||(qn.question_type==='LONG'&&photoAnswerIds.has(Number(qn.id)));
+      if(!hasAnswer)correct=false;
+      if((qn.question_type==='MCQ'||qn.question_type==='TRUE_FALSE')&&qn.correct_answer!==null){
+        correct=answer?answer.toLowerCase()===String(qn.correct_answer).trim().toLowerCase():false;
+        awarded=correct?Number(qn.points):0;
+      }
+      await conn.execute('INSERT INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded) VALUES(?,?,?,?,?) ON DUPLICATE KEY UPDATE answer_text=VALUES(answer_text),is_correct=VALUES(is_correct),points_awarded=VALUES(points_awarded)',[attempt.id,qn.id,answer,correct,awarded]);
+      score+=awarded;
+    }
+    total=questions.filter(x=>x.question_type==='MCQ'||x.question_type==='TRUE_FALSE').reduce((n,x)=>n+Number(x.points||0),0);
+    percent=total?Math.round(score/total*100):0;
+    const [updated]=await conn.execute("UPDATE exam_attempts SET status='SUBMITTED',score=?,submitted_at=NOW() WHERE id=? AND status='STARTED'",[score,attempt.id]);
+    if(!Number(updated?.affectedRows||0)){await conn.rollback();return res.status(409).json({error:'Exam state changed. Please reopen the Exam Center.'});}
+    await conn.commit();
+  }catch(e){
+    try{await conn.rollback()}catch{}
+    console.error('Exam submission failed:',e);
+    return res.status(500).json({error:'Could not submit the exam'});
+  }finally{conn.release();}
   await audit(req,'EXAM_SUBMITTED','exam',id,{score,total,percent});
   const [examOwner]=await q('SELECT title FROM exams WHERE id=? LIMIT 1',[id]);
-  if(examOwner[0]){const [teachers]=await q("SELECT id FROM users WHERE status='ACTIVE' AND id<>? AND (role='TEACHER' OR is_super_admin=1)",[req.session.userId]);await notifyUsers(teachers.map(x=>x.id),{type:'exam_submission',title:'Exam Submission',body:((await userById(req.session.userId))?.display_name||'A student')+' submitted '+examOwner[0].title,entityId:id,url:'/?view=exams&id='+id});}
+  if(examOwner[0]){
+    const [teachers]=await q("SELECT id FROM users WHERE status='ACTIVE' AND id<>? AND (role='TEACHER' OR is_super_admin=1)",[req.session.userId]);
+    await notifyUsers(teachers.map(x=>x.id),{type:'exam_submission',title:'Exam Submission',body:((await userById(req.session.userId))?.display_name||'A student')+' submitted '+examOwner[0].title,entityId:id,url:'/?view=exams&id='+id});
+  }
+  pushGlobalEvent('data-changed',{path:'/api/exams/'+id+'/submit',method:'POST',examId:id,attemptId:attempt.id,userId:req.session.userId});
   res.json({ok:true,score,total,percent});
 });
 
