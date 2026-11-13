@@ -1655,6 +1655,59 @@ app.post('/api/exams/:id/start', requireAuth, async(req,res)=>{
   return sendExamStart(res,exam,a[0]);
 });
 
+async function gradeAndMaybeFinalizeExamAttempt(attemptId,forceSubmit=false){
+  const conn=await pool.getConnection();
+  try{
+    await conn.beginTransaction();
+    const [attemptRows]=await conn.execute(`SELECT a.id,a.exam_id,a.user_id,a.status,a.started_at,a.submitted_at,e.ends_at,e.duration_minutes,e.title
+      FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.id=? FOR UPDATE`,[attemptId]);
+    const attempt=attemptRows[0];
+    if(!attempt){await conn.rollback();return null;}
+    if(!['STARTED','LOCKED'].includes(attempt.status)){await conn.commit();return {status:attempt.status,alreadyFinal:true};}
+    const started=new Date(attempt.started_at).getTime();
+    const deadlines=[attempt.ends_at?cairoEpoch(attempt.ends_at):Infinity,attempt.duration_minutes?started+Number(attempt.duration_minutes)*60000:Infinity];
+    const deadline=Math.min(...deadlines);
+    const expired=forceSubmit||Date.now()>=deadline;
+    const [questions]=await conn.execute('SELECT id,question_type,correct_answer,points FROM exam_questions WHERE exam_id=?',[attempt.exam_id]);
+    const [answers]=await conn.execute('SELECT question_id,answer_text,image_size_bytes FROM exam_answers WHERE attempt_id=?',[attempt.id]);
+    const byQuestion=new Map(answers.map(x=>[Number(x.question_id),x]));
+    let score=0,total=0;
+    for(const question of questions){
+      const saved=byQuestion.get(Number(question.id));
+      const answer=String(saved?.answer_text??'').trim();
+      if(['MCQ','TRUE_FALSE'].includes(question.question_type)){
+        const correct=!!answer&&answer.toLowerCase()===String(question.correct_answer??'').trim().toLowerCase();
+        const points=correct?Number(question.points||0):0;
+        total+=Number(question.points||0);score+=points;
+        await conn.execute(`INSERT INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded)
+          VALUES(?,?,?, ?,?) ON DUPLICATE KEY UPDATE is_correct=VALUES(is_correct),points_awarded=VALUES(points_awarded)`,
+          [attempt.id,question.id,answer,correct?1:0,points]);
+      }else if(expired&&!saved){
+        await conn.execute('INSERT IGNORE INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded) VALUES(?,?,NULL,NULL,0)',[attempt.id,question.id]);
+      }
+    }
+    if(expired){
+      await conn.execute("UPDATE exam_attempts SET status='SUBMITTED',score=?,submitted_at=COALESCE(submitted_at,NOW()) WHERE id=? AND status IN ('STARTED','LOCKED')",[score,attempt.id]);
+    }else{
+      await conn.execute('UPDATE exam_attempts SET score=? WHERE id=?',[score,attempt.id]);
+    }
+    await conn.commit();
+    if(expired){
+      try{await audit({session:{userId:attempt.user_id}},'EXAM_AUTO_SUBMITTED','exam',attempt.exam_id,{attemptId:attempt.id,score,total})}catch{}
+      try{
+        const [teachers]=await q("SELECT id FROM users WHERE status='ACTIVE' AND id<>? AND (role='TEACHER' OR is_super_admin=1)",[attempt.user_id]);
+        await notifyUsers(teachers.map(x=>x.id),{type:'exam_submission',title:'Exam Auto-Submitted',body:(await userById(attempt.user_id))?.display_name+' time expired for '+attempt.title,entityId:attempt.exam_id,url:'/?view=exams&id='+attempt.exam_id});
+      }catch{}
+      pushGlobalEvent('data-changed',{path:'/api/exams/'+attempt.exam_id+'/auto-submit',method:'POST',examId:attempt.exam_id,attemptId:attempt.id,userId:attempt.user_id});
+      pushUserEvent(attempt.user_id,'exam-auto-submitted',{examId:attempt.exam_id,attemptId:attempt.id});
+    }else{
+      pushGlobalEvent('data-changed',{path:'/api/exams/'+attempt.exam_id+'/autosave-grade',method:'PUT',examId:attempt.exam_id,attemptId:attempt.id,userId:attempt.user_id});
+    }
+    return {status:expired?'SUBMITTED':attempt.status,score,total,auto:expired};
+  }catch(e){try{await conn.rollback()}catch{};throw e}
+  finally{conn.release()}
+}
+
 async function sendExamStart(res,exam,attempt){
   const [questions]=await q('SELECT id,question_text,question_type,options_json,points,sort_order FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[exam.id]);
   const start=new Date(attempt.started_at).getTime();
