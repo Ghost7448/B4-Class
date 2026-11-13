@@ -1817,6 +1817,7 @@ app.post('/api/exams/:id/lock',requireAuth,async(req,res)=>{
   const id=Number(req.params.id);
   if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid exam'});
   const reason=String(req.body?.reason||'LEFT_EXAM').slice(0,60);
+  const answers=req.body?.answers&&typeof req.body.answers==='object'&&!Array.isArray(req.body.answers)?req.body.answers:{};
   const conn=await pool.getConnection();
   try{
     await conn.beginTransaction();
@@ -1830,6 +1831,13 @@ app.post('/api/exams/:id/lock',requireAuth,async(req,res)=>{
     if(attempt.status!=='STARTED'){
       await conn.commit();
       return res.json({ok:true,status:attempt.status});
+    }
+    const [questions]=await conn.execute('SELECT id FROM exam_questions WHERE exam_id=?',[id]);
+    const validIds=new Set(questions.map(x=>String(x.id)));
+    for(const [questionId,value] of Object.entries(answers)){
+      if(!validIds.has(String(questionId)))continue;
+      const answer=String(value??'').slice(0,20000);
+      await conn.execute('INSERT INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded) VALUES(?,?,?,NULL,0) ON DUPLICATE KEY UPDATE answer_text=VALUES(answer_text)',[attempt.id,Number(questionId),answer]);
     }
     const [locked]=await conn.execute(`
       UPDATE exam_attempts a JOIN exams e ON e.id=a.exam_id
