@@ -1314,7 +1314,6 @@ app.post('/api/admin/exams/:examId/submissions/:attemptId/unlock',requirePermiss
     }else{
       await conn.execute("UPDATE exam_attempts SET status='STARTED',lock_reason=NULL,paused_remaining_ms=NULL WHERE id=? AND exam_id=? AND status='LOCKED'",[attemptId,examId]);
     }
-    await conn.execute('DELETE FROM exam_attempt_devices WHERE attempt_id=?',[attemptId]);
     await conn.commit();
   }catch(e){
     try{await conn.rollback()}catch{}
@@ -1706,28 +1705,51 @@ app.get('/api/exams/:id', requireAuth, async(req,res)=>{
 });
 
 app.post('/api/exams/:id/start', requireAuth, async(req,res)=>{
-  const id=Number(req.params.id); const now=new Date();
-  await q('CREATE TABLE IF NOT EXISTS exam_attempt_devices (attempt_id BIGINT UNSIGNED NOT NULL PRIMARY KEY, session_id VARCHAR(128) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, CONSTRAINT fk_exam_attempt_devices_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
-  const [ex]=await q('SELECT * FROM exams WHERE id=? AND class_name=\'B4\' LIMIT 1',[id]); const exam=ex[0];
-  if(!exam) return res.status(404).json({error:'Exam not found'});
-  const startMs=cairoEpoch(exam.starts_at),endMs=cairoEpoch(exam.ends_at);
-  if(startMs!==null&&now.getTime()<startMs)return res.status(403).json({error:'This exam is not open yet.',examClosed:true});
-  if(endMs!==null&&now.getTime()>=endMs)return res.status(403).json({error:'This exam is closed. You cannot start or submit it now.',examClosed:true});
-  const [existing]=await q('SELECT * FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
-  if(existing[0]){
-    const [deviceRows]=await q('SELECT session_id FROM exam_attempt_devices WHERE attempt_id=? LIMIT 1',[existing[0].id]);
-    if(deviceRows[0]&&deviceRows[0].session_id!==String(req.sessionID||''))return res.status(409).json({error:'This exam is already open on another device. Close it there or contact your Teacher.',examInUse:true});
-    await q('INSERT INTO exam_attempt_devices(attempt_id,session_id) VALUES(?,?) ON DUPLICATE KEY UPDATE session_id=VALUES(session_id)',[existing[0].id,String(req.sessionID||'')]);
-    if(existing[0].status==='LOCKED'){
-      return res.status(423).json({error:'Exam Locked. A Teacher must unlock this attempt before you can continue.',examLocked:true});
+  const id=Number(req.params.id),deviceSession=String(req.sessionID||'');
+  const now=new Date();
+  if(!Number.isSafeInteger(id)||!deviceSession)return res.status(400).json({error:'Invalid exam or device session'});
+  await q("CREATE TABLE IF NOT EXISTS exam_attempt_devices (attempt_id BIGINT UNSIGNED NOT NULL PRIMARY KEY, session_id VARCHAR(128) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, CONSTRAINT fk_exam_attempt_devices_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  const conn=await pool.getConnection();
+  let exam=null,attempt=null;
+  try{
+    await conn.beginTransaction();
+    const [ex]=await conn.execute("SELECT * FROM exams WHERE id=? AND class_name='B4' LIMIT 1",[id]);
+    exam=ex[0];
+    if(!exam){await conn.rollback();return res.status(404).json({error:'Exam not found'});}
+    const startMs=cairoEpoch(exam.starts_at),endMs=cairoEpoch(exam.ends_at);
+    if(startMs!==null&&now.getTime()<startMs){await conn.rollback();return res.status(403).json({error:'This exam is not open yet.',examClosed:true});}
+    if(endMs!==null&&now.getTime()>=endMs){await conn.rollback();return res.status(403).json({error:'This exam is closed. You cannot start or submit it now.',examClosed:true});}
+    const [existing]=await conn.execute('SELECT * FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1 FOR UPDATE',[id,req.session.userId]);
+    if(existing[0]){
+      attempt=existing[0];
+      const [deviceRows]=await conn.execute('SELECT session_id FROM exam_attempt_devices WHERE attempt_id=? LIMIT 1 FOR UPDATE',[attempt.id]);
+      if(deviceRows[0]&&deviceRows[0].session_id!==deviceSession){
+        await conn.rollback();
+        return res.status(409).json({error:'This exam is already open on another device. Continue on the device where you first opened it.',examInUse:true});
+      }
+      if(!deviceRows[0])await conn.execute('INSERT INTO exam_attempt_devices(attempt_id,session_id) VALUES(?,?)',[attempt.id,deviceSession]);
+      if(attempt.status==='LOCKED'){
+        await conn.commit();
+        return res.status(423).json({error:'Exam Locked. A Teacher must unlock this attempt before you can continue.',examLocked:true});
+      }
+      if(attempt.status!=='STARTED'){
+        await conn.commit();
+        return res.status(403).json({error:'You have already submitted this exam'});
+      }
+    }else{
+      const [created]=await conn.execute("INSERT INTO exam_attempts(exam_id,user_id,status) VALUES(?,?,'STARTED')",[id,req.session.userId]);
+      const [createdRows]=await conn.execute('SELECT * FROM exam_attempts WHERE id=? LIMIT 1',[created.insertId]);
+      attempt=createdRows[0];
+      await conn.execute('INSERT INTO exam_attempt_devices(attempt_id,session_id) VALUES(?,?)',[attempt.id,deviceSession]);
     }
-    if(existing[0].status!=='STARTED')return res.status(403).json({error:'You have already submitted this exam'});
-    return sendExamStart(res,exam,existing[0]);
-  }
-  const [r]=await q('INSERT INTO exam_attempts(exam_id,user_id,status) VALUES(?,?,\'STARTED\')',[id,req.session.userId]);
-  await q('INSERT INTO exam_attempt_devices(attempt_id,session_id) VALUES(?,?)',[r.insertId,String(req.sessionID||'')]);
-  const [a]=await q('SELECT * FROM exam_attempts WHERE id=?',[r.insertId]);
-  return sendExamStart(res,exam,a[0]);
+    await conn.commit();
+  }catch(e){
+    try{await conn.rollback()}catch{}
+    if(e?.code==='ER_DUP_ENTRY'||e?.code==='ER_LOCK_DEADLOCK')return res.status(409).json({error:'An exam attempt is already being opened for this account. Refresh Exam Center and try again.',examInUse:true});
+    console.error('Exam start/device binding failed:',e);
+    return res.status(500).json({error:'Could not start this exam'});
+  }finally{conn.release();}
+  return sendExamStart(res,exam,attempt);
 });
 
 async function gradeAndMaybeFinalizeExamAttempt(attemptId,forceSubmit=false){
@@ -1822,12 +1844,17 @@ app.post('/api/exams/:id/lock',requireAuth,async(req,res)=>{
   try{
     await conn.beginTransaction();
     const [rows]=await conn.execute(`
-      SELECT a.id,a.status,e.duration_minutes
+      SELECT a.id,a.user_id,a.status,e.duration_minutes
       FROM exam_attempts a JOIN exams e ON e.id=a.exam_id
       WHERE a.exam_id=? AND a.user_id=? LIMIT 1 FOR UPDATE
     `,[id,req.session.userId]);
     const attempt=rows[0];
     if(!attempt){await conn.rollback();return res.status(404).json({error:'Exam attempt not found'});}
+    const [deviceRows]=await conn.execute('SELECT session_id FROM exam_attempt_devices WHERE attempt_id=? LIMIT 1',[attempt.id]);
+    if(deviceRows[0]&&deviceRows[0].session_id!==String(req.sessionID||'')){
+      await conn.rollback();
+      return res.status(409).json({error:'This exam is active on another device.',examInUse:true});
+    }
     if(attempt.status!=='STARTED'){
       await conn.commit();
       return res.json({ok:true,status:attempt.status});
@@ -1852,6 +1879,7 @@ app.post('/api/exams/:id/lock',requireAuth,async(req,res)=>{
     if(Number(locked?.affectedRows||0)){
       await audit(req,'EXAM_LOCKED','exam',id,{attemptId:attempt.id,reason});
       pushGlobalEvent('data-changed',{path:'/api/exams/'+id+'/lock',method:'POST',examId:id,attemptId:attempt.id});
+      pushUserEvent(attempt.user_id,'exam-locked',{examId:id,attemptId:attempt.id,status:'LOCKED',reason});
     }
     res.json({ok:true,status:'LOCKED'});
   }catch(e){
@@ -1865,8 +1893,9 @@ const examPhotoUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:2*
 app.post('/api/exams/:id/questions/:questionId/image',requireAuth,examPhotoUpload.single('image'),async(req,res)=>{
   const examId=Number(req.params.id),questionId=Number(req.params.questionId);
   if(!req.file)return res.status(400).json({error:'Please take or choose a photo'});
-  const [attemptRows]=await q("SELECT a.id,a.status FROM exam_attempts a WHERE a.exam_id=? AND a.user_id=? LIMIT 1",[examId,req.session.userId]);
+  const [attemptRows]=await q("SELECT a.id,a.status,d.session_id FROM exam_attempts a LEFT JOIN exam_attempt_devices d ON d.attempt_id=a.id WHERE a.exam_id=? AND a.user_id=? LIMIT 1",[examId,req.session.userId]);
   const attempt=attemptRows[0];
+  if(attempt?.session_id&&attempt.session_id!==String(req.sessionID||''))return res.status(409).json({error:'This exam is active on another device.',examInUse:true});
   if(!attempt||attempt.status!=='STARTED')return res.status(403).json({error:'Exam attempt is locked or no longer editable'});
   const [questionRows]=await q("SELECT id FROM exam_questions WHERE id=? AND exam_id=? AND question_type='LONG' LIMIT 1",[questionId,examId]);
   if(!questionRows[0])return res.status(404).json({error:'Long-answer question not found'});
@@ -1977,6 +2006,7 @@ app.post('/api/exams/:id/submit',requireAuth,async(req,res)=>{
     await notifyUsers(teachers.map(x=>x.id),{type:'exam_submission',title:'Exam Submission',body:((await userById(req.session.userId))?.display_name||'A student')+' submitted '+examOwner[0].title,entityId:id,url:'/?view=exams&id='+id});
   }
   pushGlobalEvent('data-changed',{path:'/api/exams/'+id+'/submit',method:'POST',examId:id,attemptId:attempt.id,userId:req.session.userId});
+  pushUserEvent(req.session.userId,'exam-submitted',{examId:id,attemptId:attempt.id,status:'SUBMITTED'});
   res.json({ok:true,score,total,percent});
 });
 
