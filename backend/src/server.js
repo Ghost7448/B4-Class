@@ -1777,7 +1777,8 @@ app.put('/api/exams/:id/save',requireAuth,async(req,res)=>{
       await conn.execute('INSERT INTO exam_answers(attempt_id,question_id,answer_text,is_correct,points_awarded) VALUES(?,?,?,NULL,0) ON DUPLICATE KEY UPDATE answer_text=VALUES(answer_text)',[attempt.id,Number(questionId),answer]);
     }
     await conn.commit();
-    res.json({ok:true,savedAt:new Date().toISOString()});
+    const grading=await gradeAndMaybeFinalizeExamAttempt(attempt.id,false);
+    res.json({ok:true,savedAt:new Date().toISOString(),status:grading?.status||attempt.status,score:grading?.score??null,autoSubmitted:!!grading?.auto});
   }catch(e){await conn.rollback();res.status(500).json({error:'Could not save exam answers'});}
   finally{conn.release();}
 });
