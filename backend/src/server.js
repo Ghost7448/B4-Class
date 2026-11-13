@@ -319,6 +319,7 @@ const PERMISSION_DEFS = [
 ];
 
 async function ensurePermissionSchema() {
+  await q("CREATE TABLE IF NOT EXISTS b4_account_link_tokens(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,token_hash CHAR(64) NOT NULL UNIQUE,expires_at DATETIME NOT NULL,used_at DATETIME NULL,created_by BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE,INDEX idx_account_link_expiry(expires_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_exam_drafts(user_id BIGINT UNSIGNED PRIMARY KEY,draft_json LONGTEXT NOT NULL,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_bug_reports(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NULL,reporter_name VARCHAR(120) NOT NULL,reporter_role VARCHAR(20) NOT NULL,description TEXT NOT NULL,status ENUM('OPEN','IN_PROGRESS','RESOLVED') NOT NULL DEFAULT 'OPEN',resolved_by BIGINT UNSIGNED NULL,resolved_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_bug_reports_status(status),INDEX idx_bug_reports_created(created_at),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,FOREIGN KEY(resolved_by) REFERENCES users(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_bug_report_files(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,report_id BIGINT UNSIGNED NOT NULL,filename VARCHAR(255) NOT NULL,mime_type VARCHAR(120) NOT NULL,data LONGBLOB NOT NULL,size_bytes BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(report_id) REFERENCES b4_bug_reports(id) ON DELETE CASCADE,INDEX idx_bug_report_files_report(report_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -1788,6 +1789,43 @@ app.get('/api/admin/accounts',requirePermission('MANAGE_ACCOUNTS'),async(req,res
     LEFT JOIN activation_keys ak ON ak.used_user_id=u.id ORDER BY u.display_name`);
   res.json({accounts:rows});
 });
+app.post('/api/admin/accounts/:id/one-time-link',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
+  const id=Number(req.params.id);
+  if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid account'});
+  const [users]=await q("SELECT id,role,status,is_super_admin FROM users WHERE id=? LIMIT 1",[id]);
+  const target=users[0];
+  if(!target)return res.status(404).json({error:'Account not found'});
+  if(target.role!=='STUDENT'||Number(target.is_super_admin)===1)return res.status(400).json({error:'One-time links are only available for student accounts'});
+  if(target.status!=='ACTIVE')return res.status(400).json({error:'This account is not active'});
+  const token=crypto.randomBytes(32).toString('base64url');
+  const hash=crypto.createHash('sha256').update(token).digest('hex');
+  await q('DELETE FROM b4_account_link_tokens WHERE user_id=? AND used_at IS NULL',[id]);
+  await q('INSERT INTO b4_account_link_tokens(user_id,token_hash,expires_at,created_by) VALUES(?,?,DATE_ADD(NOW(),INTERVAL 15 MINUTE),?)',[id,hash,req.session.userId]);
+  await audit(req,'STUDENT_ACCOUNT_LINK_CREATED','user',id,{expiresInMinutes:15});
+  res.json({ok:true,token,expiresInMinutes:15});
+});
+app.post('/api/auth/account-link/:token',async(req,res)=>{
+  const token=String(req.params.token||'');
+  if(!/^[A-Za-z0-9_-]{40,60}$/.test(token))return res.status(400).json({error:'Invalid account link'});
+  const hash=crypto.createHash('sha256').update(token).digest('hex');
+  const conn=await pool.getConnection();
+  try{
+    await conn.beginTransaction();
+    const [used]=await conn.execute("UPDATE b4_account_link_tokens SET used_at=NOW() WHERE token_hash=? AND used_at IS NULL AND expires_at>NOW()",[hash]);
+    if(!used.affectedRows){await conn.rollback();return res.status(410).json({error:'This account link is invalid, expired, or already used'});}
+    const [rows]=await conn.execute("SELECT u.id,u.role,u.status,u.session_version FROM b4_account_link_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=? LIMIT 1",[hash]);
+    const user=rows[0];
+    if(!user||user.role!=='STUDENT'||user.status!=='ACTIVE'){await conn.rollback();return res.status(410).json({error:'This student account is unavailable'});}
+    await conn.commit();
+    await new Promise((resolve,reject)=>req.session.regenerate(err=>err?reject(err):resolve()));
+    req.session.userId=user.id;
+    req.session.sessionVersion=Number(user.session_version||0);
+    await new Promise((resolve,reject)=>req.session.save(err=>err?reject(err):resolve()));
+    res.json({ok:true});
+  }catch(e){try{await conn.rollback()}catch{};console.error('One-time account link failed:',e);res.status(500).json({error:'Could not open this account link'});}
+  finally{conn.release();}
+});
+
 app.delete('/api/admin/accounts/:id',requirePermission('MANAGE_ACCOUNTS'),async(req,res)=>{
   const id=Number(req.params.id);
   if(!Number.isSafeInteger(id)) return res.status(400).json({error:'Invalid account'});
