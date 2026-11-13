@@ -1635,12 +1635,17 @@ app.get('/api/exams/:id', requireAuth, async(req,res)=>{
 
 app.post('/api/exams/:id/start', requireAuth, async(req,res)=>{
   const id=Number(req.params.id); const now=new Date();
+  await q('CREATE TABLE IF NOT EXISTS exam_attempt_devices (attempt_id BIGINT UNSIGNED NOT NULL PRIMARY KEY, session_id VARCHAR(128) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, CONSTRAINT fk_exam_attempt_devices_attempt FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
   const [ex]=await q('SELECT * FROM exams WHERE id=? AND class_name=\'B4\' LIMIT 1',[id]); const exam=ex[0];
   if(!exam) return res.status(404).json({error:'Exam not found'});
-  const endMs=cairoEpoch(exam.ends_at);
-  if(endMs!==null&&now.getTime()>=endMs) return res.status(403).json({error:'Exam deadline has passed'});
+  const startMs=cairoEpoch(exam.starts_at),endMs=cairoEpoch(exam.ends_at);
+  if(startMs!==null&&now.getTime()<startMs)return res.status(403).json({error:'This exam is not open yet.',examClosed:true});
+  if(endMs!==null&&now.getTime()>=endMs)return res.status(403).json({error:'This exam is closed. You cannot start or submit it now.',examClosed:true});
   const [existing]=await q('SELECT * FROM exam_attempts WHERE exam_id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
   if(existing[0]){
+    const [deviceRows]=await q('SELECT session_id FROM exam_attempt_devices WHERE attempt_id=? LIMIT 1',[existing[0].id]);
+    if(deviceRows[0]&&deviceRows[0].session_id!==String(req.sessionID||''))return res.status(409).json({error:'This exam is already open on another device. Close it there or contact your Teacher.',examInUse:true});
+    await q('INSERT INTO exam_attempt_devices(attempt_id,session_id) VALUES(?,?) ON DUPLICATE KEY UPDATE session_id=VALUES(session_id)',[existing[0].id,String(req.sessionID||'')]);
     if(existing[0].status==='LOCKED'){
       const resumableReasons=['LEFT_EXAM','WINDOW_RESIZED','SPLIT_SCREEN','FULLSCREEN_EXIT','POPUP_VIEW'];
       if(!resumableReasons.includes(String(existing[0].lock_reason||'')))return res.status(423).json({error:'Exam Locked. A Teacher must unlock this attempt.',examLocked:true});
@@ -1651,6 +1656,7 @@ app.post('/api/exams/:id/start', requireAuth, async(req,res)=>{
     return sendExamStart(res,exam,existing[0]);
   }
   const [r]=await q('INSERT INTO exam_attempts(exam_id,user_id,status) VALUES(?,?,\'STARTED\')',[id,req.session.userId]);
+  await q('INSERT INTO exam_attempt_devices(attempt_id,session_id) VALUES(?,?)',[r.insertId,String(req.sessionID||'')]);
   const [a]=await q('SELECT * FROM exam_attempts WHERE id=?',[r.insertId]);
   return sendExamStart(res,exam,a[0]);
 });
