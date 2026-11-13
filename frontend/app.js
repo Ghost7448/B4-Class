@@ -2152,7 +2152,13 @@ async function examEdit(id){
 }
 async function saveExam(e,id){
   e.preventDefault();collectExamQuestions();
-  const qs=examDraft.map(q=>({id:q.id||null,questionText:q.questionText,questionType:q.questionType,options:q.questionType==='MCQ'?(q.options||[]).filter(v=>String(v||'').trim()):[],correctAnswer:q.questionType==='TRUE_FALSE'?String(q.correctAnswer||'').trim().toUpperCase():(q.correctAnswer||null),points:Number(q.points||1)})).filter(q=>q.questionText);
+  const qs=examDraft.map((q,i)=>{
+    const card=document.querySelector('[data-qindex="'+i+'"]');
+    const type=card?.querySelector('[data-qtype]')?.value||q.questionType;
+    const selectedTrueFalse=type==='TRUE_FALSE'?card?.querySelector('input[name="correct-'+i+'"]:checked')?.value:null;
+    const correctAnswer=type==='TRUE_FALSE'?String(selectedTrueFalse??q.correctAnswer??'').trim().toUpperCase():(type==='MCQ'?(q.correctAnswer||null):null);
+    return {id:q.id||null,questionText:card?.querySelector('[data-qtext]')?.value?.trim()??q.questionText,questionType:type,options:type==='MCQ'?(q.options||[]).filter(v=>String(v||'').trim()):[],correctAnswer,points:Number(card?.querySelector('[data-qpoints]')?.value||q.points||1)};
+  }).filter(q=>q.questionText);
   if(!qs.length)return toast('Add at least one question');
   if(qs.some(q=>q.questionType==='MCQ'&&(!q.options||q.options.length<2||!q.correctAnswer)))return toast('Each MCQ needs at least 2 options and a correct answer');
   if(qs.some(q=>q.questionType==='TRUE_FALSE'&&!['TRUE','FALSE'].includes(String(q.correctAnswer||'').trim().toUpperCase())))return toast('Choose TRUE or FALSE for every true/false question');
