@@ -519,6 +519,7 @@ async function syncLiveData(){
     if(!changed)return;
     if(S.view==='admin:logs'){loadLogs({silent:true});return}
     if(S.view==='admin:reports'){loadReports({silent:true});return}
+    if(S.view==='admin:permissions'){loadPermissions();return}
     if(S.view==='admin:accounts'){loadAccounts({silent:true});return}
     if($('#back')?.classList.contains('show'))return;
     if(S.view==='chat'||S.view==='teacherChat')return;
@@ -1565,6 +1566,10 @@ async function loadPermissions(){
   try{
     const d=await api('/api/admin/users');S.users=d.users||[];
     if(!r.isConnected||S.view!=='admin:permissions')return;
+    const signature=JSON.stringify(S.users.map(u=>({id:u.id,name:u.display_name,official:u.official_name,role:u.role,super:Number(u.is_super_admin),student:u.student_code,teacher:u.teacher_code,permissions:[...(u.direct_permissions||[])].sort()})));
+    if(window.permissionsRenderedRoot===r&&window.permissionsRenderedSignature===signature)return;
+    window.permissionsRenderedRoot=r;
+    window.permissionsRenderedSignature=signature;
     const html='<div class="grid c2">'+S.users.map(u=>{
       const superAdmin=Number(u.is_super_admin)===1, administrator=(u.direct_permissions||[]).includes('ADMINISTRATOR');
       return '<div class="card permission-user" data-user-id="'+u.id+'"><div class="head"><div><b>'+esc(u.display_name)+'</b><p class="muted identity-line">'+((u.student_code||u.teacher_code)?'<span class="identity-code">'+esc(u.student_code||u.teacher_code)+'</span>':'')+' <span>'+esc(u.role)+'</span></p></div><span class="badge">'+(superAdmin?'SUPER ADMIN':(administrator?'ADMINISTRATOR':((u.direct_permissions||[]).length||0)+' direct'))+'</span></div><div class="permission-grid">'+PERMS.map(p=>'<label class="permission-tile '+(((u.direct_permissions||[]).includes(p[0])||superAdmin)?'is-on':'')+'"><input type="checkbox" class="permission-checkbox" data-perm="'+p[0]+'" '+(((u.direct_permissions||[]).includes(p[0])||superAdmin)?'checked':'')+' '+(superAdmin?'disabled':'')+'><span>'+p[1]+'</span></label>').join('')+'</div>'+(superAdmin?'<div class="notice">Super Admin has every permission automatically.</div>':'<button class="btn primary" onclick="savePermissions('+u.id+')">Save permissions</button>')+'</div>';
@@ -1604,7 +1609,7 @@ async function saveRoleLink(e,id,role){
     close();await loadMe();await loadRoles();toast('Role and profile link updated ✓');
   }catch(e){toast(e.message)}
 }
-async function savePermissions(id){try{const card=[...document.querySelectorAll('.permission-user')].find(x=>x.dataset.userId===String(id));const codes=card?[...card.querySelectorAll('[data-perm]:checked')].map(x=>x.dataset.perm):[];await api('/api/admin/users/'+id+'/permissions',{method:'PUT',body:JSON.stringify({permissionCodes:codes})});toast('Permissions saved ✓');loadPermissions()}catch(e){toast(e.message)}}
+async function savePermissions(id){try{const card=[...document.querySelectorAll('.permission-user')].find(x=>x.dataset.userId===String(id));const codes=card?[...card.querySelectorAll('[data-perm]:checked')].map(x=>x.dataset.perm):[];await api('/api/admin/users/'+id+'/permissions',{method:'PUT',body:JSON.stringify({permissionCodes:codes})});window.permissionsRenderedSignature=null;toast('Permissions saved ✓');loadPermissions()}catch(e){toast(e.message)}}
 async function loadAccounts(options={}){
   const r=$('#adminRoot');
   if(!r)return;
