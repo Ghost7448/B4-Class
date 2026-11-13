@@ -609,6 +609,46 @@ function ensureGlobalRealtime(){
     });
     window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
     window.globalRealtimeStream.addEventListener('permissions-changed',()=>syncLiveData(true));
+    window.globalRealtimeStream.addEventListener('exam-locked',(event)=>{
+      try{
+        const data=JSON.parse(event.data||'{}');
+        const examId=Number(data.examId||0);
+        if(!examId)return;
+        if(Number(S.examRun?.id)===examId&&S.view==='exam-run'){
+          clearInterval(window.examTimer);clearTimeout(examSaveTimer);
+          S.examRun={...S.examRun,locked:true,lockMessage:'This exam was locked on the device where it was started.'};
+          S.view='exam-locked';window.examExitAllowed=true;
+          if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
+          render();window.scrollTo({top:0,behavior:'smooth'});
+        }else if(Number(S.pendingExamId)===examId&&S.view==='exam-fullscreen'){
+          S.pendingExamId=null;S.examRun={id:examId,locked:true,lockMessage:'This exam was locked on another device.'};
+          S.view='exam-locked';render();
+        }
+        if(S.view==='exams')syncExamCenter();
+      }catch{}
+    });
+    window.globalRealtimeStream.addEventListener('exam-submitted',(event)=>{
+      try{
+        const data=JSON.parse(event.data||'{}');
+        const examId=Number(data.examId||0);
+        if(examId&&Number(S.examRun?.id)===examId&&S.view==='exam-run'){
+          clearInterval(window.examTimer);clearTimeout(examSaveTimer);
+          window.examExitAllowed=true;S.examRun=null;
+          loadStudentExamAnswers(examId);
+        }
+      }catch{}
+    });
+    window.globalRealtimeStream.addEventListener('exam-auto-submitted',(event)=>{
+      try{
+        const data=JSON.parse(event.data||'{}');
+        const examId=Number(data.examId||0);
+        if(examId&&Number(S.examRun?.id)===examId&&S.view==='exam-run'){
+          clearInterval(window.examTimer);clearTimeout(examSaveTimer);
+          window.examExitAllowed=true;S.examRun=null;
+          loadStudentExamAnswers(examId);
+        }
+      }catch{}
+    });
     window.globalRealtimeStream.addEventListener('exam-unlocked',async(event)=>{
       try{
         const data=JSON.parse(event.data||'{}');
