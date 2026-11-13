@@ -1708,6 +1708,21 @@ async function gradeAndMaybeFinalizeExamAttempt(attemptId,forceSubmit=false){
   finally{conn.release()}
 }
 
+let examDeadlineSweepBusy=false;
+setInterval(async()=>{
+  if(examDeadlineSweepBusy)return;
+  examDeadlineSweepBusy=true;
+  try{
+    const [expired]=await q(`SELECT a.id FROM exam_attempts a JOIN exams e ON e.id=a.exam_id
+      WHERE a.status IN ('STARTED','LOCKED') AND (
+        (e.duration_minutes IS NOT NULL AND a.started_at + INTERVAL e.duration_minutes MINUTE <= NOW())
+        OR (e.ends_at IS NOT NULL AND e.ends_at <= NOW())
+      ) ORDER BY a.id LIMIT 100`);
+    for(const row of expired)try{await gradeAndMaybeFinalizeExamAttempt(row.id,false)}catch(e){console.error('Exam auto-submit failed for attempt '+row.id,e)}
+  }catch(e){console.error('Exam deadline sweep failed:',e)}
+  finally{examDeadlineSweepBusy=false}
+},10000);
+
 async function sendExamStart(res,exam,attempt){
   const [questions]=await q('SELECT id,question_text,question_type,options_json,points,sort_order FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[exam.id]);
   const start=new Date(attempt.started_at).getTime();
@@ -1790,7 +1805,7 @@ app.post('/api/exams/:id/submit', requireAuth, async(req,res)=>{
   if(attempt.status==='LOCKED')return res.status(423).json({error:'Exam is locked. Reopen the exam to resume your saved answers.',examLocked:true});
   if(attempt.status!=='STARTED')return res.status(400).json({error:'Exam already submitted'});
   const started=new Date(attempt.started_at).getTime(),deadline=Math.min(...[attempt.ends_at?cairoEpoch(attempt.ends_at):Infinity,attempt.duration_minutes?started+Number(attempt.duration_minutes)*60000:Infinity]);
-  if(Date.now()>deadline){await q('UPDATE exam_attempts SET status=\'SUBMITTED\',submitted_at=NOW() WHERE id=?',[attempt.id]);return res.status(403).json({error:'Time is over. The exam was closed automatically.'});}
+  if(Date.now()>deadline){await gradeAndMaybeFinalizeExamAttempt(attempt.id,false);return res.status(403).json({error:'Time is over. The exam was submitted automatically.'});}
   const [questions]=await q('SELECT * FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[id]);
   const [savedRows]=await q('SELECT question_id,answer_text,image_size_bytes FROM exam_answers WHERE attempt_id=?',[attempt.id]);
   const mergedAnswers=Object.fromEntries(savedRows.map(x=>[String(x.question_id),String(x.answer_text??'')]));
