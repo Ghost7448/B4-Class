@@ -2086,7 +2086,7 @@ function examRunV(){
       const photoUrl=API+'/api/exams/'+Number(r.id)+'/questions/'+Number(q.id)+'/image';
       body=`<div class="exam-photo-answer"><span class="exam-photo-label">Your handwritten answer</span><p class="muted">Write your answer on paper, then take a clear photo.</p><input id="examLongPhoto${q.id}" class="exam-photo-input" type="file" accept="image/*" capture="environment" onpointerdown="beginExamCameraCapture()" ontouchstart="beginExamCameraCapture()" onclick="beginExamCameraCapture()" onchange="uploadLongAnswerPhoto(event,${Number(r.id)},${Number(q.id)})" oncancel="cancelExamCameraCapture()"><label class="btn primary exam-photo-button" for="examLongPhoto${q.id}" onpointerdown="beginExamCameraCapture()" ontouchstart="beginExamCameraCapture()" onclick="beginExamCameraCapture()">📷 ${hasPhoto?'Retake answer photo':'Open camera & take photo'}</label><div id="examLongPhotoStatus${q.id}" class="muted exam-photo-status">${hasPhoto?'Photo saved ✓':'No photo uploaded yet'}</div><img id="examLongPhotoPreview${q.id}" class="exam-photo-preview" ${hasPhoto?'src="'+photoUrl+'"':'hidden'} alt="Your answer photo"></div>`;
     }else{
-      body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="4" placeholder="Write your short answer here…">${esc(savedAnswer)}</textarea></label>`;
+      body=`<label class="exam-answer-box"><span>Your answer</span><textarea name="q${q.id}" rows="4" oninput="queueExamAnswerSave(${Number(r.id)})" placeholder="Write your short answer here…">${esc(savedAnswer)}</textarea></label>`;
     }
     return `<article class="exam-run-question"><div class="exam-question-top"><span class="question-number">Question ${i+1}</span><span class="badge">${esc(type==='TRUE_FALSE'?'TRUE / FALSE':type)}</span></div><h3>${esc(q.question_text)}</h3>${body}</article>`;
   }).join('');
@@ -2277,8 +2277,23 @@ function examAnswersV(){
     return '<article class="exam-answer-review '+state+'"><div class="head"><div><div class="exam-question-meta"><span class="question-number">Question '+(i+1)+'</span><span class="badge exam-type-badge">'+esc(type)+'</span></div><h3>'+esc(q.question_text)+'</h3></div><span class="answer-status">'+status+'</span></div><div class="answer-review-grid"><div class="answer-review-box"><small>Your answer</small><p>'+esc(q.answer_text||((q.question_type==='LONG'&&Number(q.image_size_bytes)>0)?'Photo answer attached':'No answer'))+'</p>'+(q.question_type==='LONG'&&Number(q.image_size_bytes)>0?'<img class="exam-review-photo" src="'+API+'/api/exams/'+Number(r.examId)+'/questions/'+q.id+'/image" alt="Your submitted answer">':'')+'</div><div class="answer-review-box"><small>'+((!manual)?'Correct answer':'Teacher answer')+'</small><p>'+esc(answerToShow)+'</p></div></div></article>';
   }).join('')+'</div>';
 }
-async function submissions(id){try{const d=await api('/api/admin/exams/'+id+'/submissions');S.examReview={examId:id,submissions:d.submissions||[]};S.view='exam-review';render();}catch(e){toast(e.message)}}
-async function openExamSubmission(examId,attemptId){try{const d=await api('/api/admin/exams/'+examId+'/submissions/'+attemptId);S.examReview={examId,detail:d};S.view='exam-review';render();}catch(e){toast(e.message)}}
+function startExamTeacherRefresh(examId,attemptId=null){
+  clearInterval(window.examTeacherRefreshTimer);
+  window.examTeacherRefreshTimer=setInterval(async()=>{
+    if(S.view!=='exam-review'||Number(S.examReview?.examId)!==Number(examId)){clearInterval(window.examTeacherRefreshTimer);return}
+    try{
+      if(attemptId){
+        const d=await api('/api/admin/exams/'+examId+'/submissions/'+attemptId+'?_='+Date.now(),{cache:'no-store'});
+        if(JSON.stringify(d)!==JSON.stringify(S.examReview?.detail)){S.examReview={examId,detail:d};render()}
+      }else{
+        const d=await api('/api/admin/exams/'+examId+'/submissions?_='+Date.now(),{cache:'no-store'});
+        if(JSON.stringify(d.submissions||[])!==JSON.stringify(S.examReview?.submissions||[])){S.examReview={examId,submissions:d.submissions||[]};render()}
+      }
+    }catch{}
+  },3000);
+}
+async function submissions(id){try{clearInterval(window.examTeacherRefreshTimer);const d=await api('/api/admin/exams/'+id+'/submissions');S.examReview={examId:id,submissions:d.submissions||[]};S.view='exam-review';render();startExamTeacherRefresh(id);}catch(e){toast(e.message)}}
+async function openExamSubmission(examId,attemptId){try{clearInterval(window.examTeacherRefreshTimer);const d=await api('/api/admin/exams/'+examId+'/submissions/'+attemptId);S.examReview={examId,detail:d};S.view='exam-review';render();startExamTeacherRefresh(examId,attemptId);}catch(e){toast(e.message)}}
 function unlockExamAttempt(examId,attemptId){
   if(!confirm('Unlock this exam attempt for the student?'))return;
   api('/api/admin/exams/'+examId+'/submissions/'+attemptId+'/unlock',{method:'POST'}).then(()=>{toast('Exam unlocked');openExamSubmission(examId,attemptId)}).catch(e=>toast(e.message));
