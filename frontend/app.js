@@ -2073,7 +2073,7 @@ function bindExamBuilderDraftAutosave(){
 }
 
 function examInputDate(v){return v?String(v).replace(' ','T').slice(0,16):''}
-function examDraftFromQuestion(q){return {questionText:q?.question_text||'',questionType:q?.question_type||'MCQ',options:Array.isArray(q?.options_json)?q.options_json:[],correctAnswer:q?.correct_answer||'',points:Number(q?.points||1)}}
+function examDraftFromQuestion(q){return {id:Number(q?.id)||null,questionText:q?.question_text||'',questionType:q?.question_type||'MCQ',options:Array.isArray(q?.options_json)?q.options_json:[],correctAnswer:q?.correct_answer||'',points:Number(q?.points||1)}}
 function examQuestionHTML(q,i){
   const type=q.questionType||'MCQ';
   const options=(q.options||['Option A','Option B']).map(x=>String(x||''));
@@ -2128,7 +2128,7 @@ async function examEdit(id){
 }
 async function saveExam(e,id){
   e.preventDefault();collectExamQuestions();
-  const qs=examDraft.map(q=>({questionText:q.questionText,questionType:q.questionType,options:q.questionType==='MCQ'?q.options:[],correctAnswer:q.correctAnswer||null,points:Number(q.points||1)})).filter(q=>q.questionText);
+  const qs=examDraft.map(q=>({id:q.id||null,questionText:q.questionText,questionType:q.questionType,options:q.questionType==='MCQ'?q.options:[],correctAnswer:q.correctAnswer||null,points:Number(q.points||1)})).filter(q=>q.questionText);
   if(!qs.length)return toast('Add at least one question');
   if(qs.some(q=>q.questionType==='MCQ'&&(!q.options||q.options.length<2||!q.correctAnswer)))return toast('Each MCQ needs at least 2 options and a correct answer');
   if(qs.some(q=>q.questionType==='TRUE_FALSE'&&!q.correctAnswer))return toast('Choose TRUE or FALSE for every true/false question');
