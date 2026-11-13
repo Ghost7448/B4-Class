@@ -570,7 +570,7 @@ async function syncLiveData(forceFull=false){
     if(S.view==='chat'||S.view==='teacherChat')return;
     if(S.view==='exam-run'||S.view==='exam-result'||S.view==='exam-answers'||S.view==='exam-review')return;
     if(!changed)return;
-    if(S.view==='admin:logs'){loadLogs({silent:true});return}
+    if(S.view==='admin:logs'){loadLogs({silent:true});return}if(S.view==='teacher:exam-logs'){teacherExamLogsLoad({silent:true});return}
     if(S.view==='admin:reports'){loadReports({silent:true});return}
     if(S.view==='admin:permissions'){loadPermissions();return}
     if(S.view==='admin:accounts'){loadAccounts({silent:true});return}
@@ -861,7 +861,7 @@ function messageHTML(m){
   const edited=m.edited_at?'<small class="edited">edited</small>':'';
   return '<div class="msg '+(S.me&&Number(m.user_id)===Number(S.me.id)?'me':'')+'" data-message-id="'+esc(m.id)+'" onclick="messageMenu(event,'+m.id+')"><img class="avatar" src="'+esc(m.avatar_url||BROKEN_IMAGE_FALLBACK)+'"><div><div class="chat-name-line"><b>'+esc(m.display_name||'Deleted user')+'</b>'+badgeHTML(m.badges,true)+'</div>'+reply+'<div class="bubble">'+esc(m.body||'')+edited+'</div><small class="muted">'+esc(chatTime(m.created_at))+'</small></div></div>'
 } function adminV(){const cards=[['roles','Roles','MANAGE_ROLES'],['permissions','Permissions','MANAGE_PERMISSIONS'],['accounts','Accounts','MANAGE_ACCOUNTS'],['students','Manage Students','MANAGE_STUDENTS'],['teachers','Manage Teachers','MANAGE_TEACHERS'],['keys','Activation Keys','MANAGE_KEYS'],['badges','Manage Badges','MANAGE_BADGES'],['subjects','Manage Subjects','MANAGE_SUBJECTS'],['schedule','Manage Schedule','MANAGE_SCHEDULE'],['admins','Manage Admins','MANAGE_ADMINS'],['logs','View Logs','VIEW_LOGS'],['reports',S.lang==='ar'?'البلاغات':'Reports','MANAGE_REPORTS'],['site','Manage Site','MANAGE_SITE']];if(Number(S.me?.is_super_admin)===1||can('MANAGE_DEVELOPERS'))cards.push(['developers','Manage Developers','MANAGE_DEVELOPERS']);return title(t('admin'),'Control center')+'<div class="grid c3 admin-cards">'+cards.filter(x=>can(x[2])).map(x=>'<button class="card admin-card" onclick="go(\'admin:'+x[0]+'\')"><span>◈</span><h3>'+x[1]+'</h3><small>Open management</small></button>').join('')+'</div>'}
-function teacherCenterV(){return title(t('teacherCenter'),'Teacher tools')+'<div class="grid c3">'+[['assignments','Create assignments','MANAGE_ASSIGNMENTS'],['assignment-submissions','Assignment submissions','MANAGE_ASSIGNMENTS'],['resources','Publish resources/PDFs','MANAGE_RESOURCES'],['exams','Create exams','MANAGE_EXAMS'],['announcements','Publish announcements','MANAGE_ANNOUNCEMENTS'],['subjects','Manage teaching subjects','MANAGE_SUBJECTS'],['schedule','View schedule','VIEW_CLASS']].filter(x=>can(x[2])).map(x=>'<button class="card admin-card" onclick="'+(x[0]==='assignment-submissions'?'assignmentSubmissions()':'go(\''+x[0]+'\')')+'"><span>✦</span><h3>'+x[1]+'</h3></button>').join('')+'</div>'}
+function teacherCenterV(){const ar=S.lang==='ar';return title(t('teacherCenter'),'Teacher tools')+'<div class="grid c3">'+[['assignments',ar?'إنشاء واجبات':'Create assignments','MANAGE_ASSIGNMENTS'],['assignment-submissions',ar?'تسليمات الواجبات':'Assignment submissions','MANAGE_ASSIGNMENTS'],['resources',ar?'نشر المصادر':'Publish resources/PDFs','MANAGE_RESOURCES'],['exams',ar?'إنشاء الامتحانات':'Create exams','MANAGE_EXAMS'],['exam-logs',ar?'سجلات الامتحانات':'Exam Logs','MANAGE_EXAMS'],['announcements',ar?'نشر الإعلانات':'Publish announcements','MANAGE_ANNOUNCEMENTS'],['subjects',ar?'إدارة المواد':'Manage teaching subjects','MANAGE_SUBJECTS'],['schedule',ar?'عرض الجدول':'View schedule','VIEW_CLASS']].filter(x=>can(x[2])).map(x=>'<button class="card admin-card" onclick="'+(x[0]==='assignment-submissions'?'assignmentSubmissions()':x[0]==='exam-logs'?'go(\\'teacher:exam-logs\\')':'go(\\''+x[0]+'\\')')+'"><span>'+(x[0]==='exam-logs'?'◷':'✦')+'</span><h3>'+x[1]+'</h3></button>').join('')+'</div>'}
 function settingsV(){
   const ar=S.lang==='ar';
   const ns=S.notificationSettings||{};
@@ -1001,18 +1001,18 @@ function render(){
   if(v==='admin:reports'){
     if(!window.b4ReportsLiveTimer)window.b4ReportsLiveTimer=setInterval(()=>{if(S.view==='admin:reports'&&!document.hidden)loadReports({silent:true})},5000);
   }else if(window.b4ReportsLiveTimer){clearInterval(window.b4ReportsLiveTimer);window.b4ReportsLiveTimer=null}
-  if(v==='admin:logs'){
+  if(v==='teacher:exam-logs'){if(!window.b4TeacherExamLogsTimer)window.b4TeacherExamLogsTimer=setInterval(()=>{if(S.view==='teacher:exam-logs'&&!document.hidden)teacherExamLogsLoad({silent:true})},5000);}else if(window.b4TeacherExamLogsTimer){clearInterval(window.b4TeacherExamLogsTimer);window.b4TeacherExamLogsTimer=null;}if(v==='admin:logs'){
     if(!window.b4LogsLiveTimer)window.b4LogsLiveTimer=setInterval(()=>{if(S.view==='admin:logs'&&!document.hidden)loadLogs({silent:true})},5000);
   }else if(window.b4LogsLiveTimer){clearInterval(window.b4LogsLiveTimer);window.b4LogsLiveTimer=null}
   morphHtml($('#nav'),buildNav());
-  let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-fullscreen'?examFullscreenV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-unavailable'?examUnavailableV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
+  let html=v==='teacher:exam-logs'?title(S.lang==='ar'?'سجلات الامتحانات':'Exam Logs',S.lang==='ar'?'سجل أنشطة الامتحانات فقط.':'Exam-related activity only.')+'<div id="teacherExamLogsRoot"></div>':v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-fullscreen'?examFullscreenV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-unavailable'?examUnavailableV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
   morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
   if(v==='dashboard')animateDashboardStats();
   applySuperAdminCrown();
   if(S.me?.avatar_url&&$('#topAvatar'))$('#topAvatar').src=S.me.avatar_url;
   if(v==='chat'){chatLoop();setupChatPosition('messages');setupChatJumpButton('messages','chatJumpBottom')}
   if(v==='teacherChat'){teacherChatLoop();setupChatPosition('teacherMessages');setupChatJumpButton('teacherMessages','teacherChatJumpBottom')}
-  if(v.startsWith('admin:'))adminLoad(v.slice(6));
+  if(v==='teacher:exam-logs')teacherExamLogsLoad();if(v.startsWith('admin:'))adminLoad(v.slice(6));
   if(v==='assignments')startAssignmentCountdown();
   if(v==='exam-answers')examAnswersLoop(S.examAnswers?.examId);
 }
@@ -1595,7 +1595,7 @@ function teacherMessageHTML(m){
   return '<div class="msg '+(S.me&&Number(m.user_id)===Number(S.me.id)?'me':'')+'" data-message-id="'+esc(m.id)+'" onclick="teacherMessageMenu(event,'+m.id+')"><img class="avatar" src="'+esc(m.avatar_url||BROKEN_IMAGE_FALLBACK)+'"><div><div class="chat-name-line"><b>'+esc(m.display_name||'Deleted user')+'</b>'+badgeHTML(m.badges,true)+'</div>'+reply+'<div class="bubble">'+esc(m.body||'')+edited+'</div><small class="muted">'+esc(chatTime(m.created_at))+'</small></div></div>';
 }
 
-function adminLoad(p){if(p==='roles')loadRoles();if(p==='permissions')loadPermissions();if(p==='accounts')loadAccounts();if(p==='keys')loadKeys();if(p==='badges')loadBadges();if(p==='admins')loadAdmins();if(p==='logs')loadLogs();if(p==='site')loadSiteManagement();if(p==='reports')loadReports();if(p==='developers')loadDevelopers()}
+function teacherExamLogsLoad(options={}){const r=$('#teacherExamLogsRoot');if(!r||window.b4TeacherExamLogsBusy)return;const silent=!!options.silent;window.b4TeacherExamLogsBusy=true;api('/api/teacher/exam-logs',{cache:'no-store'}).then(d=>{if(!r.isConnected||S.view!=='teacher:exam-logs')return;const rows=(d.activity||[]).map(x=>({...x,kind:'activity'})).sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));const signature=JSON.stringify(rows);window.__b4TeacherExamLogRows=rows;if(silent&&signature===window.__b4TeacherExamLogSignature)return;window.__b4TeacherExamLogSignature=signature;const html='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Exam activity · Live · Tap any log for details</span></div><div class="log-list">'+(rows.map(logRowHTML).join('')||'<div class="empty">No exam activity yet.</div>')+'</div>';if(r.innerHTML!==html)r.innerHTML=html;}).catch(e=>{if(!silent)r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}).finally(()=>{window.b4TeacherExamLogsBusy=false})}\nfunction adminLoad(p){if(p==='roles')loadRoles();if(p==='permissions')loadPermissions();if(p==='accounts')loadAccounts();if(p==='keys')loadKeys();if(p==='badges')loadBadges();if(p==='admins')loadAdmins();if(p==='logs')loadLogs();if(p==='site')loadSiteManagement();if(p==='reports')loadReports();if(p==='developers')loadDevelopers()}
 
 async function loadReports(options={}){
   const root=$('#adminRoot');if(!root||window.reportsLoadBusy)return;
@@ -2991,7 +2991,7 @@ setupMobileDockAutoHide();showInitialSkeleton();document.documentElement.dataset
 (function(){
   const viewKey='b4:current-view';
   const scrollKey='b4:scroll:'+location.pathname+location.search;
-  const valid=new Set(['dashboard','students','teachers','subjects','subject','schedule','assignments','resources','exams','announcements','chat','teacherChat','admin','teacherCenter','settings','reportBug','developers','admin:reports','admin:accounts','admin:permissions','admin:roles','admin:students','admin:teachers','admin:subjects','admin:schedule','admin:keys','admin:badges','admin:admins','admin:logs','admin:site']);
+  const valid=new Set(['dashboard','students','teachers','subjects','subject','schedule','assignments','resources','exams','announcements','chat','teacherChat','admin','teacherCenter','settings','reportBug','developers','admin:reports','admin:accounts','admin:permissions','admin:roles','admin:students','admin:teachers','admin:subjects','admin:schedule','admin:keys','admin:badges','admin:admins','admin:logs','teacher:exam-logs','admin:site']);
   window.b4RestoreView=()=>{try{const saved=sessionStorage.getItem(viewKey);if(saved&&valid.has(saved))return saved}catch(_){}return null};
   window.b4SaveView=view=>{try{if(valid.has(view))sessionStorage.setItem(viewKey,view)}catch(_){}};
   let savedY=null;try{const y=sessionStorage.getItem(scrollKey);if(y!==null)savedY=Number(y)}catch(_){}
