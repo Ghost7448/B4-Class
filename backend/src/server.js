@@ -1358,6 +1358,28 @@ res.json({ok:true,correct,correctAnswer:savedGradeRows[0].teacher_correct_answer
 
 app.get('/api/exams/:id/result',requireAuth,async(req,res)=>{const id=Number(req.params.id),[r]=await q('SELECT a.id,a.status,a.score,a.started_at,a.submitted_at,e.title,e.ends_at,e.duration_minutes FROM exam_attempts a JOIN exams e ON e.id=a.exam_id WHERE a.exam_id=? AND a.user_id=? LIMIT 1',[id,req.session.userId]);if(!r[0])return res.status(404).json({error:'No exam submission yet'});const [tot]=await q("SELECT COALESCE(SUM(q.points),0) total,COALESCE(SUM(CASE WHEN a.is_correct=1 THEN q.points ELSE 0 END),0) score FROM exam_questions q LEFT JOIN exam_answers a ON a.question_id=q.id AND a.attempt_id=? WHERE q.exam_id=?",[r[0].id,id]);const total=Number(tot[0]?.total||0),score=Number(tot[0]?.score||0);r[0].score=score;res.json({attempt:r[0],percent:total?Math.round(score/total*100):0,total});});
 
+app.delete('/api/admin/exams/:examId/submissions/:attemptId',requireAuth,async(req,res)=>{
+  const examId=Number(req.params.examId),attemptId=Number(req.params.attemptId);
+  if(!Number.isSafeInteger(examId)||!Number.isSafeInteger(attemptId))return res.status(400).json({error:'Invalid submission'});
+  const [actor]=await q('SELECT is_super_admin FROM users WHERE id=? AND status=\'ACTIVE\' LIMIT 1',[req.session.userId]);
+  if(Number(actor[0]?.is_super_admin)!==1)return res.status(403).json({error:'Only Super Admin can delete exam submissions'});
+  const conn=await pool.getConnection();
+  try{
+    await conn.beginTransaction();
+    const [rows]=await conn.execute('SELECT id,user_id,status FROM exam_attempts WHERE id=? AND exam_id=? LIMIT 1 FOR UPDATE',[attemptId,examId]);
+    if(!rows[0]){await conn.rollback();return res.status(404).json({error:'Submission not found'});}
+    await conn.execute('DELETE FROM exam_attempts WHERE id=? AND exam_id=?',[attemptId,examId]);
+    await conn.commit();
+    await audit(req,'EXAM_SUBMISSION_DELETED','exam',examId,{attemptId,userId:rows[0].user_id,status:rows[0].status});
+    pushGlobalEvent('data-changed',{path:'/api/admin/exams/'+examId+'/submissions/'+attemptId,method:'DELETE',examId,attemptId});
+    res.json({ok:true});
+  }catch(e){
+    try{await conn.rollback()}catch{}
+    console.error('Exam submission deletion failed:',e);
+    res.status(500).json({error:'Could not delete this exam submission'});
+  }finally{conn.release();}
+});
+
 app.get('/api/admin/exams/:id/submissions',requirePermission('MANAGE_EXAMS'),async(req,res)=>{
   const id=Number(req.params.id);
   if(!Number.isSafeInteger(id)) return res.status(400).json({error:'Invalid exam id'});
