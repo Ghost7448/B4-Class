@@ -904,7 +904,7 @@ function render(){
     if(!window.b4LogsLiveTimer)window.b4LogsLiveTimer=setInterval(()=>{if(S.view==='admin:logs'&&!document.hidden)loadLogs({silent:true})},5000);
   }else if(window.b4LogsLiveTimer){clearInterval(window.b4LogsLiveTimer);window.b4LogsLiveTimer=null}
   morphHtml($('#nav'),buildNav());
-  let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-fullscreen'?examFullscreenV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
+  let html=v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-fullscreen'?examFullscreenV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-unavailable'?examUnavailableV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
   morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
   if(v==='dashboard')animateDashboardStats();
   applySuperAdminCrown();
@@ -2057,6 +2057,7 @@ async function enterExamFullscreen(){
     try{if(document.fullscreenElement)await document.exitFullscreen()}catch{}
     if(/already submitted/i.test(e.message)){S.pendingExamId=null;loadStudentExamAnswers(id);return}
     if(/Exam Locked/i.test(e.message)){S.pendingExamId=null;toast('🔒 Exam Locked — your attempt was locked because you left the exam. A Teacher can unlock it from Submissions.');return}
+    if(e?.data?.examClosed||e?.data?.examInUse||/exam is closed|not open yet|another device/i.test(String(e.message||''))){S.pendingExamId=null;S.examRun={id,lockMessage:e.message};S.view='exam-unavailable';render();return}
     toast(e.message);
   }
 }
@@ -2211,6 +2212,12 @@ async function submitExam(e,id,auto=false){
   }finally{
     window.examSubmitInProgress=false;
   }
+}
+function examUnavailableV(){
+  const r=S.examRun||{};
+  const message=r.lockMessage||'This exam is closed or already active on another device.';
+  return title('Exam Unavailable','This exam cannot be opened right now.',`<button class="btn ghost" onclick="go('exams')">← Back to Exams</button>`)+
+  '<div class="exam-locked-page"><div class="exam-locked-card"><div class="exam-lock-icon">🔒</div><span class="eyebrow">EXAM UNAVAILABLE</span><h2>Exam Closed</h2><p class="muted">'+esc(message)+'</p><div class="exam-locked-note">You cannot start or submit this exam while it is closed. If you believe this is a mistake, contact your Teacher.</div><button class="btn primary" onclick="go(\'exams\')">Back to Exams</button></div></div>';
 }
 function examLockedV(){
   const r=S.examRun||{};
