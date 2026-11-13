@@ -381,9 +381,10 @@ function lockActiveExam(reason='LEFT_EXAM'){
   const local=S.exams.find(x=>Number(x.id)===id);
   if(local)local.attempt_status='LOCKED';
   try{
-    const blob=new Blob([JSON.stringify({reason})],{type:'application/json'});
-    if(navigator.sendBeacon)navigator.sendBeacon('/api/exams/'+id+'/lock',blob);
-    else fetch('/api/exams/'+id+'/lock',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reason}),credentials:'include',keepalive:true});
+    const payload=JSON.stringify({reason,answers:collectExamAnswers()});
+    const blob=new Blob([payload],{type:'application/json'});
+    const sent=!!navigator.sendBeacon&&navigator.sendBeacon('/api/exams/'+id+'/lock',blob);
+    if(!sent)fetch('/api/exams/'+id+'/lock',{method:'POST',headers:{'Content-Type':'application/json'},body:payload,credentials:'include',keepalive:true}).catch(()=>{});
   }catch{}
 }
 function showExamLockedIfNeeded(){
@@ -397,10 +398,6 @@ function installExamExitGuard(){
   examExitGuardInstalled=true;
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden'&&S.view==='exam-run'&&!window.examExitAllowed&&!isExamCameraCaptureActive()){
-      const id=Number(S.examRun?.id||0);
-      if(id){
-        try{fetch('/api/exams/'+id+'/save',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:collectExamAnswers()}),credentials:'include',keepalive:true})}catch{}
-      }
       lockActiveExam('LEFT_EXAM');
       return;
     }
@@ -408,10 +405,6 @@ function installExamExitGuard(){
   });
   window.addEventListener('pagehide',()=>{
     if(S.view==='exam-run'&&!window.examExitAllowed&&!isExamCameraCaptureActive()){
-      const id=Number(S.examRun?.id||0);
-      if(id){
-        try{fetch('/api/exams/'+id+'/save',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({answers:collectExamAnswers()}),credentials:'include',keepalive:true})}catch{}
-      }
       lockActiveExam('LEFT_EXAM');
     }
   });
