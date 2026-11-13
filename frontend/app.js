@@ -2205,7 +2205,7 @@ async function submitExam(e,id,auto=false){
       S.examResult={...d,examId:id,auto:false};S.view='exam-result';render();window.scrollTo({top:0,behavior:'smooth'});
     }
   }catch(x){
-    if(auto&&/already submitted|no longer editable|time is over|submitted automatically/i.test(String(x?.message||''))){S.examRun=null;await loadStudentExamAnswers(id);return}
+    if(/already submitted|no longer editable|time is over|submitted automatically|exam is closed/i.test(String(x?.message||''))){S.examRun=null;await loadStudentExamAnswers(id);return}
     if(/exam is locked/i.test(x.message)){S.examRun={id,locked:true,lockMessage:x.message};S.view='exam-locked';render();window.scrollTo({top:0,behavior:'smooth'});return}
     toast(x.message);
     if(submitBtn)submitBtn.disabled=false;
@@ -2216,8 +2216,9 @@ async function submitExam(e,id,auto=false){
 function examUnavailableV(){
   const r=S.examRun||{};
   const message=r.lockMessage||'This exam is closed or already active on another device.';
-  return title('Exam Unavailable','This exam cannot be opened right now.',`<button class="btn ghost" onclick="go('exams')">← Back to Exams</button>`)+
-  '<div class="exam-locked-page"><div class="exam-locked-card"><div class="exam-lock-icon">🔒</div><span class="eyebrow">EXAM UNAVAILABLE</span><h2>Exam Closed</h2><p class="muted">'+esc(message)+'</p><div class="exam-locked-note">You cannot start or submit this exam while it is closed. If you believe this is a mistake, contact your Teacher.</div><button class="btn primary" onclick="go(\'exams\')">Back to Exams</button></div></div>';
+  const isDevice= /another device/i.test(message);
+  return title(isDevice?'Exam Already Open':'Exam Closed',isDevice?'This attempt is active on another device.':'This exam cannot be opened right now.',`<button class="btn ghost" onclick="go('exams')">← Back to Exams</button>`)+
+  '<div class="exam-locked-page"><div class="exam-locked-card"><div class="exam-lock-icon">🔒</div><span class="eyebrow">EXAM UNAVAILABLE</span><h2>'+ (isDevice?'Exam Already Open':'Exam Closed') +'</h2><p class="muted">'+esc(message)+'</p><div class="exam-locked-note">You cannot start or submit this exam while it is closed. If you believe this is a mistake, contact your Teacher.</div><button class="btn primary" onclick="go(\'exams\')">Back to Exams</button></div></div>';
 }
 function examLockedV(){
   const r=S.examRun||{};
