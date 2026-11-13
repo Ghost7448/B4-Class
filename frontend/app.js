@@ -468,6 +468,40 @@ function installExamExitGuard(){
 }
 installExamExitGuard();
 
+function patchExamCards(items){
+  const root=document.querySelector('#content > .grid.exam-cards');
+  if(!root)return;
+  const nextItems=Array.isArray(items)?items:[];
+  const existing=new Map([...root.children].filter(el=>el.dataset?.liveId).map(el=>[String(el.dataset.liveId),el]));
+  if(!nextItems.length){
+    root.innerHTML='<div class="card empty">No exams.</div>';
+    return;
+  }
+  root.querySelectorAll(':scope > .empty, :scope > .card.empty').forEach(el=>el.remove());
+  const ordered=[];
+  for(const item of nextItems){
+    const id=String(item.id);
+    let node=existing.get(id);
+    const holder=document.createElement('template');
+    holder.innerHTML=String(examCard(item)).trim();
+    const fresh=holder.content.firstElementChild;
+    if(!fresh)continue;
+    if(node){
+      existing.delete(id);
+      [...node.attributes].forEach(attr=>{if(!fresh.hasAttribute(attr.name))node.removeAttribute(attr.name)});
+      [...fresh.attributes].forEach(attr=>{if(node.getAttribute(attr.name)!==attr.value)node.setAttribute(attr.name,attr.value)});
+      morphHtml(node,fresh.innerHTML);
+    }else{
+      node=fresh;
+    }
+    ordered.push(node);
+  }
+  ordered.forEach((node,index)=>{
+    const current=root.children[index];
+    if(current!==node)root.insertBefore(node,current||null);
+  });
+  existing.forEach(node=>node.remove());
+}
 let liveSyncBusy=false;
 let examCenterSyncBusy=false;
 async function syncExamCenter(){
@@ -478,7 +512,7 @@ async function syncExamCenter(){
     const next=Array.isArray(data.exams)?data.exams:[];
     if(JSON.stringify(next)===JSON.stringify(S.exams||[]))return;
     S.exams=next;
-    patchLiveCards('#content > .grid.exam-cards',S.exams,examCard);
+    patchExamCards(S.exams);
     updateExamCountdowns();
   }catch(e){
     console.warn('Live Exam Center sync failed:',e.message);
@@ -681,7 +715,7 @@ function examCard(e){
 }
 function examsV(){
   return title(t('exams'),'Exams, submissions and results.',can('MANAGE_EXAMS')?'<button class="btn primary" onclick="examEdit()">＋ '+t('add')+'</button>':'')+
-  '<div class="grid c2 exam-cards">'+S.exams.map(examCard).join('')+'</div>'+(S.exams.length?'':'<div class="card empty">No exams.</div>');
+  '<div class="grid c2 exam-cards">'+(S.exams.length?S.exams.map(examCard).join(''):'<div class="card empty">No exams.</div>')+'</div>';
 }
 function announcementTime(value){
   const d=new Date(value);
