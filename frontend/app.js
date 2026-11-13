@@ -497,8 +497,10 @@ function patchExamCards(items){
 }
 let liveSyncBusy=false;
 let examCenterSyncBusy=false;
+let examCenterSyncPending=false;
 async function syncExamCenter(){
-  if(!S.me||S.view!=='exams'||examCenterSyncBusy)return;
+  if(!S.me||S.view!=='exams')return;
+  if(examCenterSyncBusy){examCenterSyncPending=true;return;}
   examCenterSyncBusy=true;
   try{
     const data=await api('/api/exams/live',{cache:'no-store'});
@@ -509,7 +511,13 @@ async function syncExamCenter(){
     updateExamCountdowns();
   }catch(e){
     console.warn('Live Exam Center sync failed:',e.message);
-  }finally{examCenterSyncBusy=false}
+  }finally{
+    examCenterSyncBusy=false;
+    if(examCenterSyncPending){
+      examCenterSyncPending=false;
+      Promise.resolve().then(()=>syncExamCenter());
+    }
+  }
 }
 async function syncLiveData(forceFull=false){
   if(liveSyncBusy||!S.me)return;
@@ -2109,7 +2117,13 @@ async function enterExamFullscreen(){
   }catch(e){
     try{if(document.fullscreenElement)await document.exitFullscreen()}catch{}
     if(/already submitted/i.test(e.message)){S.pendingExamId=null;loadStudentExamAnswers(id);return}
-    if(/Exam Locked/i.test(e.message)){S.pendingExamId=null;toast('🔒 Exam Locked — your attempt was locked because you left the exam. A Teacher can unlock it from Submissions.');return}
+    if(e?.data?.examLocked||/Exam Locked/i.test(e.message)){
+      S.pendingExamId=null;
+      S.examRun={id,locked:true,lockMessage:e.message};
+      S.view='exam-locked';
+      render();
+      return;
+    }
     if(e?.data?.examClosed||e?.data?.examInUse||/exam is closed|not open yet|another device/i.test(String(e.message||''))){S.pendingExamId=null;S.examRun={id,lockMessage:e.message};S.view='exam-unavailable';render();return}
     toast(e.message);
   }
