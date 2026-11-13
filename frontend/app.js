@@ -2079,7 +2079,7 @@ function examQuestionHTML(q,i){
   const type=q.questionType||'MCQ';
   const options=(q.options||['Option A','Option B']).map(x=>String(x||''));
   const optionFields=type==='MCQ'?'<div class="answer-list">'+[0,1,2,3].map(j=>'<div class="answer-option"><input data-qopt="'+i+'" data-opt="'+j+'" value="'+esc(options[j]||'')+'" placeholder="Option '+String.fromCharCode(65+j)+'"><button type="button" class="btn ghost" onclick="setExamCorrect('+i+','+j+')">'+(String(q.correctAnswer||'')===String(options[j]||'')?'✓ Correct':'Set correct')+'</button></div>').join('')+'</div>':
-    type==='TRUE_FALSE'?'<div class="answer-list"><label class="answer-option"><input type="radio" name="correct-'+i+'" '+(q.correctAnswer==='TRUE'?'checked':'')+' onchange="examDraft['+i+'].correctAnswer=\'TRUE\'"> TRUE</label><label class="answer-option"><input type="radio" name="correct-'+i+'" '+(q.correctAnswer==='FALSE'?'checked':'')+' onchange="examDraft['+i+'].correctAnswer=\'FALSE\'"> FALSE</label></div>':
+    type==='TRUE_FALSE'?'<div class="answer-list"><label class="answer-option"><input type="radio" name="correct-'+i+'" value="TRUE" '+(q.correctAnswer==='TRUE'?'checked':'')+' onchange="examDraft['+i+'].correctAnswer=\'TRUE\'"> TRUE</label><label class="answer-option"><input type="radio" name="correct-'+i+'" value="FALSE" '+(q.correctAnswer==='FALSE'?'checked':'')+' onchange="examDraft['+i+'].correctAnswer=\'FALSE\'"> FALSE</label></div>':
     '<div class="manual-grade-note"><b>Teacher graded</b><span>This question will not be auto-graded.</span></div>';
   return '<article class="card exam-question question-editor" data-qindex="'+i+'"><div class="head"><div><span class="question-number">Question '+(i+1)+'</span><h3>'+esc(q.questionText||'')+'</h3></div><button type="button" class="btn danger" onclick="removeExamQuestion('+i+')">Remove</button></div><label>Question<textarea data-qtext="'+i+'" rows="3" placeholder="Write the question...">'+esc(q.questionText||'')+'</textarea></label><div class="grid c2"><label>Type<select data-qtype="'+i+'" onchange="examTypeChanged('+i+',this.value)"><option value="MCQ" '+(type==='MCQ'?'selected':'')+'>Multiple choice</option><option value="TRUE_FALSE" '+(type==='TRUE_FALSE'?'selected':'')+'>True / False</option><option value="SHORT" '+(type==='SHORT'?'selected':'')+'>Short answer</option><option value="LONG" '+(type==='LONG'?'selected':'')+'>Long answer</option></select></label><label>Points<input type="number" min="0.5" step="0.5" data-qpoints="'+i+'" value="'+Number(q.points||1)+'"></label></div>'+optionFields+'</article>';
 }
@@ -2092,7 +2092,15 @@ function renderExamQuestions(){
 }
 function addExamQuestion(){collectExamQuestions();examDraft.push({questionText:'',questionType:'MCQ',options:['','','',''],correctAnswer:'',points:1});renderExamQuestions();queueExamBuilderDraftSave()}
 function removeExamQuestion(i){collectExamQuestions();if(examDraft.length<=1)return toast('An exam needs at least one question');examDraft.splice(i,1);renderExamQuestions();queueExamBuilderDraftSave()}
-function setExamCorrect(i,j){collectExamQuestions();examDraft[i].correctAnswer=String(examDraft[i].options[j]||'').trim();renderExamQuestions();queueExamBuilderDraftSave()}
+function setExamCorrect(i,j){
+  collectExamQuestions();
+  const card=document.querySelector('[data-qindex="'+i+'"]');
+  const selected=String(card?.querySelector('[data-qopt="'+i+'"][data-opt="'+j+'"]')?.value||'').trim();
+  if(!selected)return toast('Enter the option text before setting it as correct');
+  examDraft[i].correctAnswer=selected;
+  renderExamQuestions();
+  queueExamBuilderDraftSave();
+}
 function examTypeChanged(i,type){
   collectExamQuestions();
   examDraft[i].questionType=type;
@@ -2109,7 +2117,12 @@ function collectExamQuestions(){
     examDraft[i].points=Number(card.querySelector('[data-qpoints]')?.value||1);
     const type=card.querySelector('[data-qtype]')?.value||examDraft[i].questionType;examDraft[i].questionType=type;
     if(type==='MCQ'){
-      examDraft[i].options=[...card.querySelectorAll('[data-qopt="'+i+'"]')].map(x=>x.value.trim()).filter(Boolean);
+      const previousOptions=Array.isArray(examDraft[i].options)?[...examDraft[i].options]:[];
+      const previousCorrect=String(examDraft[i].correctAnswer||'').trim();
+      const nextOptions=[...card.querySelectorAll('[data-qopt="'+i+'"]')].map(x=>x.value.trim());
+      const correctIndex=previousOptions.findIndex(x=>String(x||'').trim()===previousCorrect);
+      if(correctIndex>=0&&nextOptions[correctIndex])examDraft[i].correctAnswer=nextOptions[correctIndex];
+      examDraft[i].options=nextOptions;
     }else if(type==='TRUE_FALSE'){
       examDraft[i].correctAnswer=card.querySelector('[name="correct-'+i+'"]:checked')?.value||examDraft[i].correctAnswer||'TRUE';
     }else{
@@ -2129,7 +2142,7 @@ async function examEdit(id){
 }
 async function saveExam(e,id){
   e.preventDefault();collectExamQuestions();
-  const qs=examDraft.map(q=>({id:q.id||null,questionText:q.questionText,questionType:q.questionType,options:q.questionType==='MCQ'?q.options:[],correctAnswer:q.correctAnswer||null,points:Number(q.points||1)})).filter(q=>q.questionText);
+  const qs=examDraft.map(q=>({id:q.id||null,questionText:q.questionText,questionType:q.questionType,options:q.questionType==='MCQ'?(q.options||[]).filter(v=>String(v||'').trim()):[],correctAnswer:q.correctAnswer||null,points:Number(q.points||1)})).filter(q=>q.questionText);
   if(!qs.length)return toast('Add at least one question');
   if(qs.some(q=>q.questionType==='MCQ'&&(!q.options||q.options.length<2||!q.correctAnswer)))return toast('Each MCQ needs at least 2 options and a correct answer');
   if(qs.some(q=>q.questionType==='TRUE_FALSE'&&!q.correctAnswer))return toast('Choose TRUE or FALSE for every true/false question');
