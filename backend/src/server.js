@@ -1370,15 +1370,16 @@ app.get('/api/admin/exams/:id/submissions/:attemptId',requirePermission('MANAGE_
   const [attemptRows]=await q(`SELECT a.id,a.exam_id,a.user_id,a.status,a.score,a.started_at,a.submitted_at,u.display_name,u.official_name,e.title,e.subject_id
     FROM exam_attempts a JOIN users u ON u.id=a.user_id JOIN exams e ON e.id=a.exam_id WHERE a.id=? AND a.exam_id=? LIMIT 1`,[attemptId,examId]);
   if(!attemptRows[0]) return res.status(404).json({error:'Submission not found'});
-  const [securityCount]=await q("SELECT COUNT(*) screenshot_attempts FROM exam_security_events WHERE attempt_id=? AND event_type='SCREENSHOT_ATTEMPT'",[attemptId]);
+  const [securityCount]=await q("SELECT COUNT(*) screenshot_attempts FROM exam_security_events WHERE attempt_id=? AND event_type IN ('SCREENSHOT_ATTEMPT','SCREENSHOT_KEY_DETECTED')",[attemptId]);
   attemptRows[0].screenshot_attempts=Number(securityCount[0]?.screenshot_attempts||0);
+  const [securityEvents]=await q('SELECT event_type,source,created_at FROM exam_security_events WHERE attempt_id=? ORDER BY created_at DESC,id DESC',[attemptId]);
   const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points, ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer,ans.image_size_bytes, CASE WHEN ans.is_correct IS NULL THEN 0 ELSE 1 END AS graded FROM exam_questions q
     LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptId,examId]);
   const total=questions.reduce((n,x)=>n+Number(x.points||0),0);
   const currentScore=questions.reduce((n,x)=>n+(x.is_correct===1||x.is_correct===true?Number(x.points||0):0),0);
   attemptRows[0].score=currentScore;
-  res.json({attempt:attemptRows[0],total,percent:total?Math.round(currentScore/total*100):0,
+  res.json({attempt:attemptRows[0],total,percent:total?Math.round(currentScore/total*100):0,securityEvents,
     questions:questions.map(x=>({...x,options_json:typeof x.options_json==='string'?(JSON.parse(x.options_json||'[]')):(x.options_json||[])}))});
 });
 
@@ -1422,7 +1423,8 @@ app.get('/api/admin/exams/:id/submissions',requirePermission('MANAGE_EXAMS'),asy
   const [rows]=await q(`SELECT a.id,a.user_id,a.status,a.score,a.started_at,a.submitted_at,u.display_name,u.official_name,
     COALESCE((SELECT SUM(q.points) FROM exam_questions q WHERE q.exam_id=a.exam_id),0) total,
     COALESCE((SELECT SUM(CASE WHEN ea.is_correct=1 THEN q.points ELSE 0 END) FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=a.id WHERE q.exam_id=a.exam_id),0) score,
-    (SELECT COUNT(*) FROM exam_security_events se WHERE se.attempt_id=a.id AND se.event_type='SCREENSHOT_ATTEMPT') screenshot_attempts
+    (SELECT COUNT(*) FROM exam_security_events se WHERE se.attempt_id=a.id AND se.event_type IN ('SCREENSHOT_ATTEMPT','SCREENSHOT_KEY_DETECTED')) screenshot_attempts,
+    (SELECT COUNT(*) FROM exam_security_events se WHERE se.attempt_id=a.id) security_event_count
     FROM exam_attempts a JOIN users u ON u.id=a.user_id WHERE a.exam_id=? ORDER BY a.submitted_at DESC,a.started_at DESC`,[id]);
   res.json({submissions:rows.map(x=>({...x,percent:Number(x.total)?Math.round(Number(x.score||0)/Number(x.total)*100):0}))});
 });
@@ -1956,6 +1958,7 @@ app.post('/api/exams/:id/lock',requireAuth,async(req,res)=>{
     `,[reason,attempt.id]);
     await conn.commit();
     if(Number(locked?.affectedRows||0)){
+      await q('INSERT INTO exam_security_events(attempt_id,exam_id,user_id,event_type,source) VALUES(?,?,?,?,?)',[attempt.id,id,attempt.user_id,reason,'AUTO_LOCK']);
       await audit(req,'EXAM_LOCKED','exam',id,{attemptId:attempt.id,reason});
       pushGlobalEvent('data-changed',{path:'/api/exams/'+id+'/lock',method:'POST',examId:id,attemptId:attempt.id});
       pushUserEvent(attempt.user_id,'exam-locked',{examId:id,attemptId:attempt.id,status:'LOCKED',reason});
