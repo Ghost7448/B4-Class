@@ -2910,3 +2910,8 @@ img.b4-image-fallback{aspect-ratio:1/1;}
 /* Exam content protection: question prompts cannot be selected/copied in the exam UI. */
 .exam-run-question h3,.exam-run-question .exam-question-top,.exam-run-question .question-number{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .screenshot-warning{display:inline-flex!important;align-items:center;gap:5px;width:max-content;max-width:100%;margin-top:6px;background:#dc262615!important;border:1px solid #dc26264a!important;color:#dc2626!important;white-space:normal;font-size:10px}
+
+/* Announcement formatting and clickable links */
+.announcement-body{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;line-height:1.85;margin:12px 0 16px;color:var(--t)}
+.announcement-body a{color:#3b82f6;text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px;font-weight:700;overflow-wrap:anywhere}
+.announcement-body a:hover{color:#60a5fa;text-decoration-thickness:2px}
