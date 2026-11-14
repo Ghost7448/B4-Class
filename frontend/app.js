@@ -2474,7 +2474,16 @@ async function submitExam(e,id,auto=false){
       toast('Time is up — your exam was submitted.');
       await loadStudentExamAnswers(id);
     }else{
-      S.examResult={...d,examId:id,auto:false};S.view='exam-result';render();window.scrollTo({top:0,behavior:'smooth'});
+      let resultPercent=Number(d.percent||0),correctQuestions=null,totalQuestions=null;
+      try{
+        const review=await api('/api/exams/'+id+'/answers?_='+Date.now(),{cache:'no-store'});
+        const stats=examCompletionStats(review.questions||[]);
+        resultPercent=stats.overallPercent;
+        correctQuestions=stats.correct;
+        totalQuestions=stats.total;
+      }catch(e){console.warn('Could not load correct-answer result percentage:',e.message);}
+      S.examResult={...d,percent:resultPercent,correctQuestions,totalQuestions,examId:id,auto:false};
+      S.view='exam-result';render();window.scrollTo({top:0,behavior:'smooth'});
     }
   }catch(x){
     if(/already submitted|no longer editable|time is over|submitted automatically|exam is closed/i.test(String(x?.message||''))){S.examRun=null;await loadStudentExamAnswers(id);return}
@@ -2528,7 +2537,7 @@ function examAnswersLoop(id){
 function examResultV(){
   const r=S.examResult||{};
   return title('Exam Result','Your submission has been recorded.','<button class="btn ghost" onclick="go(\'exams\')">← Back to Exams</button>')+
-  '<div class="exam-result-page"><div class="score-wrap"><div class="score-ring" style="--score:'+Number(r.percent||0)+'"><svg viewBox="0 0 120 120"><circle class="score-bg" cx="60" cy="60" r="50"></circle><circle class="score-value" cx="60" cy="60" r="50" pathLength="100" stroke-dasharray="'+Number(r.percent||0)+' 100"></circle></svg><div class="score-number">'+Number(r.percent||0)+'%<small>'+Number(r.score||0)+' / '+Number(r.total||0)+'</small></div></div><h2>Submitted successfully</h2><p class="muted">'+(r.auto?'Auto-submitted because the time limit ended.':'Your exam has been submitted.')+'</p><div class="exam-result-actions"><button class="btn primary" onclick="loadStudentExamAnswers('+Number(r.examId)+')">View Answers</button><button class="btn ghost" onclick="go(\'exams\')">Back to Exams</button></div></div></div>';
+  '<div class="exam-result-page"><div class="score-wrap"><div class="score-ring" style="--score:'+Number(r.percent||0)+'"><svg viewBox="0 0 120 120"><circle class="score-bg" cx="60" cy="60" r="50"></circle><circle class="score-value" cx="60" cy="60" r="50" pathLength="100" stroke-dasharray="'+Number(r.percent||0)+' 100"></circle></svg><div class="score-number">'+Number(r.percent||0)+'%<small>'+(r.correctQuestions!==null&&r.correctQuestions!==undefined?r.correctQuestions+' / '+r.totalQuestions+' correct':'Overall correct answers')+'</small></div></div><h2>Submitted successfully</h2><p class="muted">'+(r.auto?'Auto-submitted because the time limit ended.':'Your exam has been submitted.')+'</p><div class="exam-result-actions"><button class="btn primary" onclick="loadStudentExamAnswers('+Number(r.examId)+')">View Answers</button><button class="btn ghost" onclick="go(\'exams\')">Back to Exams</button></div></div></div>';
 }
 function examCompletionStats(questions){
   const qs=Array.isArray(questions)?questions:[];
