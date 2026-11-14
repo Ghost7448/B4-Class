@@ -718,15 +718,7 @@ function ensureGlobalRealtime(){
         if($('#back')?.classList.contains('show')&&document.querySelector('.notification-modal'))openNotifications();
       }catch{}
     });
-    window.globalRealtimeStream.addEventListener('site-status',(event)=>{
-      try{
-        const data=JSON.parse(event.data||'{}');
-        if(data.locked && Number(S.me?.is_super_admin)!==1){
-          document.documentElement.classList.add('site-lock-transition');
-          setTimeout(()=>window.location.reload(),180);
-        }
-      }catch{}
-    });
+    window.globalRealtimeStream.addEventListener('site-status',()=>checkSiteLock());
     window.globalRealtimeStream.addEventListener('ready',()=>{window.globalRealtimeOnline=true});
     window.globalRealtimeStream.onerror=()=>{
       window.globalRealtimeOnline=false;
@@ -741,31 +733,36 @@ function ensureGlobalRealtime(){
 }
 let siteLockTimer=null;
 let siteLockTransitioning=false;
+function applySiteLockOverlay(locked,message=''){
+  let overlay=document.getElementById('b4SiteLockOverlay');
+  if(!locked){overlay?.remove();siteLockTransitioning=false;return}
+  if(Number(S.me?.is_super_admin)===1)return;
+  if(!overlay){
+    overlay=document.createElement('section');
+    overlay.id='b4SiteLockOverlay';
+    overlay.setAttribute('role','alertdialog');
+    overlay.setAttribute('aria-modal','true');
+    overlay.style.cssText='position:fixed;inset:0;z-index:2147483000;display:grid;place-items:center;padding:24px;background:rgba(7,9,18,.97);color:#fff;text-align:center;font-family:inherit';
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML='<div style="width:min(560px,100%);padding:32px;border:1px solid rgba(160,120,255,.35);border-radius:24px;background:linear-gradient(145deg,#202333,#11131e);box-shadow:0 24px 90px rgba(0,0,0,.45)"><div style="font-size:42px;margin-bottom:14px">🔒</div><div style="font-size:12px;letter-spacing:.18em;opacity:.7">B4 CLASS</div><h1 style="font-size:clamp(26px,6vw,38px);margin:12px 0">Website temporarily locked</h1><p style="line-height:1.7;opacity:.82;margin:0">'+esc(message||'The website is temporarily unavailable. Please try again later.')+'</p></div>';
+  siteLockTransitioning=true;
+}
 async function checkSiteLock(){
-  if(siteLockTransitioning)return;
   try{
-    const r=await fetch(API+'/api/site/status?_='+Date.now(),{
-      method:'GET',
-      credentials:'include',
-      cache:'no-store',
+    const r=await fetch(API+'/api/site/status',{
+      method:'GET',credentials:'include',cache:'no-store',
       headers:{'Cache-Control':'no-cache'}
     });
     if(!r.ok)return;
     const d=await r.json();
-    if(d.locked&&!d.isSuperAdmin){
-      siteLockTransitioning=true;
-      document.documentElement.classList.add('site-lock-transition');
-      try{window.globalRealtimeStream?.close()}catch{}
-      try{window.realtimeStream?.close()}catch{}
-      try{window.teacherRealtimeStream?.close()}catch{}
-      setTimeout(()=>window.location.reload(),100);
-    }
+    applySiteLockOverlay(!!d.locked&&!d.isSuperAdmin,d.message||'');
   }catch{}
 }
 function startSiteLockWatcher(){
   clearInterval(siteLockTimer);
+  siteLockTimer=null;
   checkSiteLock();
-  siteLockTimer=setInterval(checkSiteLock,2000);
 }
 
 function liveDataLoop(){
