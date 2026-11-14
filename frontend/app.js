@@ -440,6 +440,15 @@ function installExamExitGuard(){
     if(S.view!=='exam-run'||!window.examFullscreenRequired||window.examExitAllowed||isExamCameraCaptureActive())return;
     const activeFullscreen=!!(document.fullscreenElement||document.webkitFullscreenElement);
     if(!activeFullscreen){
+      // Native camera/file pickers may dispatch fullscreenchange AFTER the
+      // input change/focus event. During this short return grace, treat that
+      // delayed exit as part of the camera flow, not as an exam violation.
+      const cameraGraceUntil=Number(window.examCameraReturnGraceUntil||0);
+      if(cameraGraceUntil>Date.now()){
+        window.examFullscreenRequired=false;
+        window.examFullscreenSuspendedForCamera=true;
+        return;
+      }
       lockActiveExam('FULLSCREEN_EXIT');
       showExamLockedIfNeeded();
     }
