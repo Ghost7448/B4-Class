@@ -616,7 +616,7 @@ async function syncLiveData(forceFull=false){
       return;
     }
     if(S.view==='announcements'){
-      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3><p>'+esc(a.body||'')+'</p>'+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
+      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
       return;
     }
     render();
@@ -802,6 +802,17 @@ function announcementTime(value){
   if(!Number.isFinite(d.getTime()))return String(value||'');
   const locale=S.lang==='ar'?'ar-EG':'en-EG';
   return d.toLocaleString(locale,{timeZone:'Africa/Cairo',day:'numeric',month:'long',year:'numeric',hour:'numeric',minute:'2-digit',hour12:S.lang!=='ar'});
+}
+function formatAnnouncementBody(value){
+ const safe=esc(value||'');
+ const linked=safe.replace(/(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi,raw=>{
+  let url=raw,tail='';
+  while(/[.,!?;:،؛؟)]$/.test(url)){tail=url.slice(-1)+tail;url=url.slice(0,-1)}
+  if(!url)return raw;
+  const href=/^https?:\/\//i.test(url)?url:'https://'+url;
+  return '<a href="'+href+'" target="_blank" rel="noopener noreferrer">'+url+'</a>'+tail;
+ });
+ return '<div class="announcement-body">'+linked+'</div>';
 }
 function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3><p>'+esc(a.body||'')+'</p>'+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
 function chatTime(value){
