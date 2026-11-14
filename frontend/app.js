@@ -392,11 +392,15 @@ function lockActiveExam(reason='LEFT_EXAM'){
   }
   const local=S.exams.find(x=>Number(x.id)===id);
   if(local)local.attempt_status='LOCKED';
+  window.examFullscreenRequired=false;
   try{
     const payload=JSON.stringify({reason,answers:collectExamAnswers()});
-    const blob=new Blob([payload],{type:'application/json'});
-    const sent=!!navigator.sendBeacon&&navigator.sendBeacon('/api/exams/'+id+'/lock',blob);
-    if(!sent)fetch('/api/exams/'+id+'/lock',{method:'POST',headers:{'Content-Type':'application/json'},body:payload,credentials:'include',keepalive:true}).catch(()=>{});
+    const url=API+'/api/exams/'+id+'/lock';
+    fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:payload,credentials:'include',keepalive:true})
+      .then(response=>{if(!response.ok)throw new Error('Exam lock request failed');})
+      .catch(()=>{
+        try{navigator.sendBeacon?.(url,new Blob([payload],{type:'application/json'}));}catch{}
+      });
   }catch{}
 }
 function showExamLockedIfNeeded(){
@@ -420,12 +424,20 @@ function installExamExitGuard(){
       lockActiveExam('PAGE_CLOSED_OR_RELOADED');
     }
   });
-  document.addEventListener('fullscreenchange',()=>{
-    if(S.view==='exam-run'&&!document.fullscreenElement&&!window.examExitAllowed&&!isExamCameraCaptureActive()){
+  const checkExamFullscreen=()=>{
+    if(S.view!=='exam-run'||!window.examFullscreenRequired||window.examExitAllowed||isExamCameraCaptureActive())return;
+    const activeFullscreen=!!(document.fullscreenElement||document.webkitFullscreenElement);
+    if(!activeFullscreen){
       lockActiveExam('FULLSCREEN_EXIT');
       showExamLockedIfNeeded();
     }
-  });
+  };
+  document.addEventListener('fullscreenchange',checkExamFullscreen);
+  document.addEventListener('webkitfullscreenchange',checkExamFullscreen);
+  // Some mobile browsers miss or delay the fullscreenchange event. Keep a small watchdog
+  // while an exam is active so leaving fullscreen is still caught.
+  clearInterval(window.examFullscreenWatchdog);
+  window.examFullscreenWatchdog=setInterval(checkExamFullscreen,500);
   // Detect split-screen and floating/pop-up windows by comparing both inner and outer dimensions.
   // Use outerHeight rather than innerHeight to avoid treating the on-screen keyboard as a resize.
   const checkWindowDimensions=()=>{
@@ -788,6 +800,19 @@ function chatTime(value){
     hour:'numeric',
     minute:'2-digit',
     hour12:true
+  }).replace(',',' •');
+}
+function examSecurityTime(value){
+  const d=new Date(value);
+  if(!Number.isFinite(d.getTime()))return String(value||'');
+  const locale=S.lang==='ar'?'ar-EG':'en-GB';
+  return d.toLocaleString(locale,{
+    timeZone:'Africa/Cairo',
+    day:'2-digit',
+    month:'2-digit',
+    hour:'2-digit',
+    minute:'2-digit',
+    hour12:false
   }).replace(',',' •');
 }
 function chatV(){
@@ -2209,6 +2234,7 @@ async function enterExamFullscreen(){
     return;
   }
   window.examExitAllowed=false;
+  window.examFullscreenRequired=true;
   captureExamViewport();
   try{
     const d=await api('/api/exams/'+id+'/start',{method:'POST'});
@@ -2535,7 +2561,7 @@ function examReviewV(){
   if(r.detail){
     const d=r.detail,examId=Number(r.examId||0),attemptId=Number(d.attempt?.id||0);
     const securityEventNames={SCREENSHOT_ATTEMPT:'Screenshot attempt',SCREENSHOT_KEY_DETECTED:'Screenshot shortcut detected',APP_SWITCH_OR_CAPTURE:'Exam tab/browser hidden (exact cause unavailable)',FULLSCREEN_EXIT:'Full Screen exited',WINDOW_RESIZED:'Window size changed',PAGE_CLOSED_OR_RELOADED:'Exam page closed or reloaded',LEFT_EXAM:'Left exam screen'};
-    const securityEventsHTML=(d.securityEvents||[]).length?'<div class="card exam-security-log"><div class="head"><h3>Exam Security Log</h3><span class="badge">'+(d.securityEvents||[]).length+' events</span></div>'+d.securityEvents.map(ev=>'<div class="item"><div class="grow"><b>'+esc(securityEventNames[ev.event_type]||ev.event_type||'Security event')+'</b><small class="muted">'+esc(ev.source||'Automatic detection')+' • '+esc(ev.created_at||'')+'</small></div><span class="badge screenshot-warning">Recorded</span></div>').join('')+'</div>':'<div class="card exam-security-log"><div class="head"><h3>Exam Security Log</h3></div><p class="muted">No security events were recorded for this attempt.</p></div>';
+    const securityEventsHTML=(d.securityEvents||[]).length?'<div class="card exam-security-log"><div class="head"><h3>Exam Security Log</h3><span class="badge">'+(d.securityEvents||[]).length+' events</span></div>'+d.securityEvents.map(ev=>'<div class="item"><div class="grow"><b>'+esc(securityEventNames[ev.event_type]||ev.event_type||'Security event')+'</b><small class="muted">'+esc(ev.source||'Automatic detection')+' • '+esc(examSecurityTime(ev.created_at))+'</small></div><span class="badge screenshot-warning">Recorded</span></div>').join('')+'</div>':'<div class="card exam-security-log"><div class="head"><h3>Exam Security Log</h3></div><p class="muted">No security events were recorded for this attempt.</p></div>';
     return title('Submission review','Answers submitted by '+esc(d.attempt?.display_name||'Student'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`+(d.attempt?.status==='LOCKED'?'<button class="btn primary" onclick="unlockExamSubmission('+examId+','+attemptId+')">🔓 Unlock</button>':'')+(Number(S.me?.is_super_admin)===1?'<button class="btn danger" onclick="deleteExamSubmission('+examId+','+attemptId+')">Delete Submission</button>':''))+
     '<div class="grid c3 review-summary"><div class="card"><small>Student</small><b>'+esc(d.attempt?.display_name||'—')+'</b>'+(Number(d.attempt?.screenshot_attempts||0)>0?'<span class="badge screenshot-warning">⚠ Screenshot attempts: '+Number(d.attempt.screenshot_attempts)+'</span>':'')+'</div><div class="card"><small>Score</small><b>'+Number(d.attempt?.score||0)+' / '+Number(d.total||0)+'</b></div><div class="card"><small>Percentage</small><b>'+Number(d.percent||0)+'%</b></div></div>'+
     securityEventsHTML+
