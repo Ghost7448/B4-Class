@@ -2530,10 +2530,25 @@ function examResultV(){
   return title('Exam Result','Your submission has been recorded.','<button class="btn ghost" onclick="go(\'exams\')">← Back to Exams</button>')+
   '<div class="exam-result-page"><div class="score-wrap"><div class="score-ring" style="--score:'+Number(r.percent||0)+'"><svg viewBox="0 0 120 120"><circle class="score-bg" cx="60" cy="60" r="50"></circle><circle class="score-value" cx="60" cy="60" r="50" pathLength="100" stroke-dasharray="'+Number(r.percent||0)+' 100"></circle></svg><div class="score-number">'+Number(r.percent||0)+'%<small>'+Number(r.score||0)+' / '+Number(r.total||0)+'</small></div></div><h2>Submitted successfully</h2><p class="muted">'+(r.auto?'Auto-submitted because the time limit ended.':'Your exam has been submitted.')+'</p><div class="exam-result-actions"><button class="btn primary" onclick="loadStudentExamAnswers('+Number(r.examId)+')">View Answers</button><button class="btn ghost" onclick="go(\'exams\')">Back to Exams</button></div></div></div>';
 }
+function examCompletionStats(questions){
+  const qs=Array.isArray(questions)?questions:[];
+  const answered=q=>String(q?.answer_text??'').trim().length>0||Number(q?.image_size_bytes||0)>0;
+  const objective=qs.filter(q=>q.question_type==='MCQ'||q.question_type==='TRUE_FALSE');
+  const answeredObjective=objective.filter(answered).length;
+  const answeredAll=qs.filter(answered).length;
+  const correct=qs.filter(q=>q.is_correct===true||Number(q.is_correct)===1).length;
+  return {
+    correct,total:qs.length,
+    objectiveAnswered:answeredObjective,objectiveTotal:objective.length,
+    objectivePercent:objective.length?Math.round(answeredObjective/objective.length*100):0,
+    answeredAll,totalAll:qs.length,
+    overallPercent:qs.length?Math.round(answeredAll/qs.length*100):0
+  };
+}
 function examAnswersV(){
-  const r=S.examAnswers||{},qs=r.questions||[];
+  const r=S.examAnswers||{},qs=r.questions||[],stats=examCompletionStats(qs);
   return title('View Answers','Review what you submitted and what was marked correct or incorrect.',`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
-  '<div class="exam-answers-summary"><div><b>'+Number(r.percent||0)+'%</b><span>Current score</span></div><div><b>'+Number(r.score||r.attempt?.score||0)+' / '+Number(r.total||0)+'</b><span>Graded points</span></div></div>'+
+  '<div class="exam-answers-summary"><div><b>'+Number(r.percent||0)+'%</b><span>Current score</span></div><div><b>'+Number(r.score||r.attempt?.score||0)+' / '+Number(r.total||0)+'</b><span>Graded points</span></div><div><b>'+stats.correct+' / '+stats.total+'</b><span>Correct questions</span></div><div><b>'+stats.objectivePercent+'%</b><span>MCQ & T/F completion ('+stats.objectiveAnswered+' / '+stats.objectiveTotal+')</span></div><div><b>'+stats.overallPercent+'%</b><span>Overall completion ('+stats.answeredAll+' / '+stats.totalAll+')</span></div></div>'+
   '<div class="exam-answer-review-list">'+qs.map((q,i)=>{
     const type=q.question_type==='TRUE_FALSE'?'TRUE/FALSE':(q.question_type||'MCQ');
     const manual=q.question_type==='SHORT'||q.question_type==='LONG';
@@ -2613,7 +2628,7 @@ function examReviewV(){
     const securityEventNames={SCREENSHOT_ATTEMPT:'Screenshot attempt',SCREENSHOT_KEY_DETECTED:'Screenshot shortcut detected',APP_SWITCH_OR_CAPTURE:'Exam tab/browser hidden (exact cause unavailable)',FULLSCREEN_EXIT:'Full Screen exited',WINDOW_RESIZED:'Window size changed',PAGE_CLOSED_OR_RELOADED:'Exam page closed or reloaded',LEFT_EXAM:'Left exam screen'};
     const securityEventsHTML=(d.securityEvents||[]).length?'<div class="card exam-security-log"><div class="head"><h3>Exam Security Log</h3><span class="badge">'+(d.securityEvents||[]).length+' events</span></div>'+d.securityEvents.map(ev=>'<div class="item"><div class="grow"><b>'+esc(securityEventNames[ev.event_type]||ev.event_type||'Security event')+'</b><small class="muted">'+esc(ev.source||'Automatic detection')+' • '+esc(examSecurityTime(ev.created_at))+'</small></div><span class="badge screenshot-warning">Recorded</span></div>').join('')+'</div>':'<div class="card exam-security-log"><div class="head"><h3>Exam Security Log</h3></div><p class="muted">No security events were recorded for this attempt.</p></div>';
     return title('Submission review','Answers submitted by '+esc(d.attempt?.display_name||'Student'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`+(d.attempt?.status==='LOCKED'?'<button class="btn primary" onclick="unlockExamSubmission('+examId+','+attemptId+')">🔓 Unlock</button>':'')+(Number(S.me?.is_super_admin)===1?'<button class="btn danger" onclick="deleteExamSubmission('+examId+','+attemptId+')">Delete Submission</button>':''))+
-    '<div class="grid c4 review-summary"><div class="card"><small>Student</small><b>'+esc(d.attempt?.display_name||'—')+'</b>'+(Number(d.attempt?.screenshot_attempts||0)>0?'<span class="badge screenshot-warning">⚠ Screenshot attempts: '+Number(d.attempt.screenshot_attempts)+'</span>':'')+'</div><div class="card"><small>Score</small><b>'+Number(d.attempt?.score||0)+' / '+Number(d.total||0)+'</b></div><div class="card"><small>Percentage</small><b>'+Number(d.percent||0)+'%</b></div><div class="card"><small>Correct Questions</small><b>'+(d.questions||[]).filter(q=>q.is_correct===true||Number(q.is_correct)===1).length+' / '+(d.questions||[]).length+'</b></div></div>'+
+    '<div class="grid c4 review-summary"><div class="card"><small>Student</small><b>'+esc(d.attempt?.display_name||'—')+'</b>'+(Number(d.attempt?.screenshot_attempts||0)>0?'<span class="badge screenshot-warning">⚠ Screenshot attempts: '+Number(d.attempt.screenshot_attempts)+'</span>':'')+'</div><div class="card"><small>Score</small><b>'+Number(d.attempt?.score||0)+' / '+Number(d.total||0)+'</b></div><div class="card"><small>Percentage</small><b>'+Number(d.percent||0)+'%</b></div><div class="card"><small>Correct Questions</small><b>'+examCompletionStats(d.questions).correct+' / '+examCompletionStats(d.questions).total+'</b></div><div class="card"><small>MCQ & T/F completion</small><b>'+examCompletionStats(d.questions).objectivePercent+'%</b><small>'+examCompletionStats(d.questions).objectiveAnswered+' / '+examCompletionStats(d.questions).objectiveTotal+' answered</small></div><div class="card"><small>Overall completion</small><b>'+examCompletionStats(d.questions).overallPercent+'%</b><small>'+examCompletionStats(d.questions).answeredAll+' / '+examCompletionStats(d.questions).totalAll+' answered</small></div></div>'+
     securityEventsHTML+
     '<div class="grid review-questions">'+(d.questions||[]).map((q,i)=>{
       const manual=q.question_type==='SHORT'||q.question_type==='LONG';
