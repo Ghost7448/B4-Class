@@ -1795,7 +1795,7 @@ app.post('/api/exams/:id/start', requireAuth, async(req,res)=>{
       if(!deviceRows[0])await conn.execute('INSERT INTO exam_attempt_devices(attempt_id,session_id) VALUES(?,?)',[attempt.id,deviceSession]);
       if(attempt.status==='LOCKED'){
         await conn.commit();
-        return res.status(423).json({error:'Exam Locked. A Teacher must unlock this attempt before you can continue.',examLocked:true});
+        return res.status(423).json({error:'Exam Locked. Recorded reason: '+String(attempt.lock_reason||'Security rule triggered')+'. A Teacher must unlock this attempt before you can continue.',examLocked:true,lockReason:attempt.lock_reason||null});
       }
       if(attempt.status!=='STARTED'){
         await conn.commit();
