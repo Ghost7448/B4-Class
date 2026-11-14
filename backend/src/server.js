@@ -1423,10 +1423,12 @@ app.get('/api/admin/exams/:id/submissions',requirePermission('MANAGE_EXAMS'),asy
   const [rows]=await q(`SELECT a.id,a.user_id,a.status,a.score,a.started_at,a.submitted_at,u.display_name,u.official_name,
     COALESCE((SELECT SUM(q.points) FROM exam_questions q WHERE q.exam_id=a.exam_id),0) total,
     COALESCE((SELECT SUM(CASE WHEN ea.is_correct=1 THEN q.points ELSE 0 END) FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=a.id WHERE q.exam_id=a.exam_id),0) score,
+    (SELECT COUNT(*) FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=a.id WHERE q.exam_id=a.exam_id AND ea.is_correct=1) correct_questions,
+    (SELECT COUNT(*) FROM exam_questions q WHERE q.exam_id=a.exam_id) total_questions,
     (SELECT COUNT(*) FROM exam_security_events se WHERE se.attempt_id=a.id AND se.event_type IN ('SCREENSHOT_ATTEMPT','SCREENSHOT_KEY_DETECTED')) screenshot_attempts,
     (SELECT COUNT(*) FROM exam_security_events se WHERE se.attempt_id=a.id) security_event_count
     FROM exam_attempts a JOIN users u ON u.id=a.user_id WHERE a.exam_id=? ORDER BY a.submitted_at DESC,a.started_at DESC`,[id]);
-  res.json({submissions:rows.map(x=>({...x,percent:Number(x.total)?Math.round(Number(x.score||0)/Number(x.total)*100):0}))});
+  res.json({submissions:rows.map(x=>({...x,percent:Number(x.total)?Math.round(Number(x.score||0)/Number(x.total)*100):0,points_percent:Number(x.total)?Math.round(Number(x.score||0)/Number(x.total)*100):0,correct_percent:Number(x.total_questions)?Math.round(Number(x.correct_questions||0)/Number(x.total_questions)*100):0}))});
 });
 
 app.get('/api/chat/stream',requireAuth,async(req,res)=>{
