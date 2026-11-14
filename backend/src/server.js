@@ -321,6 +321,7 @@ const PERMISSION_DEFS = [
 
 async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS b4_account_link_tokens(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,token_hash CHAR(64) NOT NULL UNIQUE,expires_at DATETIME NOT NULL,used_at DATETIME NULL,created_by BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE,INDEX idx_account_link_expiry(expires_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS exam_security_events(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,attempt_id BIGINT UNSIGNED NOT NULL,exam_id BIGINT UNSIGNED NOT NULL,user_id BIGINT UNSIGNED NOT NULL,event_type VARCHAR(40) NOT NULL,source VARCHAR(60) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_exam_security_attempt(attempt_id,event_type,created_at),INDEX idx_exam_security_exam(exam_id,created_at),FOREIGN KEY(attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,FOREIGN KEY(exam_id) REFERENCES exams(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_exam_drafts(user_id BIGINT UNSIGNED PRIMARY KEY,draft_json LONGTEXT NOT NULL,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_bug_reports(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NULL,reporter_name VARCHAR(120) NOT NULL,reporter_role VARCHAR(20) NOT NULL,description TEXT NOT NULL,status ENUM('OPEN','IN_PROGRESS','RESOLVED') NOT NULL DEFAULT 'OPEN',resolved_by BIGINT UNSIGNED NULL,resolved_at DATETIME NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_bug_reports_status(status),INDEX idx_bug_reports_created(created_at),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,FOREIGN KEY(resolved_by) REFERENCES users(id) ON DELETE SET NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_bug_report_files(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,report_id BIGINT UNSIGNED NOT NULL,filename VARCHAR(255) NOT NULL,mime_type VARCHAR(120) NOT NULL,data LONGBLOB NOT NULL,size_bytes BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(report_id) REFERENCES b4_bug_reports(id) ON DELETE CASCADE,INDEX idx_bug_report_files_report(report_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -1369,6 +1370,8 @@ app.get('/api/admin/exams/:id/submissions/:attemptId',requirePermission('MANAGE_
   const [attemptRows]=await q(`SELECT a.id,a.exam_id,a.user_id,a.status,a.score,a.started_at,a.submitted_at,u.display_name,u.official_name,e.title,e.subject_id
     FROM exam_attempts a JOIN users u ON u.id=a.user_id JOIN exams e ON e.id=a.exam_id WHERE a.id=? AND a.exam_id=? LIMIT 1`,[attemptId,examId]);
   if(!attemptRows[0]) return res.status(404).json({error:'Submission not found'});
+  const [securityCount]=await q("SELECT COUNT(*) screenshot_attempts FROM exam_security_events WHERE attempt_id=? AND event_type='SCREENSHOT_ATTEMPT'",[attemptId]);
+  attemptRows[0].screenshot_attempts=Number(securityCount[0]?.screenshot_attempts||0);
   const [questions]=await q(`SELECT q.id,q.question_text,q.question_type,q.options_json,q.correct_answer,q.correct_answer AS auto_correct_answer,q.points, ans.answer_text,ans.is_correct,ans.points_awarded,ans.teacher_correct_answer,ans.image_size_bytes, CASE WHEN ans.is_correct IS NULL THEN 0 ELSE 1 END AS graded FROM exam_questions q
     LEFT JOIN exam_answers ans ON ans.question_id=q.id AND ans.attempt_id=?
     WHERE q.exam_id=? ORDER BY q.sort_order`,[attemptId,examId]);
@@ -1418,7 +1421,8 @@ app.get('/api/admin/exams/:id/submissions',requirePermission('MANAGE_EXAMS'),asy
   try{await assertTeacherOwner(req,'exams',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}
   const [rows]=await q(`SELECT a.id,a.user_id,a.status,a.score,a.started_at,a.submitted_at,u.display_name,u.official_name,
     COALESCE((SELECT SUM(q.points) FROM exam_questions q WHERE q.exam_id=a.exam_id),0) total,
-    COALESCE((SELECT SUM(CASE WHEN ea.is_correct=1 THEN q.points ELSE 0 END) FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=a.id WHERE q.exam_id=a.exam_id),0) score
+    COALESCE((SELECT SUM(CASE WHEN ea.is_correct=1 THEN q.points ELSE 0 END) FROM exam_questions q LEFT JOIN exam_answers ea ON ea.question_id=q.id AND ea.attempt_id=a.id WHERE q.exam_id=a.exam_id),0) score,
+    (SELECT COUNT(*) FROM exam_security_events se WHERE se.attempt_id=a.id AND se.event_type='SCREENSHOT_ATTEMPT') screenshot_attempts
     FROM exam_attempts a JOIN users u ON u.id=a.user_id WHERE a.exam_id=? ORDER BY a.submitted_at DESC,a.started_at DESC`,[id]);
   res.json({submissions:rows.map(x=>({...x,percent:Number(x.total)?Math.round(Number(x.score||0)/Number(x.total)*100):0}))});
 });
@@ -1893,6 +1897,22 @@ async function sendExamStart(res,exam,attempt){
   const savedImageIds=savedRows.filter(x=>Number(x.image_size_bytes)>0).map(x=>String(x.question_id));
   res.json({exam,attempt:{id:attempt.id,started_at:attempt.started_at,deadline},answers:savedAnswers,imageQuestionIds:savedImageIds,questions:questions.map(q=>({...q,options_json:typeof q.options_json==='string'?(JSON.parse(q.options_json||'[]')):(q.options_json||[])}))});
 }
+
+app.post('/api/exams/:id/security-event',requireAuth,async(req,res)=>{
+  const examId=Number(req.params.id),eventType=String(req.body?.eventType||'').toUpperCase(),source=String(req.body?.source||'').slice(0,60);
+  if(!Number.isSafeInteger(examId)||eventType!=='SCREENSHOT_ATTEMPT')return res.status(400).json({error:'Invalid security event'});
+  try{
+    const [rows]=await q("SELECT a.id,a.status,d.session_id FROM exam_attempts a LEFT JOIN exam_attempt_devices d ON d.attempt_id=a.id WHERE a.exam_id=? AND a.user_id=? LIMIT 1",[examId,req.session.userId]);
+    const attempt=rows[0];if(!attempt)return res.status(404).json({error:'Exam attempt not found'});
+    if(attempt.status!=='STARTED')return res.status(409).json({error:'Exam attempt is not active'});
+    if(attempt.session_id&&attempt.session_id!==String(req.sessionID||''))return res.status(409).json({error:'Exam is active on another device'});
+    const [recent]=await q("SELECT id FROM exam_security_events WHERE attempt_id=? AND event_type=? AND created_at>=DATE_SUB(NOW(),INTERVAL 2 SECOND) LIMIT 1",[attempt.id,eventType]);
+    if(recent.length)return res.json({ok:true,recorded:false});
+    await q('INSERT INTO exam_security_events(attempt_id,exam_id,user_id,event_type,source) VALUES(?,?,?,?,?)',[attempt.id,examId,req.session.userId,eventType,source||null]);
+    await audit(req,'EXAM_SCREENSHOT_ATTEMPT','exam_attempt',attempt.id,{examId,eventType,source});
+    res.json({ok:true,recorded:true});
+  }catch(e){console.error('Exam security event failed:',e);res.status(500).json({error:'Could not record exam security event'});}
+});
 
 app.post('/api/exams/:id/lock',requireAuth,async(req,res)=>{
   const id=Number(req.params.id);
