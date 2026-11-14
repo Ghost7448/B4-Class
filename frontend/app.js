@@ -2533,15 +2533,19 @@ function examResultV(){
 function examCompletionStats(questions){
   const qs=Array.isArray(questions)?questions:[];
   const answered=q=>String(q?.answer_text??'').trim().length>0||Number(q?.image_size_bytes||0)>0;
-  const objective=qs.filter(q=>q.question_type==='MCQ'||q.question_type==='TRUE_FALSE');
+  const isObjective=q=>{
+    const type=String(q?.question_type||'').trim().toUpperCase().replace(/[\\s-]+/g,'_');
+    return type==='MCQ'||type.includes('MULTIPLE_CHOICE')||type==='TRUE_FALSE'||type==='TRUE/FALSE'||type==='TF'||type==='T/F';
+  };
+  const objective=qs.filter(isObjective);
   const answeredObjective=objective.filter(answered).length;
   const answeredAll=qs.filter(answered).length;
   const correct=qs.filter(q=>q.is_correct===true||Number(q.is_correct)===1).length;
   const objectiveCorrect=objective.filter(q=>q.is_correct===true||Number(q.is_correct)===1).length;
   return {
     correct,total:qs.length,
-    objectiveCorrect,
-    objectiveAnswered:answeredObjective,objectiveTotal:objective.length,
+    objectiveCorrect,objectiveTotal:objective.length,
+    objectiveAnswered:answeredObjective,
     objectivePercent:objective.length?Math.round(answeredObjective/objective.length*100):0,
     answeredAll,totalAll:qs.length,
     overallPercent:qs.length?Math.round(answeredAll/qs.length*100):0
@@ -2550,7 +2554,7 @@ function examCompletionStats(questions){
 function examAnswersV(){
   const r=S.examAnswers||{},qs=r.questions||[],stats=examCompletionStats(qs);
   return title('View Answers','Review what you submitted and what was marked correct or incorrect.',`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
-  '<div class="exam-answers-summary"><div><b>'+Number(r.percent||0)+'%</b><span>Points Score</span></div><div><b>'+Number(r.score||r.attempt?.score||0)+' / '+Number(r.total||0)+'</b><span>Graded points</span></div><div><b>'+stats.objectiveCorrect+' / '+stats.objectiveTotal+'</b><span>Correct MCQ & T/F</span></div><div><b>'+stats.objectivePercent+'%</b><span>MCQ & T/F completion ('+stats.objectiveAnswered+' / '+stats.objectiveTotal+')</span></div><div><b>'+stats.overallPercent+'%</b><span>Overall completion ('+stats.answeredAll+' / '+stats.totalAll+')</span></div></div>'+
+  '<div class="exam-answers-summary"><div><b>'+Number(r.percent||0)+'%</b><span>Points Score</span></div><div><b>'+Number(r.score||r.attempt?.score||0)+' / '+Number(r.total||0)+'</b><span>Graded points</span></div><div><b>'+stats.correct+' / '+stats.total+'</b><span>Correct questions</span></div><div><b>'+stats.objectivePercent+'%</b><span>MCQ & T/F completion ('+stats.objectiveAnswered+' / '+stats.objectiveTotal+')</span></div><div><b>'+stats.overallPercent+'%</b><span>Overall completion ('+stats.answeredAll+' / '+stats.totalAll+')</span></div></div>'+
   '<div class="exam-answer-review-list">'+qs.map((q,i)=>{
     const type=q.question_type==='TRUE_FALSE'?'TRUE/FALSE':(q.question_type||'MCQ');
     const manual=q.question_type==='SHORT'||q.question_type==='LONG';
