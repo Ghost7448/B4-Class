@@ -460,6 +460,7 @@ function installExamExitGuard(){
   checkWindowDimensions();
 }
 installExamExitGuard();
+installExamContentProtection();
 
 function patchExamCards(items){
   const root=document.querySelector('#content > .grid.exam-cards');
@@ -2325,6 +2326,35 @@ function collectExamAnswers(){
   });
   return answers;
 }
+let lastExamScreenshotReportAt=0,lastExamCopyWarningAt=0;
+async function reportExamScreenshotAttempt(){
+  const id=Number(S.examRun?.id||0);if(!id||S.view!=='exam-run'||window.examExitAllowed)return;
+  const now=Date.now();if(now-lastExamScreenshotReportAt<1800)return;lastExamScreenshotReportAt=now;
+  try{
+    const response=await fetch(API+'/api/exams/'+id+'/security-event',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({eventType:'SCREENSHOT_ATTEMPT',source:'PRINT_SCREEN_KEY'})});
+    if(!response.ok)throw new Error('HTTP '+response.status);
+    toast(S.lang==='ar'?'تم رصد محاولة Screenshot وتسجيلها':'Screenshot attempt detected and recorded');
+  }catch(e){console.warn('Could not record screenshot attempt:',e?.message||e);}
+}
+function isExamContentTarget(target){return S.view==='exam-run'&&!!target&&!!target.closest?.('#examRunForm');}
+function installExamContentProtection(){
+  if(window.b4ExamContentProtectionInstalled)return;window.b4ExamContentProtectionInstalled=true;
+  document.addEventListener('contextmenu',e=>{if(isExamContentTarget(e.target)){e.preventDefault();e.stopPropagation();}},true);
+  document.addEventListener('copy',e=>{if(!isExamContentTarget(e.target))return;e.preventDefault();const n=Date.now();if(n-lastExamCopyWarningAt>1800){lastExamCopyWarningAt=n;toast(S.lang==='ar'?'النسخ غير متاح أثناء الامتحان':'Copying is disabled during the exam');}},true);
+  document.addEventListener('cut',e=>{if(isExamContentTarget(e.target)){e.preventDefault();e.stopPropagation();}},true);
+  document.addEventListener('selectstart',e=>{if(isExamContentTarget(e.target)&&!e.target.closest('input,textarea,[contenteditable="true"]'))e.preventDefault();},true);
+  document.addEventListener('dragstart',e=>{if(isExamContentTarget(e.target)){e.preventDefault();e.stopPropagation();}},true);
+  document.addEventListener('keydown',e=>{
+    if(S.view!=='exam-run')return;
+    if(e.key==='PrintScreen'){e.preventDefault();reportExamScreenshotAttempt();return;}
+    if((e.ctrlKey||e.metaKey)&&['c','x'].includes(String(e.key||'').toLowerCase())){
+      const anchor=window.getSelection?.()?.anchorNode?.parentElement||null;
+      if(isExamContentTarget(e.target)||isExamContentTarget(anchor)){e.preventDefault();e.stopPropagation();const n=Date.now();if(n-lastExamCopyWarningAt>1800){lastExamCopyWarningAt=n;toast(S.lang==='ar'?'النسخ غير متاح أثناء الامتحان':'Copying is disabled during the exam');}}
+    }
+  },true);
+  document.addEventListener('keyup',e=>{if(S.view==='exam-run'&&e.key==='PrintScreen')reportExamScreenshotAttempt();},true);
+}
+
 async function saveExamAnswers(id,keepalive=false){
   const answers=collectExamAnswers();
   examSavePending={id,answers};
@@ -2488,7 +2518,7 @@ function examReviewV(){
   if(r.detail){
     const d=r.detail,examId=Number(r.examId||0),attemptId=Number(d.attempt?.id||0);
     return title('Submission review','Answers submitted by '+esc(d.attempt?.display_name||'Student'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`+(d.attempt?.status==='LOCKED'?'<button class="btn primary" onclick="unlockExamSubmission('+examId+','+attemptId+')">🔓 Unlock</button>':'')+(Number(S.me?.is_super_admin)===1?'<button class="btn danger" onclick="deleteExamSubmission('+examId+','+attemptId+')">Delete Submission</button>':''))+
-    '<div class="grid c3 review-summary"><div class="card"><small>Student</small><b>'+esc(d.attempt?.display_name||'—')+'</b></div><div class="card"><small>Score</small><b>'+Number(d.attempt?.score||0)+' / '+Number(d.total||0)+'</b></div><div class="card"><small>Percentage</small><b>'+Number(d.percent||0)+'%</b></div></div>'+
+    '<div class="grid c3 review-summary"><div class="card"><small>Student</small><b>'+esc(d.attempt?.display_name||'—')+'</b>'+(Number(d.attempt?.screenshot_attempts||0)>0?'<span class="badge screenshot-warning">⚠ Screenshot attempts: '+Number(d.attempt.screenshot_attempts)+'</span>':'')+'</div><div class="card"><small>Score</small><b>'+Number(d.attempt?.score||0)+' / '+Number(d.total||0)+'</b></div><div class="card"><small>Percentage</small><b>'+Number(d.percent||0)+'%</b></div></div>'+
     '<div class="grid review-questions">'+(d.questions||[]).map((q,i)=>{
       const manual=q.question_type==='SHORT'||q.question_type==='LONG';
       const pending=q.is_correct===null||q.is_correct===undefined;
@@ -2499,7 +2529,7 @@ function examReviewV(){
     }).join('')+'</div>';;
   }
   return title('Exam submissions','Choose a student to review their full answers.',`<button class="btn ghost" onclick="go('exams')">← Back</button>`)+
-  '<div class="grid review-submissions">'+(r.submissions||[]).map(x=>'<article class="card review-student"><button class="review-student-main" onclick="openExamSubmission('+r.examId+','+x.id+')"><div><b>'+esc(x.display_name)+'</b><small>'+esc(x.status||'')+'</small></div><span class="badge">'+Number(x.percent||0)+'%</span></button>'+(x.status==='LOCKED'?'<button class="btn primary review-unlock" onclick="unlockExamSubmission('+r.examId+','+x.id+')">🔓 Unlock</button>':'')+(Number(S.me?.is_super_admin)===1?'<button class="btn danger" onclick="deleteExamSubmission('+r.examId+','+x.id+')">Delete Submission</button>':'')+'</article>').join('')||'<div class="card empty">No submissions yet.</div>'+'</div>';
+  '<div class="grid review-submissions">'+(r.submissions||[]).map(x=>'<article class="card review-student"><button class="review-student-main" onclick="openExamSubmission('+r.examId+','+x.id+')"><div><b>'+esc(x.display_name)+'</b><small>'+esc(x.status||'')+'</small>'+(Number(x.screenshot_attempts||0)>0?'<span class="badge screenshot-warning">⚠ Screenshot attempts: '+Number(x.screenshot_attempts)+'</span>':'')+'</div><span class="badge">'+Number(x.percent||0)+'%</span></button>'+(x.status==='LOCKED'?'<button class="btn primary review-unlock" onclick="unlockExamSubmission('+r.examId+','+x.id+')">🔓 Unlock</button>':'')+(Number(S.me?.is_super_admin)===1?'<button class="btn danger" onclick="deleteExamSubmission('+r.examId+','+x.id+')">Delete Submission</button>':'')+'</article>').join('')||'<div class="card empty">No submissions yet.</div>'+'</div>';
 }
 
 async function deleteExamSubmission(examId,attemptId){
