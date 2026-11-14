@@ -382,7 +382,7 @@ function lockActiveExam(reason='LEFT_EXAM'){
     S.examRun.lockReason=reason;
     const messages={
       SCREENSHOT_KEY_DETECTED:'A Print Screen key press was detected. Your exam was automatically locked.',
-      APP_SWITCH_OR_CAPTURE:'You left the exam screen or the browser was hidden. Your exam was automatically locked.',
+      APP_SWITCH_OR_CAPTURE:'The exam tab or browser became hidden. The website cannot identify whether this was an app switch, screen recording, or screen sharing.',
       FULLSCREEN_EXIT:'Full Screen was exited during the exam.',
       WINDOW_RESIZED:'A major window-size change was detected during the exam.',
       PAGE_CLOSED_OR_RELOADED:'The exam page was closed or reloaded.',
@@ -2534,7 +2534,7 @@ function examReviewV(){
   const r=S.examReview||{};
   if(r.detail){
     const d=r.detail,examId=Number(r.examId||0),attemptId=Number(d.attempt?.id||0);
-    const securityEventNames={SCREENSHOT_ATTEMPT:'Screenshot attempt',SCREENSHOT_KEY_DETECTED:'Screenshot shortcut detected',APP_SWITCH_OR_CAPTURE:'Exam tab hidden / app switch',FULLSCREEN_EXIT:'Full Screen exited',WINDOW_RESIZED:'Window size changed',PAGE_CLOSED_OR_RELOADED:'Exam page closed or reloaded',LEFT_EXAM:'Left exam screen'};
+    const securityEventNames={SCREENSHOT_ATTEMPT:'Screenshot attempt',SCREENSHOT_KEY_DETECTED:'Screenshot shortcut detected',APP_SWITCH_OR_CAPTURE:'Exam tab/browser hidden (exact cause unavailable)',FULLSCREEN_EXIT:'Full Screen exited',WINDOW_RESIZED:'Window size changed',PAGE_CLOSED_OR_RELOADED:'Exam page closed or reloaded',LEFT_EXAM:'Left exam screen'};
     const securityEventsHTML=(d.securityEvents||[]).length?'<div class="card exam-security-log"><div class="head"><h3>Exam Security Log</h3><span class="badge">'+(d.securityEvents||[]).length+' events</span></div>'+d.securityEvents.map(ev=>'<div class="item"><div class="grow"><b>'+esc(securityEventNames[ev.event_type]||ev.event_type||'Security event')+'</b><small class="muted">'+esc(ev.source||'Automatic detection')+' • '+esc(ev.created_at||'')+'</small></div><span class="badge screenshot-warning">Recorded</span></div>').join('')+'</div>':'<div class="card exam-security-log"><div class="head"><h3>Exam Security Log</h3></div><p class="muted">No security events were recorded for this attempt.</p></div>';
     return title('Submission review','Answers submitted by '+esc(d.attempt?.display_name||'Student'),`<button class="btn ghost" onclick="go('exams')">← Back</button>`+(d.attempt?.status==='LOCKED'?'<button class="btn primary" onclick="unlockExamSubmission('+examId+','+attemptId+')">🔓 Unlock</button>':'')+(Number(S.me?.is_super_admin)===1?'<button class="btn danger" onclick="deleteExamSubmission('+examId+','+attemptId+')">Delete Submission</button>':''))+
     '<div class="grid c3 review-summary"><div class="card"><small>Student</small><b>'+esc(d.attempt?.display_name||'—')+'</b>'+(Number(d.attempt?.screenshot_attempts||0)>0?'<span class="badge screenshot-warning">⚠ Screenshot attempts: '+Number(d.attempt.screenshot_attempts)+'</span>':'')+'</div><div class="card"><small>Score</small><b>'+Number(d.attempt?.score||0)+' / '+Number(d.total||0)+'</b></div><div class="card"><small>Percentage</small><b>'+Number(d.percent||0)+'%</b></div></div>'+
