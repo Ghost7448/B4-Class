@@ -632,7 +632,24 @@ function ensureGlobalRealtime(){
       window.globalRealtimeOnline=true;
       clearInterval(window.liveFallbackTimer);
     });
-    window.globalRealtimeStream.addEventListener('data-changed',()=>syncLiveData());
+    let liveEventQueue=[];
+    let liveEventFlushQueued=false;
+    window.globalRealtimeStream.addEventListener('data-changed',(event)=>{
+      try{liveEventQueue.push(JSON.parse(event.data||'{}'))}catch{liveEventQueue.push({})}
+      if(liveEventFlushQueued)return;
+      liveEventFlushQueued=true;
+      queueMicrotask(async()=>{
+        liveEventFlushQueued=false;
+        const events=liveEventQueue.splice(0);
+        await syncLiveData();
+        const paths=events.map(x=>String(x.path||''));
+        if(S.view==='admin:logs')loadLogs({silent:true});
+        else if(S.view==='teacher:exam-logs')teacherExamLogsLoad({silent:true});
+        else if(S.view==='admin:reports'&&paths.some(p=>p.includes('/api/admin/reports')))loadReports({silent:true});
+        if(S.view==='exam-review'&&paths.some(p=>/\/api\/(admin\/exams|exams)\/.*(submission|grade|unlock|lock)/i.test(p)))refreshExamReviewLive();
+        if(S.view==='exam-answers'&&paths.some(p=>/\/api\/(admin\/exams|exams)\/.*(grade|submission)/i.test(p)))refreshExamAnswersLive();
+      });
+    });
     window.globalRealtimeStream.addEventListener('permissions-changed',()=>syncLiveData(true));
     window.globalRealtimeStream.addEventListener('exam-locked',(event)=>{
       try{
@@ -1036,12 +1053,9 @@ function render(){
   document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';
   if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';
   const previousView=lastAnimatedView;let v=S.view;
-  if(v==='admin:reports'){
-    if(!window.b4ReportsLiveTimer)window.b4ReportsLiveTimer=setInterval(()=>{if(S.view==='admin:reports'&&!document.hidden)loadReports({silent:true})},5000);
-  }else if(window.b4ReportsLiveTimer){clearInterval(window.b4ReportsLiveTimer);window.b4ReportsLiveTimer=null}
-  if(v==='teacher:exam-logs'){if(!window.b4TeacherExamLogsTimer)window.b4TeacherExamLogsTimer=setInterval(()=>{if(S.view==='teacher:exam-logs'&&!document.hidden)teacherExamLogsLoad({silent:true})},5000);}else if(window.b4TeacherExamLogsTimer){clearInterval(window.b4TeacherExamLogsTimer);window.b4TeacherExamLogsTimer=null;}if(v==='admin:logs'){
-    if(!window.b4LogsLiveTimer)window.b4LogsLiveTimer=setInterval(()=>{if(S.view==='admin:logs'&&!document.hidden)loadLogs({silent:true})},5000);
-  }else if(window.b4LogsLiveTimer){clearInterval(window.b4LogsLiveTimer);window.b4LogsLiveTimer=null}
+  if(window.b4ReportsLiveTimer){clearInterval(window.b4ReportsLiveTimer);window.b4ReportsLiveTimer=null}
+  if(window.b4TeacherExamLogsTimer){clearInterval(window.b4TeacherExamLogsTimer);window.b4TeacherExamLogsTimer=null}
+  if(window.b4LogsLiveTimer){clearInterval(window.b4LogsLiveTimer);window.b4LogsLiveTimer=null}
   morphHtml($('#nav'),buildNav());
   let html=v==='teacher:exam-logs'?title(S.lang==='ar'?'سجلات الامتحانات':'Exam Logs',S.lang==='ar'?'سجل أنشطة الامتحانات فقط.':'Exam-related activity only.')+'<div id="teacherExamLogsRoot"></div>':v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-fullscreen'?examFullscreenV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-unavailable'?examUnavailableV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
   morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
@@ -1073,7 +1087,7 @@ async function syncProfiles(){
     if(S.me?.avatar_url&&$('#topAvatar'))$('#topAvatar').src=S.me.avatar_url;
   }catch{}
 }
-function profileSyncLoop(){clearInterval(window.profileSyncTimer);if(!S.me)return;syncProfiles();window.profileSyncTimer=setInterval(syncProfiles,1500)}
+function profileSyncLoop(){clearInterval(window.profileSyncTimer);window.profileSyncTimer=null;if(S.me)syncProfiles()}
 async function loadMe(){
   try{
     const d=await api('/api/auth/me');
@@ -1608,8 +1622,8 @@ function teacherChatLoop(){
       applyTeacherMessages(d.messages||[]);
     }catch{}finally{window.teacherSyncBusy=false}
   };
-  // Keep a DB-backed fallback running even when SSE reports "open".
-  window.teacherTimer=setInterval(sync,2000);
+  // SSE is the primary live transport. Poll only while the SSE connection is unavailable.
+  window.teacherTimer=setInterval(()=>{if(window.teacherRealtimeOnline!==true)sync()},5000);
   window.teacherTypingTimer=setInterval(async()=>{
     if(S.view!=='teacherChat')return;
     try{
@@ -2479,21 +2493,7 @@ function examAnswersLoop(id){
   // The answers endpoint returns 404 when this student has no submitted attempt.
   // Stop polling in that case instead of spamming the console every 3 seconds.
   const originalApi=api;
-  window.examAnswersTimer=setInterval(async()=>{
-    if(S.view!=='exam-answers'||Number(S.examAnswers?.examId)!==Number(id)){clearInterval(window.examAnswersTimer);return}
-    try{
-      const d=await originalApi('/api/exams/'+id+'/answers?_='+Date.now(),{cache:'no-store'});
-      const before=JSON.stringify(S.examAnswers?.questions||[]);
-      const after=JSON.stringify(d.questions||[]);
-      if(before!==after||Number(S.examAnswers?.score)!==Number(d.score)){S.examAnswers={...d,examId:id};render()}
-    }catch(e){
-      if(/404|No exam submission yet/i.test(String(e?.message||''))){
-        clearInterval(window.examAnswersTimer);
-        window.examAnswersTimer=null;
-        if(!missingAttemptNotified){missingAttemptNotified=true;toast('No submitted exam answers are available yet.')}
-      }
-    }
-  },3000);
+  window.examAnswersTimer=null;
 }
 function examResultV(){
   const r=S.examResult||{};
@@ -2516,18 +2516,38 @@ function examAnswersV(){
 }
 function startExamTeacherRefresh(examId,attemptId=null){
   clearInterval(window.examTeacherRefreshTimer);
-  window.examTeacherRefreshTimer=setInterval(async()=>{
-    if(S.view!=='exam-review'||Number(S.examReview?.examId)!==Number(examId)){clearInterval(window.examTeacherRefreshTimer);return}
-    try{
-      if(attemptId){
-        const d=await api('/api/admin/exams/'+examId+'/submissions/'+attemptId+'?_='+Date.now(),{cache:'no-store'});
-        if(JSON.stringify(d)!==JSON.stringify(S.examReview?.detail)){S.examReview={examId,detail:d};render()}
-      }else{
-        const d=await api('/api/admin/exams/'+examId+'/submissions?_='+Date.now(),{cache:'no-store'});
-        if(JSON.stringify(d.submissions||[])!==JSON.stringify(S.examReview?.submissions||[])){S.examReview={examId,submissions:d.submissions||[]};render()}
+  window.examTeacherRefreshTimer=null;
+}
+async function refreshExamReviewLive(){
+  const current=S.examReview;if(!current||S.view!=='exam-review')return;
+  try{
+    if(current.detail){
+      const d=await api('/api/admin/exams/'+current.examId+'/submissions/'+current.detail.attempt?.id,{cache:'no-store'});
+      if(JSON.stringify(d)!==JSON.stringify(S.examReview?.detail)){
+        S.examReview={examId:current.examId,detail:d};
+        const root=$('#content');if(root)morphHtml(root,contentView());
       }
-    }catch{}
-  },3000);
+    }else{
+      const d=await api('/api/admin/exams/'+current.examId+'/submissions',{cache:'no-store'});
+      const next=d.submissions||[];
+      if(JSON.stringify(next)!==JSON.stringify(S.examReview?.submissions||[])){
+        S.examReview={examId:current.examId,submissions:next};
+        const root=$('#content');if(root)morphHtml(root,contentView());
+      }
+    }
+  }catch(e){console.warn('Live exam review update failed:',e.message)}
+}
+async function refreshExamAnswersLive(){
+  const id=Number(S.examAnswers?.examId);if(!id||S.view!=='exam-answers')return;
+  try{
+    const d=await api('/api/exams/'+id+'/answers',{cache:'no-store'});
+    const before=JSON.stringify(S.examAnswers?.questions||[]);
+    const after=JSON.stringify(d.questions||[]);
+    if(before!==after||Number(S.examAnswers?.score)!==Number(d.score)){
+      S.examAnswers={...d,examId:id};
+      const root=$('#content');if(root)morphHtml(root,contentView());
+    }
+  }catch(e){console.warn('Live exam answers update failed:',e.message)}
 }
 async function submissions(id){try{clearInterval(window.examTeacherRefreshTimer);const d=await api('/api/admin/exams/'+id+'/submissions');S.examReview={examId:id,submissions:d.submissions||[]};S.view='exam-review';render();startExamTeacherRefresh(id);}catch(e){toast(e.message)}}
 async function openExamSubmission(examId,attemptId){try{clearInterval(window.examTeacherRefreshTimer);const d=await api('/api/admin/exams/'+examId+'/submissions/'+attemptId);S.examReview={examId,detail:d};S.view='exam-review';render();startExamTeacherRefresh(examId,attemptId);}catch(e){toast(e.message)}}
