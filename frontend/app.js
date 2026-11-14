@@ -377,7 +377,19 @@ function lockActiveExam(reason='LEFT_EXAM'){
   window.examExitAllowed=true;
   clearInterval(window.examTimer);
   clearTimeout(examSaveTimer);
-  if(S.examRun)S.examRun.locked=true;
+  if(S.examRun){
+    S.examRun.locked=true;
+    S.examRun.lockReason=reason;
+    const messages={
+      SCREENSHOT_KEY_DETECTED:'A Print Screen key press was detected. Your exam was automatically locked.',
+      APP_SWITCH_OR_CAPTURE:'You left the exam screen or the browser was hidden. Your exam was automatically locked.',
+      FULLSCREEN_EXIT:'Full Screen was exited during the exam.',
+      WINDOW_RESIZED:'A major window-size change was detected during the exam.',
+      PAGE_CLOSED_OR_RELOADED:'The exam page was closed or reloaded.',
+      LEFT_EXAM:'You left the exam screen during the exam.'
+    };
+    S.examRun.lockMessage=messages[reason]||'A security rule was triggered. Your exam was automatically locked.';
+  }
   const local=S.exams.find(x=>Number(x.id)===id);
   if(local)local.attempt_status='LOCKED';
   try{
@@ -398,14 +410,14 @@ function installExamExitGuard(){
   examExitGuardInstalled=true;
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden'&&S.view==='exam-run'&&!window.examExitAllowed&&!isExamCameraCaptureActive()){
-      lockActiveExam('LEFT_EXAM');
+      lockActiveExam('APP_SWITCH_OR_CAPTURE');
       return;
     }
     if(document.visibilityState==='visible')showExamLockedIfNeeded();
   });
   window.addEventListener('pagehide',()=>{
     if(S.view==='exam-run'&&!window.examExitAllowed&&!isExamCameraCaptureActive()){
-      lockActiveExam('LEFT_EXAM');
+      lockActiveExam('PAGE_CLOSED_OR_RELOADED');
     }
   });
   document.addEventListener('fullscreenchange',()=>{
@@ -2346,13 +2358,18 @@ function installExamContentProtection(){
   document.addEventListener('dragstart',e=>{if(isExamContentTarget(e.target)){e.preventDefault();e.stopPropagation();}},true);
   document.addEventListener('keydown',e=>{
     if(S.view!=='exam-run')return;
-    if(e.key==='PrintScreen'){e.preventDefault();reportExamScreenshotAttempt();return;}
+    if(e.key==='PrintScreen'){
+      e.preventDefault();
+      lockActiveExam('SCREENSHOT_KEY_DETECTED');
+      showExamLockedIfNeeded();
+      return;
+    }
     if((e.ctrlKey||e.metaKey)&&['c','x'].includes(String(e.key||'').toLowerCase())){
       const anchor=window.getSelection?.()?.anchorNode?.parentElement||null;
       if(isExamContentTarget(e.target)||isExamContentTarget(anchor)){e.preventDefault();e.stopPropagation();const n=Date.now();if(n-lastExamCopyWarningAt>1800){lastExamCopyWarningAt=n;toast(S.lang==='ar'?'النسخ غير متاح أثناء الامتحان':'Copying is disabled during the exam');}}
     }
   },true);
-  document.addEventListener('keyup',e=>{if(S.view==='exam-run'&&e.key==='PrintScreen')reportExamScreenshotAttempt();},true);
+  // Browsers do not expose reliable OS-level screenshot, screen-recording, or screen-sharing events.
 }
 
 async function saveExamAnswers(id,keepalive=false){
