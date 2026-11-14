@@ -2525,14 +2525,14 @@ async function refreshExamReviewLive(){
       const d=await api('/api/admin/exams/'+current.examId+'/submissions/'+current.detail.attempt?.id,{cache:'no-store'});
       if(JSON.stringify(d)!==JSON.stringify(S.examReview?.detail)){
         S.examReview={examId:current.examId,detail:d};
-        const root=$('#content');if(root)morphHtml(root,contentView());
+        const root=$('#content');if(root)morphHtml(root,examReviewV());
       }
     }else{
       const d=await api('/api/admin/exams/'+current.examId+'/submissions',{cache:'no-store'});
       const next=d.submissions||[];
       if(JSON.stringify(next)!==JSON.stringify(S.examReview?.submissions||[])){
         S.examReview={examId:current.examId,submissions:next};
-        const root=$('#content');if(root)morphHtml(root,contentView());
+        const root=$('#content');if(root)morphHtml(root,examReviewV());
       }
     }
   }catch(e){console.warn('Live exam review update failed:',e.message)}
@@ -2545,7 +2545,7 @@ async function refreshExamAnswersLive(){
     const after=JSON.stringify(d.questions||[]);
     if(before!==after||Number(S.examAnswers?.score)!==Number(d.score)){
       S.examAnswers={...d,examId:id};
-      const root=$('#content');if(root)morphHtml(root,contentView());
+      const root=$('#content');if(root)morphHtml(root,examAnswersV());
     }
   }catch(e){console.warn('Live exam answers update failed:',e.message)}
 }
