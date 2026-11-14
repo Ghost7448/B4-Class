@@ -2905,3 +2905,8 @@ img.b4-image-fallback{display:block!important;object-fit:cover!important;object-
 /* Keep fallback avatar geometry consistent wherever a profile photo is absent or broken. */
 img.avatar, img.person-avatar, img.account-avatar, img[data-user-avatar]{min-width:38px;min-height:38px;flex-shrink:0;background:#4c1d95;object-fit:cover;object-position:center;}
 img.b4-image-fallback{aspect-ratio:1/1;}
+
+
+/* Exam content protection: question prompts cannot be selected/copied in the exam UI. */
+.exam-run-question h3,.exam-run-question .exam-question-top,.exam-run-question .question-number{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.screenshot-warning{display:inline-flex!important;align-items:center;gap:5px;width:max-content;max-width:100%;margin-top:6px;background:#dc262615!important;border:1px solid #dc26264a!important;color:#dc2626!important;white-space:normal;font-size:10px}
