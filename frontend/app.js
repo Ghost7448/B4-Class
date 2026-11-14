@@ -369,7 +369,19 @@ function finishExamCameraCapture(hasFile){
   clearTimeout(window.examCameraCaptureReturnTimer);
   window.examCameraCapturePending=false;
   try{sessionStorage.removeItem('b4ExamCameraCaptureUntil')}catch{}
-  if(S.view==='exam-run'&&!window.examExitAllowed)captureExamViewport();
+  if(S.view==='exam-run'&&!window.examExitAllowed){
+    // Opening the native camera/file picker can leave browser fullscreen and
+    // restore the page with different viewport dimensions. Re-baseline first.
+    captureExamViewport();
+    window.examCameraReturnGraceUntil=Date.now()+8000;
+    const activeFullscreen=!!(document.fullscreenElement||document.webkitFullscreenElement);
+    if(window.examFullscreenRequired&&!activeFullscreen){
+      // Mobile browsers generally cannot re-enter fullscreen without a fresh user gesture.
+      // Do not punish the student for the camera picker exiting fullscreen.
+      window.examFullscreenRequired=false;
+      window.examFullscreenSuspendedForCamera=true;
+    }
+  }
 }
 function lockActiveExam(reason='LEFT_EXAM'){
   const id=Number(S.examRun?.id||0);
@@ -469,13 +481,14 @@ function installExamExitGuard(){
   const resumeAfterCameraClosed=()=>{
     if(!isExamCameraCaptureActive())return;
     clearTimeout(window.examCameraCaptureReturnTimer);
-    // Android can restore/reload the page while the camera is active. Keep the
-    // persisted camera guard until the chooser has returned and its input event settles.
+    // Some mobile browsers return from the native camera without firing input/change
+    // (for example when the user cancels). Keep the exemption briefly after focus returns.
     window.examCameraCaptureReturnTimer=setTimeout(()=>{
       if(!isExamCameraCaptureActive())return;
       finishExamCameraCapture(false);
-      if(S.view==='exam-run'&&!window.examExitAllowed)checkWindowDimensions();
-    },5000);
+      // finishExamCameraCapture refreshes the viewport baseline. Do not immediately
+      // run the old resize baseline against the camera/browser transition.
+    },12000);
   };
   window.addEventListener('focus',resumeAfterCameraClosed);
   document.addEventListener('visibilitychange',()=>{
