@@ -805,7 +805,7 @@ function announcementTime(value){
 }
 function formatAnnouncementBody(value){
  const safe=esc(value||'');
- const linked=safe.replace(/(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi,raw=>{
+ const linked=safe.replace(/(https?:\/\/[^\s<]+|www\.[^\s<]+|(?:[a-z0-9-]+\.)+[a-z]{2,}(?:\/[^\s<]*)?)/gi,raw=>{
   let url=raw,tail='';
   while(/[.,!?;:،؛؟)]$/.test(url)){tail=url.slice(-1)+tail;url=url.slice(0,-1)}
   if(!url)return raw;
