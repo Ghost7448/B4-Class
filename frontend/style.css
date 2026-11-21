@@ -3138,3 +3138,56 @@ input:focus,textarea:focus,select:focus{
   .hero{border-radius:23px}
   .modal{border-radius:22px}
 }
+
+
+/* Liquid Glass performance pass: keep the look, reduce GPU-heavy effects */
+:root{--glass-blur:blur(10px) saturate(120%)}
+body{background-attachment:scroll!important}
+body:before{display:none!important}
+.card,.admin-card,.item,.person-card,.permission-card,.role-summary,
+.log-row,.day,.exam-fullscreen-card,.exam-photo-answer,.exam-photo-status,
+.exam-review-photo-open,.schedule-modal-landscape,.exam-run-question,
+.question-editor,.live,.field input,.field textarea,.field select,
+.chatform input,.chatform textarea,.bubble,.answer-option,.classblock,
+.quick,.permission-notice,.notice,.log-icon,.close,.search,.top button,
+#mobile,.side-bottom button,.ghost,.google-btn,.toast{
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+}
+.card,.admin-card,.item,.person-card,.permission-card,.role-summary,
+.log-row,.day,.exam-fullscreen-card,.exam-photo-answer,.exam-photo-status,
+.exam-review-photo-open,.schedule-modal-landscape,.exam-run-question,
+.question-editor{
+  box-shadow:0 7px 22px rgba(15,23,42,.055),inset 0 1px 0 rgba(255,255,255,.30)!important;
+}
+.card:hover,.admin-card:hover{box-shadow:0 10px 28px rgba(15,23,42,.08)!important}
+.app aside{
+  -webkit-backdrop-filter:blur(10px) saturate(120%)!important;
+  backdrop-filter:blur(10px) saturate(120%)!important;
+}
+header{
+  -webkit-backdrop-filter:blur(10px) saturate(120%)!important;
+  backdrop-filter:blur(10px) saturate(120%)!important;
+}
+.modal{
+  -webkit-backdrop-filter:blur(12px) saturate(125%)!important;
+  backdrop-filter:blur(12px) saturate(125%)!important;
+}
+#back{
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+}
+.toast{
+  -webkit-backdrop-filter:blur(8px)!important;
+  backdrop-filter:blur(8px)!important;
+}
+@media(max-width:800px){
+  .mobile-dock{
+    -webkit-backdrop-filter:blur(12px) saturate(125%)!important;
+    backdrop-filter:blur(12px) saturate(125%)!important;
+    box-shadow:0 8px 22px rgba(15,23,42,.10),inset 0 1px 0 rgba(255,255,255,.55)!important;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
