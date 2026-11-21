@@ -3206,3 +3206,40 @@ header{
   padding:10px!important;
   color:var(--t);
 }
+
+
+/* ===== LIQUID GLASS SIDEBAR FOOTER BUTTONS ===== */
+.app aside .side-bottom{
+  background:transparent!important;
+  padding:0!important;
+  gap:9px!important;
+}
+.app aside .side-bottom button{
+  position:relative;
+  overflow:hidden;
+  min-height:48px;
+  border:1px solid rgba(255,255,255,.20)!important;
+  background:linear-gradient(135deg,rgba(255,255,255,.13),rgba(255,255,255,.045))!important;
+  color:var(--t)!important;
+  border-radius:17px!important;
+  padding:11px 14px!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.20),0 5px 16px rgba(0,0,0,.10)!important;
+  -webkit-backdrop-filter:blur(12px) saturate(145%)!important;
+  backdrop-filter:blur(12px) saturate(145%)!important;
+  transition:background .2s ease,border-color .2s ease,box-shadow .2s ease,transform .2s ease;
+}
+[data-theme="dark"] .app aside .side-bottom button,.dark .app aside .side-bottom button{
+  border-color:rgba(255,255,255,.14)!important;
+  background:linear-gradient(135deg,rgba(255,255,255,.105),rgba(255,255,255,.025))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 5px 16px rgba(0,0,0,.16)!important;
+}
+.app aside .side-bottom button:hover{
+  border-color:rgba(168,85,247,.42)!important;
+  background:linear-gradient(135deg,rgba(124,58,237,.20),rgba(168,85,247,.08))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 7px 20px rgba(124,58,237,.13)!important;
+  transform:translateY(-1px);
+}
+.app aside .side-bottom button:active{transform:scale(.985)}
+@media(max-width:800px){
+  .app aside .side-bottom button{-webkit-backdrop-filter:blur(8px) saturate(130%)!important;backdrop-filter:blur(8px) saturate(130%)!important}
+}
