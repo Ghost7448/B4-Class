@@ -841,3 +841,96 @@ body.schedule-modal-open{overflow:hidden!important}
   color:#fff!important;border:1px solid rgba(255,255,255,.42)!important;
   box-shadow:0 8px 24px rgba(91,33,182,.28)!important;
 }
+
+/* ===== RESTORE THE ORIGINAL FIRST-PASS SCHEDULE LIQUID GLASS ===== */
+/* ===== B4 SCHEDULE LIQUID GLASS SYSTEM ===== */
+.b4-schedule-wrap{
+  position:relative;
+  overflow:auto!important;
+  border:1px solid rgba(255,255,255,.14)!important;
+  border-radius:22px!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.075),rgba(255,255,255,.018))!important;
+  box-shadow:0 16px 42px rgba(0,0,0,.14),inset 0 1px 0 rgba(255,255,255,.10)!important;
+  -webkit-backdrop-filter:blur(8px) saturate(135%);
+  backdrop-filter:blur(8px) saturate(135%);
+}
+.b4-schedule{background:transparent!important;border-spacing:3px!important;border-collapse:separate!important}
+.b4-schedule th,.b4-schedule td{
+  background:linear-gradient(145deg,rgba(255,255,255,.085),rgba(255,255,255,.025))!important;
+  border:1px solid rgba(255,255,255,.105)!important;
+  border-radius:9px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+}
+.b4-schedule thead th,.b4-schedule .schedule-day,.b4-schedule .schedule-day-head{
+  background:linear-gradient(145deg,rgba(168,85,247,.19),rgba(124,58,237,.075))!important;
+  border-color:rgba(192,132,252,.22)!important;
+}
+.b4-schedule .break-head,.b4-schedule .break-cell{
+  background:linear-gradient(150deg,rgba(168,85,247,.23),rgba(124,58,237,.09))!important;
+  border-color:rgba(192,132,252,.24)!important;
+  color:#c4b5fd!important;
+}
+.b4-schedule td.is-current-period,.b4-schedule th.is-current-period{
+  background:linear-gradient(145deg,rgba(34,197,94,.24),rgba(22,163,74,.10))!important;
+  border-color:rgba(74,222,128,.62)!important;
+  color:#bbf7d0!important;
+}
+.b4-schedule td.is-current-break,.b4-schedule th.is-current-break{
+  background:linear-gradient(145deg,rgba(245,158,11,.22),rgba(217,119,6,.09))!important;
+  border-color:rgba(251,191,36,.58)!important;
+  color:#fde68a!important;
+}
+.b4-mobile-schedule .mobile-day-card{
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.14)!important;
+  border-radius:20px!important;
+  background:linear-gradient(145deg,rgba(255,255,255,.085),rgba(255,255,255,.025))!important;
+  box-shadow:0 12px 30px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.10)!important;
+  -webkit-backdrop-filter:blur(8px) saturate(135%);
+  backdrop-filter:blur(8px) saturate(135%);
+}
+.b4-mobile-schedule .mobile-day-card h3{
+  margin:0!important;padding:13px 15px!important;
+  background:linear-gradient(110deg,rgba(124,58,237,.24),rgba(168,85,247,.08))!important;
+  border-bottom:1px solid rgba(255,255,255,.12)!important;
+}
+.b4-mobile-schedule .mobile-period,.b4-mobile-schedule .mobile-break{
+  background:rgba(255,255,255,.025)!important;
+  border-color:rgba(255,255,255,.09)!important;
+}
+.b4-mobile-schedule .mobile-break{
+  background:linear-gradient(100deg,rgba(168,85,247,.18),rgba(124,58,237,.055))!important;
+}
+.b4-mobile-schedule .mobile-period.is-current-period{
+  background:linear-gradient(145deg,rgba(34,197,94,.24),rgba(22,163,74,.09))!important;
+  box-shadow:inset 0 0 0 1px rgba(74,222,128,.55)!important;
+}
+.schedule-expand-btn{
+  border:1px solid rgba(255,255,255,.18)!important;
+  background:linear-gradient(135deg,rgba(255,255,255,.12),rgba(255,255,255,.035))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.15)!important;
+  -webkit-backdrop-filter:blur(8px) saturate(130%);
+  backdrop-filter:blur(8px) saturate(130%);
+}
+.schedule-fullscreen-modal .schedule-modal-landscape{
+  background:linear-gradient(145deg,rgba(255,255,255,.105),rgba(255,255,255,.025))!important;
+  border:1px solid rgba(255,255,255,.20)!important;
+  box-shadow:0 24px 80px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.15)!important;
+  -webkit-backdrop-filter:blur(12px) saturate(140%);
+  backdrop-filter:blur(12px) saturate(140%);
+}
+.schedule-fullscreen-modal .schedule-modal-stage{background:rgba(255,255,255,.025)!important;border:1px solid rgba(255,255,255,.10)!important;border-radius:15px}
+.schedule-fullscreen-modal .schedule-modal-table{background:transparent!important}
+.schedule-fullscreen-modal .schedule-modal-table thead th,
+.schedule-fullscreen-modal .schedule-modal-table tbody th,
+.schedule-fullscreen-modal .schedule-modal-table tbody td{
+  background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(255,255,255,.035))!important;
+  border:1px solid rgba(255,255,255,.14)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10)!important;
+  border-radius:7px!important;
+}
+.schedule-fullscreen-modal .schedule-modal-table thead th{background:linear-gradient(145deg,rgba(168,85,247,.26),rgba(124,58,237,.10))!important}
+.schedule-fullscreen-modal .schedule-modal-table .break-head,
+.schedule-fullscreen-modal .schedule-modal-table .break-cell,
+.schedule-fullscreen-modal .schedule-modal-table .break-cell-merged{background:linear-gradient(145deg,rgba(168,85,247,.25),rgba(124,58,237,.10))!important;color:#d8b4fe!important}
+@media(prefers-reduced-motion:reduce){.b4-schedule-wrap,.b4-mobile-schedule .mobile-day-card{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}}
