@@ -1682,15 +1682,15 @@ function chatLoop(){
   retryChatOutbox('class');
   ensureRealtime();
   ackChatReceipts('class',S.messages||[],document.visibilityState==='visible');
-  const sync=async()=>{
-    if(window.realtimeOnline===true)return;
+  const sync=async(force=false)=>{
+    if(!force&&window.realtimeOnline===true)return;
     try{
       const d=await api('/api/chat/messages?_='+Date.now(),{cache:'no-store'});
       applyChatMessages(d.messages||[]);
       ackChatReceipts('class',d.messages||[],document.visibilityState==='visible');
     }catch{}
   };
-  window.chatTimer=setInterval(sync,5000);
+  window.chatTimer=setInterval(()=>sync(false),5000);
   window.chatTypingTimer=setInterval(async()=>{
     if(S.view!=='chat')return;
     try{
@@ -1699,7 +1699,7 @@ function chatLoop(){
       if(el)el.textContent=(ty.users||[]).filter(x=>Number(x.user_id)!==Number(S.me.id)).map(x=>x.display_name+' is typing…').join(' • ');
     }catch{}
   },1000);
-  sync();
+  sync(true);
 }
 async function sendChat(e){e.preventDefault();const i=$('#chatInput');if(i.dataset.sending==='1'||!i.value.trim())return;i.dataset.sending='1';const btn=e.submitter||e.target.querySelector('button');if(btn)btn.disabled=true;const body=i.value.trim(),replyToId=window.replyTo||null,tempId=-Date.now(),draft={tempId,body,replyToId,message:{id:tempId,user_id:S.me.id,display_name:S.me.display_name,avatar_url:S.me.avatar_url,body,created_at:new Date().toISOString(),pending:true}};const outbox=readChatOutbox('class');outbox.push(draft);writeChatOutbox('class',outbox);applyChatMessages([...S.messages,draft.message]);i.value='';i.placeholder='Write a message...';window.replyTo=null;typing(false);try{const result=await api('/api/chat/messages',{method:'POST',body:JSON.stringify({body,replyToId})});writeChatOutbox('class',readChatOutbox('class').filter(x=>Number(x.tempId)!==tempId));applyChatMessages([...S.messages.filter(m=>Number(m.id)!==tempId),result.message]);toast('Message sent ✓')}catch(x){toast('Message waiting for connection · '+x.message)}finally{i.dataset.sending='0';if(btn)btn.disabled=false}}
 function typing(v){if(!S.me)return;api('/api/chat/typing',{method:'POST',body:JSON.stringify({typing:v})}).catch(()=>{});if(window.typingT)clearTimeout(window.typingT);if(v)window.typingT=setTimeout(()=>typing(false),1600)}
