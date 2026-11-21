@@ -3349,3 +3349,16 @@ header>.search{flex:1 1 420px;width:min(100%,720px);max-width:720px;min-width:0;
   .search input{font-size:11px}
   .search input::placeholder{font-size:10px}
 }
+
+
+/* Search field alignment + compact localized placeholder */
+header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
+.search-icon{display:grid;place-items:center;flex:0 0 20px;width:20px;height:24px;font-size:22px;line-height:1;color:var(--m);transform:translateY(-1px);pointer-events:none}
+.search input{display:block;flex:1 1 0;min-width:0;width:0;height:42px;margin:0;padding:0 2px;border:0!important;outline:0!important;box-shadow:none!important;line-height:normal;vertical-align:middle}
+.search input::placeholder{display:block;line-height:normal;opacity:.72;transform:none;letter-spacing:0}
+.search-clear{align-self:center;display:grid;place-items:center;margin-inline-start:2px;padding:0}
+@media(max-width:800px){
+  header>.search{min-height:42px}
+  .search-icon{flex-basis:18px;width:18px;font-size:20px}
+  .search input{height:40px}
+}
