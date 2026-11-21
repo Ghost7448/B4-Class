@@ -1666,6 +1666,7 @@ function chatLoop(){
   if(!S.me||S.view!=='chat')return;
   retryChatOutbox('class');
   ensureRealtime();
+  ackChatReceipts('class',S.messages||[],document.visibilityState==='visible');
   const sync=async()=>{
     if(window.realtimeOnline===true)return;
     try{
@@ -1713,6 +1714,7 @@ function teacherChatLoop(){
   if(!S.me||S.view!=='teacherChat')return;
   retryChatOutbox('teacher');
   ensureTeacherRealtime();
+  ackChatReceipts('teacher',S.teacherMessages||[],document.visibilityState==='visible');
   const sync=async()=>{
     if(window.teacherSyncBusy)return;
     window.teacherSyncBusy=true;
