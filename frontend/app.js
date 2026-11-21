@@ -942,10 +942,58 @@ function setupChatJumpButton(boxId,buttonId){
   box.addEventListener('scroll',update,{passive:true});
   update();
 }
+
+function chatReceiptHTML(m){
+  if(!S.me||Number(m.user_id)!==Number(S.me.id))return '';
+  if(m.pending)return '<span class="chat-receipt pending" title="Not sent" aria-label="Not sent">◷</span>';
+  const total=Number(m.receipt_total||0),delivered=Number(m.receipt_delivered||0),read=Number(m.receipt_read||0);
+  if(total>0&&read>=total)return '<span class="chat-receipt read" title="Seen by everyone" aria-label="Seen by everyone">✓✓</span>';
+  if(total>0&&delivered>=total)return '<span class="chat-receipt delivered" title="Delivered to everyone" aria-label="Delivered to everyone">✓✓</span>';
+  return '<span class="chat-receipt sent" title="Sent" aria-label="Sent">✓</span>';
+}
+function ackChatReceipts(type,messages,read=false){
+  if(!S.me||!Array.isArray(messages)||!messages.length)return;
+  const ids=[...new Set(messages.filter(m=>Number(m.user_id)!==Number(S.me.id)&&Number(m.id)>0).map(m=>Number(m.id)))];
+  if(!ids.length)return;
+  const url=type==='teacher'?'/api/teacher-chat/receipts':'/api/chat/receipts';
+  api(url,{method:'POST',body:JSON.stringify({messageIds:ids,read:!!read})}).then(d=>{
+    const target=type==='teacher'?'teacherMessages':'messages';
+    const current=type==='teacher'?S.teacherMessages:S.messages;
+    const updates=new Map((d.receipts||[]).map(x=>[Number(x.id),x]));
+    if(!updates.size)return;
+    const next=current.map(m=>updates.has(Number(m.id))?{...m,...updates.get(Number(m.id))}:m);
+    if(type==='teacher')applyTeacherMessages(next);else applyChatMessages(next);
+  }).catch(()=>{});
+}
+function chatOutboxKey(type){return 'b4ChatOutbox:'+String(S.me?.id||'')+':'+type}
+function readChatOutbox(type){
+  try{return JSON.parse(localStorage.getItem(chatOutboxKey(type))||'[]').filter(x=>x&&x.tempId&&x.body)}catch{return []}
+}
+function writeChatOutbox(type,items){
+  try{localStorage.setItem(chatOutboxKey(type),JSON.stringify(items))}catch{}
+}
+async function retryChatOutbox(type){
+  if(!S.me||!navigator.onLine)return;
+  const teacher=type==='teacher',items=readChatOutbox(type);
+  for(const item of items){
+    try{
+      const result=await api(teacher?'/api/teacher-chat/messages':'/api/chat/messages',{method:'POST',body:JSON.stringify({body:item.body,replyToId:item.replyToId||null})});
+      const left=readChatOutbox(type).filter(x=>String(x.tempId)!==String(item.tempId));
+      writeChatOutbox(type,left);
+      if(teacher)applyTeacherMessages([...S.teacherMessages.filter(m=>Number(m.id)!==Number(item.tempId)),result.message]);
+      else applyChatMessages([...S.messages.filter(m=>Number(m.id)!==Number(item.tempId)),result.message]);
+    }catch{break}
+  }
+}
+if(!window.__b4OutboxOnlineBound){
+  window.__b4OutboxOnlineBound=true;
+  window.addEventListener('online',()=>{retryChatOutbox('class');retryChatOutbox('teacher')});
+}
+
 function messageHTML(m){
   const reply=m.reply_to_id?'<div class="reply-preview"><b>↩ '+esc(m.reply_display_name||'Reply')+'</b><span>'+esc(m.reply_body||'')+'</span></div>':'';
   const edited=m.edited_at?'<small class="edited">edited</small>':'';
-  return '<div class="msg '+(S.me&&Number(m.user_id)===Number(S.me.id)?'me':'')+'" data-message-id="'+esc(m.id)+'" onclick="messageMenu(event,'+m.id+')"><img class="avatar" src="'+esc(m.avatar_url||BROKEN_IMAGE_FALLBACK)+'"><div><div class="chat-name-line"><b>'+esc(m.display_name||'Deleted user')+'</b>'+badgeHTML(m.badges,true)+'</div>'+reply+'<div class="bubble">'+esc(m.body||'')+edited+'</div><small class="muted">'+esc(chatTime(m.created_at))+'</small></div></div>'
+  return '<div class="msg '+(S.me&&Number(m.user_id)===Number(S.me.id)?'me':'')+'" data-message-id="'+esc(m.id)+'" '+(m.pending?'':'onclick="messageMenu(event,'+m.id+')"')+'><img class="avatar" src="'+esc(m.avatar_url||BROKEN_IMAGE_FALLBACK)+'"><div><div class="chat-name-line"><b>'+esc(m.display_name||'Deleted user')+'</b>'+badgeHTML(m.badges,true)+'</div>'+reply+'<div class="bubble">'+esc(m.body||'')+edited+'</div><small class="muted">'+esc(chatTime(m.created_at))+chatReceiptHTML(m)+'</small></div></div>'
 } function adminV(){const cards=[['roles','Roles','MANAGE_ROLES'],['permissions','Permissions','MANAGE_PERMISSIONS'],['accounts','Accounts','MANAGE_ACCOUNTS'],['students','Manage Students','MANAGE_STUDENTS'],['teachers','Manage Teachers','MANAGE_TEACHERS'],['keys','Activation Keys','MANAGE_KEYS'],['badges','Manage Badges','MANAGE_BADGES'],['subjects','Manage Subjects','MANAGE_SUBJECTS'],['schedule','Manage Schedule','MANAGE_SCHEDULE'],['admins','Manage Admins','MANAGE_ADMINS'],['logs','View Logs','VIEW_LOGS'],['reports',S.lang==='ar'?'البلاغات':'Reports','MANAGE_REPORTS'],['site','Manage Site','MANAGE_SITE']];if(Number(S.me?.is_super_admin)===1||can('MANAGE_DEVELOPERS'))cards.push(['developers','Manage Developers','MANAGE_DEVELOPERS']);return title(t('admin'),'Control center')+'<div class="grid c3 admin-cards">'+cards.filter(x=>can(x[2])).map(x=>'<button class="card admin-card" onclick="go(\'admin:'+x[0]+'\')"><span>◈</span><h3>'+x[1]+'</h3><small>Open management</small></button>').join('')+'</div>'}
 function teacherCenterV(){const ar=S.lang==='ar';return title(t('teacherCenter'),'Teacher tools')+'<div class="grid c3">'+[['assignments',ar?'إنشاء واجبات':'Create assignments','MANAGE_ASSIGNMENTS'],['assignment-submissions',ar?'تسليمات الواجبات':'Assignment submissions','MANAGE_ASSIGNMENTS'],['resources',ar?'نشر المصادر':'Publish resources/PDFs','MANAGE_RESOURCES'],['exams',ar?'إنشاء الامتحانات':'Create exams','MANAGE_EXAMS'],['exam-logs',ar?'سجلات الامتحانات':'Exam Logs','MANAGE_EXAMS'],['announcements',ar?'نشر الإعلانات':'Publish announcements','MANAGE_ANNOUNCEMENTS'],['subjects',ar?'إدارة المواد':'Manage teaching subjects','MANAGE_SUBJECTS'],['schedule',ar?'عرض الجدول':'View schedule','VIEW_CLASS']].filter(x=>can(x[2])).map(x=>'<button class="card admin-card" onclick="'+(x[0]==='assignment-submissions'?'assignmentSubmissions()':x[0]==='exam-logs'?'go(\'teacher:exam-logs\')':'go(\''+x[0]+'\')')+'"><span>'+(x[0]==='exam-logs'?'◷':'✦')+'</span><h3>'+x[1]+'</h3></button>').join('')+'</div>'}
 function settingsV(){
@@ -1576,8 +1624,10 @@ function patchChatList(box,next,htmlFn){
   });
 }
 function applyChatMessages(messages){
-  const next=messages||[];
-  const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.messages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));
+  const pending=readChatOutbox('class').map(x=>x.message);
+  const incoming=messages||[];
+  const next=[...incoming,...pending.filter(p=>!incoming.some(m=>Number(m.id)===Number(p.id)))];
+  const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url,m.receipt_total,m.receipt_delivered,m.receipt_read,m.pending]))!==JSON.stringify((S.messages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url,m.receipt_total,m.receipt_delivered,m.receipt_read,m.pending]));
   if(!changed)return;
   S.messages=next;
   const box=$('#messages');
@@ -1600,8 +1650,9 @@ function ensureRealtime(){
     window.realtimeStream.addEventListener('chat',e=>{
       try{
         const d=JSON.parse(e.data);
-        if(d.type==='created'&&!S.messages.some(m=>Number(m.id)===Number(d.message.id)))applyChatMessages([...S.messages,d.message]);
+        if(d.type==='created'&&!S.messages.some(m=>Number(m.id)===Number(d.message.id))){applyChatMessages([...S.messages,d.message]);ackChatReceipts('class',[d.message],S.view==='chat'&&document.visibilityState==='visible')}
         else if(d.type==='updated')applyChatMessages(S.messages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));
+        else if(d.type==='receipts')applyChatMessages(S.messages.map(m=>Number(m.id)===Number(d.message.id)?{...m,...d.message}:m));
         else if(d.type==='deleted')applyChatMessages(S.messages.filter(m=>Number(m.id)!==Number(d.id)));
       }catch{}
     });
@@ -1619,6 +1670,7 @@ function chatLoop(){
     try{
       const d=await api('/api/chat/messages?_='+Date.now(),{cache:'no-store'});
       applyChatMessages(d.messages||[]);
+      ackChatReceipts('class',d.messages||[],document.visibilityState==='visible');
     }catch{}
   };
   window.chatTimer=setInterval(sync,5000);
@@ -1632,7 +1684,7 @@ function chatLoop(){
   },1000);
   sync();
 }
-async function sendChat(e){e.preventDefault();const i=$('#chatInput');if(i.dataset.sending==='1'||!i.value.trim())return;i.dataset.sending='1';const btn=e.submitter||e.target.querySelector('button');if(btn)btn.disabled=true;const body=i.value.trim(),replyToId=window.replyTo||null;try{const result=await api('/api/chat/messages',{method:'POST',body:JSON.stringify({body,replyToId})});if(result?.message&&!S.messages.some(m=>Number(m.id)===Number(result.message.id)))applyChatMessages([...S.messages,result.message]);i.value='';i.placeholder='Write a message...';window.replyTo=null;typing(false);toast('Message sent ✓')}catch(x){toast(x.message)}finally{i.dataset.sending='0';if(btn)btn.disabled=false}}
+async function sendChat(e){e.preventDefault();const i=$('#chatInput');if(i.dataset.sending==='1'||!i.value.trim())return;i.dataset.sending='1';const btn=e.submitter||e.target.querySelector('button');if(btn)btn.disabled=true;const body=i.value.trim(),replyToId=window.replyTo||null,tempId=-Date.now(),draft={tempId,body,replyToId,message:{id:tempId,user_id:S.me.id,display_name:S.me.display_name,avatar_url:S.me.avatar_url,body,created_at:new Date().toISOString(),pending:true}};const outbox=readChatOutbox('class');outbox.push(draft);writeChatOutbox('class',outbox);applyChatMessages([...S.messages,draft.message]);i.value='';i.placeholder='Write a message...';window.replyTo=null;typing(false);try{const result=await api('/api/chat/messages',{method:'POST',body:JSON.stringify({body,replyToId})});writeChatOutbox('class',readChatOutbox('class').filter(x=>Number(x.tempId)!==tempId));applyChatMessages([...S.messages.filter(m=>Number(m.id)!==tempId),result.message]);toast('Message sent ✓')}catch(x){toast('Message waiting for connection · '+x.message)}finally{i.dataset.sending='0';if(btn)btn.disabled=false}}
 function typing(v){if(!S.me)return;api('/api/chat/typing',{method:'POST',body:JSON.stringify({typing:v})}).catch(()=>{});if(window.typingT)clearTimeout(window.typingT);if(v)window.typingT=setTimeout(()=>typing(false),1600)}
 function messageMenu(e,id){e.preventDefault();if(!S.me)return;const m=S.messages.find(x=>Number(x.id)===Number(id));if(!m)return;const own=Number(m.user_id)===Number(S.me.id),moderator=can('MANAGE_CHAT');modal('<div class="modalhead"><h2>Message</h2><button class="close" onclick="b4Close()">×</button></div><button class="btn ghost" onclick="replyMessage('+id+')">Reply</button>'+(own?'<button class="btn ghost" onclick="editMessage('+id+')">Edit</button>':'')+((own||moderator)?'<button class="btn danger" onclick="deleteMessage('+id+')">Delete</button>':'')+'<button class="btn ghost" onclick="b4Close()">Close</button>')}
 function replyMessage(id){const m=S.messages.find(x=>Number(x.id)===Number(id));close();window.replyTo=id;const input=$('#chatInput');if(input){input.value='';input.placeholder='Replying to '+(m?.display_name||'message')+'…';input.focus()}toast('Reply mode enabled')}
@@ -1640,8 +1692,10 @@ function editMessage(id){const m=S.messages.find(x=>Number(x.id)===Number(id));i
 async function saveMessage(e,id){e.preventDefault();try{await api('/api/chat/messages/'+id,{method:'PATCH',body:JSON.stringify({body:$('#editMsg').value})});close();toast('Message updated ✓')}catch(x){toast(x.message)}}
 async function deleteMessage(id){if(!await confirmAction('Delete message?'))return;try{await api('/api/chat/messages/'+id,{method:'DELETE'});close();toast('Message deleted ✓')}catch(x){toast(x.message)}}
 function applyTeacherMessages(messages){
-  const next=messages||[];
-  const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]))!==JSON.stringify((S.teacherMessages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url]));
+  const pending=readChatOutbox('teacher').map(x=>x.message);
+  const incoming=messages||[];
+  const next=[...incoming,...pending.filter(p=>!incoming.some(m=>Number(m.id)===Number(p.id)))];
+  const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url,m.receipt_total,m.receipt_delivered,m.receipt_read,m.pending]))!==JSON.stringify((S.teacherMessages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url,m.receipt_total,m.receipt_delivered,m.receipt_read,m.pending]));
   if(!changed)return;
   S.teacherMessages=next;
   const box=$('#teacherMessages');
@@ -1651,7 +1705,7 @@ function applyTeacherMessages(messages){
     if(wasNearBottom)box.scrollTop=box.scrollHeight;
   }
 }
-function ensureTeacherRealtime(){if(!S.me)return;if(window.teacherRealtimeStream&&window.teacherRealtimeStream.readyState!==2)return;try{window.teacherRealtimeStream=new EventSource(API+'/api/teacher-chat/stream',{withCredentials:true});window.teacherRealtimeStream.addEventListener('open',()=>{window.teacherRealtimeOnline=true});window.teacherRealtimeStream.addEventListener('teacher-chat',e=>{try{const d=JSON.parse(e.data);if(d.type==='created'&&!S.teacherMessages.some(m=>Number(m.id)===Number(d.message.id)))applyTeacherMessages([...S.teacherMessages,d.message]);else if(d.type==='updated')applyTeacherMessages(S.teacherMessages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));else if(d.type==='deleted')applyTeacherMessages(S.teacherMessages.filter(m=>Number(m.id)!==Number(d.id)))}catch{}});window.teacherRealtimeStream.addEventListener('profile',e=>{try{applyProfileEvent(JSON.parse(e.data))}catch{}});window.teacherRealtimeStream.onerror=()=>{window.teacherRealtimeOnline=false}}catch{window.teacherRealtimeOnline=false}}
+function ensureTeacherRealtime(){if(!S.me)return;if(window.teacherRealtimeStream&&window.teacherRealtimeStream.readyState!==2)return;try{window.teacherRealtimeStream=new EventSource(API+'/api/teacher-chat/stream',{withCredentials:true});window.teacherRealtimeStream.addEventListener('open',()=>{window.teacherRealtimeOnline=true});window.teacherRealtimeStream.addEventListener('teacher-chat',e=>{try{const d=JSON.parse(e.data);if(d.type==='created'&&!S.teacherMessages.some(m=>Number(m.id)===Number(d.message.id))){applyTeacherMessages([...S.teacherMessages,d.message]);ackChatReceipts('teacher',[d.message],S.view==='teacherChat'&&document.visibilityState==='visible')}else if(d.type==='updated')applyTeacherMessages(S.teacherMessages.map(m=>Number(m.id)===Number(d.message.id)?d.message:m));else if(d.type==='receipts')applyTeacherMessages(S.teacherMessages.map(m=>Number(m.id)===Number(d.message.id)?{...m,...d.message}:m));else if(d.type==='deleted')applyTeacherMessages(S.teacherMessages.filter(m=>Number(m.id)!==Number(d.id)))}catch{}});window.teacherRealtimeStream.addEventListener('profile',e=>{try{applyProfileEvent(JSON.parse(e.data))}catch{}});window.teacherRealtimeStream.onerror=()=>{window.teacherRealtimeOnline=false}}catch{window.teacherRealtimeOnline=false}}
 function teacherChatLoop(){
   clearInterval(window.teacherTimer);
   clearInterval(window.teacherTypingTimer);
@@ -1663,6 +1717,7 @@ function teacherChatLoop(){
     try{
       const d=await api('/api/teacher-chat/messages?_='+Date.now(),{cache:'no-store'});
       applyTeacherMessages(d.messages||[]);
+      ackChatReceipts('teacher',d.messages||[],document.visibilityState==='visible');
     }catch{}finally{window.teacherSyncBusy=false}
   };
   // SSE is the primary live transport. Poll only while the SSE connection is unavailable.
@@ -1677,7 +1732,7 @@ function teacherChatLoop(){
   },1000);
   sync();
 }
-async function sendTeacherChat(e){e.preventDefault();const i=$('#teacherInput');if(i.dataset.sending==='1'||!i.value.trim())return;i.dataset.sending='1';const btn=e.submitter||e.target.querySelector('button');if(btn)btn.disabled=true;const body=i.value.trim(),replyToId=window.teacherReplyTo||null;try{const result=await api('/api/teacher-chat/messages',{method:'POST',body:JSON.stringify({body,replyToId})});if(result?.message&&!S.teacherMessages.some(m=>Number(m.id)===Number(result.message.id)))applyTeacherMessages([...S.teacherMessages,result.message]);else{const d=await api('/api/teacher-chat/messages?_='+Date.now(),{cache:'no-store'});applyTeacherMessages(d.messages||[])}i.value='';i.style.height='auto';i.placeholder='Write a message...';window.teacherReplyTo=null;teacherTyping(false);toast('Message sent ✓')}catch(x){toast(x.message)}finally{i.dataset.sending='0';if(btn)btn.disabled=false}}
+async function sendTeacherChat(e){e.preventDefault();const i=$('#teacherInput');if(i.dataset.sending==='1'||!i.value.trim())return;i.dataset.sending='1';const btn=e.submitter||e.target.querySelector('button');if(btn)btn.disabled=true;const body=i.value.trim(),replyToId=window.teacherReplyTo||null,tempId=-Date.now(),draft={tempId,body,replyToId,message:{id:tempId,user_id:S.me.id,display_name:S.me.display_name,avatar_url:S.me.avatar_url,body,created_at:new Date().toISOString(),pending:true}};const outbox=readChatOutbox('teacher');outbox.push(draft);writeChatOutbox('teacher',outbox);applyTeacherMessages([...S.teacherMessages,draft.message]);i.value='';i.style.height='auto';i.placeholder='Write a message...';window.teacherReplyTo=null;teacherTyping(false);try{const result=await api('/api/teacher-chat/messages',{method:'POST',body:JSON.stringify({body,replyToId})});writeChatOutbox('teacher',readChatOutbox('teacher').filter(x=>Number(x.tempId)!==tempId));applyTeacherMessages([...S.teacherMessages.filter(m=>Number(m.id)!==tempId),result.message]);toast('Message sent ✓')}catch(x){toast('Message waiting for connection · '+x.message)}finally{i.dataset.sending='0';if(btn)btn.disabled=false}}
 function teacherTyping(v){if(!S.me)return;api('/api/teacher-chat/typing',{method:'POST',body:JSON.stringify({typing:v})}).catch(()=>{});if(window.teacherTypingT)clearTimeout(window.teacherTypingT);if(v)window.teacherTypingT=setTimeout(()=>teacherTyping(false),1600)}
 function teacherMessageMenu(e,id){e.preventDefault();if(!S.me)return;const m=S.teacherMessages.find(x=>Number(x.id)===Number(id));if(!m)return;const own=Number(m.user_id)===Number(S.me.id),moderator=can('MANAGE_TEACHER_CHAT');modal('<div class="modalhead"><h2>Message</h2><button class="close" onclick="b4Close()">×</button></div><button class="btn ghost" onclick="replyTeacherMessage('+id+')">Reply</button>'+(own?'<button class="btn ghost" onclick="editTeacherMessage('+id+')">Edit</button>':'')+((own||moderator)?'<button class="btn danger" onclick="deleteTeacherMessage('+id+')">Delete</button>':'')+'<button class="btn ghost" onclick="b4Close()">Close</button>')}
 function replyTeacherMessage(id){const m=S.teacherMessages.find(x=>Number(x.id)===Number(id));close();window.teacherReplyTo=id;const input=$('#teacherInput');if(input){input.value='';input.placeholder='Replying to '+(m?.display_name||'message')+'…';input.focus()}toast('Reply mode enabled')}
@@ -1687,7 +1742,7 @@ async function deleteTeacherMessage(id){if(!await confirmAction('Delete message?
 function teacherMessageHTML(m){
   const reply=m.reply_to_id?'<div class="reply-preview"><b>↩ '+esc(m.reply_display_name||'Reply')+'</b><span>'+esc(m.reply_body||'')+'</span></div>':'';
   const edited=m.edited_at?'<small class="edited">edited</small>':'';
-  return '<div class="msg '+(S.me&&Number(m.user_id)===Number(S.me.id)?'me':'')+'" data-message-id="'+esc(m.id)+'" onclick="teacherMessageMenu(event,'+m.id+')"><img class="avatar" src="'+esc(m.avatar_url||BROKEN_IMAGE_FALLBACK)+'"><div><div class="chat-name-line"><b>'+esc(m.display_name||'Deleted user')+'</b>'+badgeHTML(m.badges,true)+'</div>'+reply+'<div class="bubble">'+esc(m.body||'')+edited+'</div><small class="muted">'+esc(chatTime(m.created_at))+'</small></div></div>';
+  return '<div class="msg '+(S.me&&Number(m.user_id)===Number(S.me.id)?'me':'')+'" data-message-id="'+esc(m.id)+'" '+(m.pending?'':'onclick="teacherMessageMenu(event,'+m.id+')"')+'><img class="avatar" src="'+esc(m.avatar_url||BROKEN_IMAGE_FALLBACK)+'"><div><div class="chat-name-line"><b>'+esc(m.display_name||'Deleted user')+'</b>'+badgeHTML(m.badges,true)+'</div>'+reply+'<div class="bubble">'+esc(m.body||'')+edited+'</div><small class="muted">'+esc(chatTime(m.created_at))+chatReceiptHTML(m)+'</small></div></div>';
 }
 
 function teacherExamLogsLoad(options={}){const r=$('#teacherExamLogsRoot');if(!r||window.b4TeacherExamLogsBusy)return;const silent=!!options.silent;window.b4TeacherExamLogsBusy=true;api('/api/teacher/exam-logs',{cache:'no-store'}).then(d=>{if(!r.isConnected||S.view!=='teacher:exam-logs')return;const rows=(d.activity||[]).map(x=>({...x,kind:'activity'})).sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));const signature=JSON.stringify(rows);window.__b4TeacherExamLogRows=rows;window.__b4LogRows=rows;if(silent&&signature===window.__b4TeacherExamLogSignature)return;window.__b4TeacherExamLogSignature=signature;const html='<div class="logs-toolbar"><div><b>'+rows.length+'</b> events</div><span class="muted">Exam activity · Live · Tap any log for details</span></div><div class="log-list">'+(rows.map(logRowHTML).join('')||'<div class="empty">No exam activity yet.</div>')+'</div>';if(r.innerHTML!==html)r.innerHTML=html;}).catch(e=>{if(!silent)r.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}).finally(()=>{window.b4TeacherExamLogsBusy=false})}
