@@ -733,6 +733,37 @@ app.get('/api/students', async (req,res)=>{
     res.status(500).json({error:'Could not load students',detail:process.env.NODE_ENV==='production'?undefined:e.message});
   }
 });
+app.get('/api/search',requireAuth,async(req,res)=>{
+  try{
+    const term=String(req.query.q||'').trim().slice(0,80);
+    if(term.length<2)return res.json({results:[]});
+    const like='%'+term.toLocaleLowerCase()+'%';
+    const [students,teachers,subjects,assignments,announcements,resources,exams]=await Promise.all([
+      q("SELECT id,COALESCE(NULLIF(display_name,''),official_name) title,student_code code FROM students WHERE class_name='B4' AND (LOWER(display_name) LIKE ? OR LOWER(official_name) LIKE ? OR LOWER(student_code) LIKE ?) ORDER BY display_name LIMIT 5",[like,like,like]),
+      q("SELECT id,COALESCE(NULLIF(display_name,''),official_name) title,teacher_code code FROM teachers WHERE class_name='B4' AND (LOWER(display_name) LIKE ? OR LOWER(official_name) LIKE ? OR LOWER(teacher_code) LIKE ?) ORDER BY display_name LIMIT 5",[like,like,like]),
+      q("SELECT id,name title,teacher_name subtitle FROM subjects WHERE class_name='B4' AND (LOWER(name) LIKE ? OR LOWER(teacher_name) LIKE ?) ORDER BY name LIMIT 5",[like,like]),
+      q("SELECT a.id,a.title,a.description,s.name subtitle FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id WHERE a.class_name='B4' AND (LOWER(a.title) LIKE ? OR LOWER(a.description) LIKE ?) ORDER BY a.created_at DESC LIMIT 5",[like,like]),
+      q("SELECT id,title,body subtitle FROM announcements WHERE class_name='B4' AND (LOWER(title) LIKE ? OR LOWER(body) LIKE ?) ORDER BY created_at DESC LIMIT 5",[like,like]),
+      q("SELECT r.id,r.title,r.description subtitle FROM resources r WHERE r.class_name='B4' AND (LOWER(r.title) LIKE ? OR LOWER(r.description) LIKE ?) ORDER BY r.created_at DESC LIMIT 5",[like,like]),
+      q("SELECT id,title,description subtitle FROM exams WHERE class_name='B4' AND (LOWER(title) LIKE ? OR LOWER(description) LIKE ?) ORDER BY created_at DESC LIMIT 5",[like,like])
+    ]);
+    const results=[
+      ...students[0].map(x=>({kind:'student',view:'students',id:x.id,title:x.title,subtitle:x.code||'Class student',label:'Student'})),
+      ...teachers[0].map(x=>({kind:'teacher',view:'teachers',id:x.id,title:x.title,subtitle:x.code||'Class teacher',label:'Teacher'})),
+      ...subjects[0].map(x=>({kind:'subject',view:'subjects',id:x.id,title:x.title,subtitle:x.subtitle||'Subject',label:'Subject'})),
+      ...assignments[0].map(x=>({kind:'assignment',view:'assignments',id:x.id,title:x.title,subtitle:x.subtitle||x.description||'Assignment',label:'Task'})),
+      ...announcements[0].map(x=>({kind:'announcement',view:'announcements',id:x.id,title:x.title,subtitle:x.subtitle||'Announcement',label:'Announcement'})),
+      ...resources[0].map(x=>({kind:'resource',view:'resources',id:x.id,title:x.title,subtitle:x.subtitle||'Resource',label:'Resource'})),
+      ...exams[0].map(x=>({kind:'exam',view:'exams',id:x.id,title:x.title,subtitle:x.subtitle||'Exam',label:'Exam'}))
+    ];
+    res.set('Cache-Control','no-store');
+    res.json({results:results.slice(0,20)});
+  }catch(error){
+    console.error('Global search failed:',error);
+    res.status(500).json({error:'Search failed'});
+  }
+});
+
 app.get('/api/class-data', async (req,res)=>{
   try { res.json(await getBootstrap(req)); }
   catch(e) {
