@@ -3302,3 +3302,17 @@ header{
 .b4-mobile-schedule .mobile-break{background:linear-gradient(110deg,rgba(168,85,247,.22),rgba(124,58,237,.07))!important}
 .schedule-expand-btn{background:linear-gradient(135deg,rgba(255,255,255,.14),rgba(255,255,255,.035))!important;border:1px solid rgba(255,255,255,.20)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.17),0 5px 16px rgba(0,0,0,.10)!important;-webkit-backdrop-filter:blur(10px) saturate(145%)!important;backdrop-filter:blur(10px) saturate(145%)!important}
 .schedule-fullscreen-modal .schedule-modal-stage{background:rgba(255,255,255,.035)!important;border:1px solid rgba(255,255,255,.12)!important}
+
+
+/* Global search dropdown */
+.search{position:relative;z-index:80;min-width:0}
+.search-results{position:absolute;top:calc(100% + 10px);left:0;right:0;max-height:min(65vh,480px);overflow:auto;padding:7px;border:1px solid var(--line);border-radius:18px;background:color-mix(in srgb,var(--s) 86%,transparent);backdrop-filter:blur(22px) saturate(150%);-webkit-backdrop-filter:blur(22px) saturate(150%);box-shadow:0 22px 60px #0003;z-index:120}
+.search-results[hidden]{display:none}
+.search-result{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;border:0;border-radius:12px;background:transparent;color:var(--t);text-align:start;cursor:pointer;transition:background .16s ease}
+.search-result:hover,.search-result:focus-visible{background:color-mix(in srgb,var(--p) 13%,var(--s2));outline:none}
+.search-result-copy{display:grid;gap:4px;min-width:0}
+.search-result-copy strong{font-size:13px;font-weight:750;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-result-copy small{font-size:11px;color:var(--m);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-result-tag{flex:0 0 auto;padding:5px 8px;border:1px solid var(--line);border-radius:999px;color:var(--p);font-size:10px;font-weight:750}
+.search-empty{padding:16px 12px;text-align:center;color:var(--m);font-size:12px}
+@media(max-width:800px){.search-results{left:0;right:0;max-height:55vh}.search{z-index:85}}
