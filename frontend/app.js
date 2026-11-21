@@ -2675,53 +2675,74 @@ async function deleteExamSubmission(examId,attemptId){
 
 async function delAPI(path,msg){if(!await confirmAction('Are you sure?'))return;try{await api(path,{method:'DELETE'});await loadData();render();toast(msg+' ✓')}catch(e){toast(e.message)}}
 function searchBind(){
-  const input=$('#search'), box=$('#searchResults');
-  if(!input||!box)return;
-  let timer=0, controller=null, requestId=0;
-  const hide=()=>{box.hidden=true;box.innerHTML='';};
-  const showMessage=(message)=>{box.innerHTML='';const row=document.createElement('div');row.className='search-empty';row.textContent=message;box.append(row);box.hidden=false;};
-  const renderResults=(items)=>{
-    box.innerHTML='';
-    if(!items.length){showMessage(S.lang==='ar'?'مفيش نتائج مطابقة':'No matching results');return;}
-    for(const item of items){
-      const button=document.createElement('button');
-      button.type='button';button.className='search-result';button.setAttribute('role','option');
+  const input=$('#search'),box=$('#searchResults'),wrap=input?.closest('.search');
+  if(!input||!box||!wrap)return;
+  let timer=0,controller=null,requestId=0,activeIndex=-1;
+  let clear=wrap.querySelector('#searchClear');
+  if(!clear){
+    clear=document.createElement('button');clear.type='button';clear.id='searchClear';clear.className='search-clear';clear.setAttribute('aria-label','Clear search');clear.title='Clear search';clear.textContent='×';
+    input.insertAdjacentElement('afterend',clear);
+  }
+  const hide=()=>{box.hidden=true;box.innerHTML='';activeIndex=-1;input.removeAttribute('aria-activedescendant');input.setAttribute('aria-expanded','false');};
+  const showMessage=message=>{box.innerHTML='';const row=document.createElement('div');row.className='search-empty';row.textContent=message;box.append(row);box.hidden=false;input.setAttribute('aria-expanded','true');activeIndex=-1;};
+  const activate=index=>{
+    const rows=[...box.querySelectorAll('.search-result')];
+    if(!rows.length){activeIndex=-1;return;}
+    activeIndex=Math.max(0,Math.min(index,rows.length-1));
+    rows.forEach((row,i)=>{row.classList.toggle('is-active',i===activeIndex);row.setAttribute('aria-selected',i===activeIndex?'true':'false');});
+    rows[activeIndex].scrollIntoView({block:'nearest'});
+    input.setAttribute('aria-activedescendant',rows[activeIndex].id);
+  };
+  const renderResults=items=>{
+    box.innerHTML='';activeIndex=-1;
+    if(!items.length){showMessage(S.lang==='ar'?'مفيش نتائج مطابقة. جرّب كلمة تانية.':'No matches found. Try another keyword.');return;}
+    const head=document.createElement('div');head.className='search-results-head';
+    const count=document.createElement('span');count.textContent=S.lang==='ar'?`تم العثور على ${items.length} نتيجة`:` ${items.length} results found`;
+    const hint=document.createElement('small');hint.textContent=S.lang==='ar'?'↑ ↓ للتنقل · Enter للفتح':'↑ ↓ to navigate · Enter to open';
+    head.append(count,hint);box.append(head);
+    items.forEach((item,index)=>{
+      const button=document.createElement('button');button.type='button';button.className='search-result';button.id='searchOption'+index;button.setAttribute('role','option');button.setAttribute('aria-selected','false');
       button.dataset.view=item.view||'';button.dataset.kind=item.kind||'';button.dataset.id=item.id||'';
       const copy=document.createElement('span');copy.className='search-result-copy';
       const title=document.createElement('strong');title.textContent=item.title||'';
-      const sub=document.createElement('small');sub.textContent=item.subtitle||item.label||'';
+      const sub=document.createElement('small');sub.textContent=item.subtitle||'';
       copy.append(title,sub);
       const tag=document.createElement('span');tag.className='search-result-tag';tag.textContent=item.label||'';
       button.append(copy,tag);box.append(button);
-    }
-    box.hidden=false;
+    });
+    box.hidden=false;input.setAttribute('aria-expanded','true');
   };
-  input.addEventListener('input',()=>{
-    clearTimeout(timer);
-    if(controller){controller.abort();controller=null;}
-    const query=input.value.trim();
+  const runSearch=()=>{
+    clearTimeout(timer);if(controller){controller.abort();controller=null;}
+    const query=input.value.trim();clear.hidden=!query;
     if(query.length<2){hide();return;}
     showMessage(S.lang==='ar'?'جاري البحث…':'Searching…');
     timer=setTimeout(async()=>{
-      const current=++requestId;
-      controller=new AbortController();
+      const current=++requestId;controller=new AbortController();
       try{
         const data=await api('/api/search?q='+encodeURIComponent(query),{signal:controller.signal,cache:'no-store'});
         if(current!==requestId||input.value.trim()!==query)return;
         renderResults(data.results||[]);
       }catch(error){
         if(error.name==='AbortError')return;
-        if(current===requestId)showMessage(S.lang==='ar'?'تعذر إتمام البحث':'Search is temporarily unavailable');
+        if(current===requestId)showMessage(S.lang==='ar'?'تعذر إتمام البحث. حاول مرة أخرى.':'Search is temporarily unavailable. Try again.');
       }
-    },450);
-  });
+    },350);
+  };
+  input.addEventListener('input',runSearch);
+  clear.addEventListener('click',()=>{input.value='';input.focus();clear.hidden=true;hide();});
+  input.addEventListener('focus',()=>{clear.hidden=!input.value;});
   input.addEventListener('keydown',event=>{
-    if(event.key==='Escape'){hide();input.blur();}
-    if(event.key==='Enter'&&!box.hidden){
-      const first=box.querySelector('.search-result');
-      if(first)first.click();
+    if(event.key==='Escape'){hide();input.blur();return;}
+    if(box.hidden)return;
+    if(event.key==='ArrowDown'){event.preventDefault();activate(activeIndex+1);}
+    else if(event.key==='ArrowUp'){event.preventDefault();activate(activeIndex<0?box.querySelectorAll('.search-result').length-1:activeIndex-1);}
+    else if(event.key==='Enter'){
+      const rows=box.querySelectorAll('.search-result');const target=rows[activeIndex]||rows[0];
+      if(target){event.preventDefault();target.click();}
     }
   });
+  box.addEventListener('mousemove',event=>{const row=event.target.closest('.search-result');if(row)activate([...box.querySelectorAll('.search-result')].indexOf(row));});
   box.addEventListener('click',event=>{
     const button=event.target.closest('.search-result');if(!button)return;
     const view=button.dataset.view,kind=button.dataset.kind,id=Number(button.dataset.id);
@@ -2731,6 +2752,7 @@ function searchBind(){
     else if(kind==='exam'&&id)setTimeout(()=>startExam(id),80);
   });
   document.addEventListener('click',event=>{if(!event.target.closest('.search'))hide();});
+  clear.hidden=!input.value;
 }
 function applyTheme(){render()}
 function toggleTheme(){S.theme=S.theme==='dark'?'light':'dark';localStorage.b4Theme=S.theme;if(document.startViewTransition&&!matchMedia('(prefers-reduced-motion: reduce)').matches){document.startViewTransition(()=>applyTheme())}else applyTheme()}
