@@ -269,7 +269,7 @@ function badgeHTML(badges,compact=false){
     return '<span class="profile-badge'+(compact?' compact':'')+'" title="'+esc(b.description||b.name||'Badge')+'">'+icon+'<span>'+esc(b.name||'Badge')+'</span></span>';
   }).join('')+'</span>';
 }
-function peopleCard(x,type){const code=type==='student'?(x.student_code||''):(x.teacher_code||'');return '<article class="card people-card"><div class="item person-item" style="padding:0;border:0"><img class="avatar" data-user-avatar="'+esc(x.user_id||'')+'" src="'+esc(x.avatar_url||BROKEN_IMAGE_FALLBACK)+'"><div class="grow"><div class="person-name-line"><b>'+esc(x.display_name||x.official_name||'')+'</b>'+badgeHTML(x.badges)+'</div><small class="muted identity-line">'+(code?'<span class="identity-code">'+esc(code)+'</span>':'<span class="identity-code empty-code">—</span>')+'</small></div><span class="badge">'+type+'</span></div>'+(can(type==='student'?'MANAGE_STUDENTS':'MANAGE_TEACHERS')?'<div class="actions-row"><button class="btn ghost" onclick="'+(type==='student'?'studentEdit('+x.id+')':'teacherEdit('+x.id+')')+'">Edit</button><button class="btn danger" onclick="'+(type==='student'?'studentDelete('+x.id+')':'teacherDelete('+x.id+')')+'">Delete</button></div>':'')+'</article>'}
+function peopleCard(x,type){const code=type==='student'?(x.student_code||''):(x.teacher_code||'');return '<article id="person-'+type+'-'+Number(x.id)+'" class="card people-card"><div class="item person-item" style="padding:0;border:0"><img class="avatar" data-user-avatar="'+esc(x.user_id||'')+'" src="'+esc(x.avatar_url||BROKEN_IMAGE_FALLBACK)+'"><div class="grow"><div class="person-name-line"><b>'+esc(x.display_name||x.official_name||'')+'</b>'+badgeHTML(x.badges)+'</div><small class="muted identity-line">'+(code?'<span class="identity-code">'+esc(code)+'</span>':'<span class="identity-code empty-code">—</span>')+'</small></div><span class="badge">'+type+'</span></div>'+(can(type==='student'?'MANAGE_STUDENTS':'MANAGE_TEACHERS')?'<div class="actions-row"><button class="btn ghost" onclick="'+(type==='student'?'studentEdit('+x.id+')':'teacherEdit('+x.id+')')+'">Edit</button><button class="btn danger" onclick="'+(type==='student'?'studentDelete('+x.id+')':'teacherDelete('+x.id+')')+'">Delete</button></div>':'')+'</article>'}
 function studentsV(){return title(t('students'),'B4 student',can('MANAGE_STUDENTS')?'<button class="btn primary" onclick="studentEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid c3">'+S.students.map(x=>peopleCard(x,'student')).join('')+'</div>'}
 function teachersV(){return title(t('teachers'),'B4 teacher',can('MANAGE_TEACHERS')?'<button class="btn primary" onclick="teacherEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid c3">'+S.teachers.map(x=>peopleCard(x,'teacher')).join('')+'</div>'}
 function subjectsV(){return title(t('subjects'),'Subjects and resources.',can('MANAGE_SUBJECTS')?'<button class="btn primary" onclick="subjectEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid c3">'+S.subjects.map(s=>'<article class="card"><div class="head"><h3>'+esc(s.name)+'</h3></div><p class="muted">'+esc(s.teacher_name||'')+'</p><button class="btn primary" onclick="openSubject('+s.id+')">'+t('open')+' →</button>'+(can('MANAGE_SUBJECTS')?'<div class="actions-row"><button class="btn ghost" onclick="subjectEdit('+s.id+')">Edit</button><button class="btn danger" onclick="subjectDelete('+s.id+')">Delete</button></div>':'')+'</article>').join('')||'<div class="card empty">No subjects.</div>'+'</div>'}
@@ -1089,7 +1089,19 @@ function render(){
   if(window.b4LogsLiveTimer){clearInterval(window.b4LogsLiveTimer);window.b4LogsLiveTimer=null}
   morphHtml($('#nav'),buildNav());
   let html=v==='teacher:exam-logs'?title(S.lang==='ar'?'سجلات الامتحانات':'Exam Logs',S.lang==='ar'?'سجل أنشطة الامتحانات فقط.':'Exam-related activity only.')+'<div id="teacherExamLogsRoot"></div>':v==='dashboard'?dashboard():v==='students'?studentsV():v==='teachers'?teachersV():v==='subjects'?subjectsV():v==='subject'?subjectV():v==='schedule'?scheduleV():v==='assignments'?tasksV():v==='resources'?resourcesV():v==='exams'?examsV():v==='announcements'?announcementsV():v==='chat'?chatV():v==='teacherChat'?teacherChatV():v==='admin'?adminV():v==='teacherCenter'?teacherCenterV():v==='settings'?settingsV():v==='reportBug'?reportBugV():v==='developers'?devV():v==='exam-fullscreen'?examFullscreenV():v==='exam-run'?examRunV():v==='exam-locked'?examLockedV():v==='exam-unavailable'?examUnavailableV():v==='exam-result'?examResultV():v==='exam-answers'?examAnswersV():v==='exam-review'?examReviewV():v.startsWith('admin:')?adminPage(v.slice(6)):dashboard();
-  morphHtml($('#content'),html);animatePageEntrance(previousView!==v);
+  morphHtml($('#content'),html);
+  if(pendingSearchPerson&&pendingSearchPerson.view===v){
+    const target=document.getElementById('person-'+pendingSearchPerson.kind+'-'+pendingSearchPerson.id);
+    if(target){
+      pendingSearchPerson=null;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        target.scrollIntoView({behavior:'smooth',block:'center'});
+        target.classList.add('search-target');
+        setTimeout(()=>target.classList.remove('search-target'),2400);
+      }));
+    }
+  }
+  animatePageEntrance(previousView!==v);
   if(v==='dashboard')animateDashboardStats();
   applySuperAdminCrown();
   if(S.me?.avatar_url&&$('#topAvatar'))$('#topAvatar').src=S.me.avatar_url;
@@ -2674,6 +2686,7 @@ async function deleteExamSubmission(examId,attemptId){
 }
 
 async function delAPI(path,msg){if(!await confirmAction('Are you sure?'))return;try{await api(path,{method:'DELETE'});await loadData();render();toast(msg+' ✓')}catch(e){toast(e.message)}}
+let pendingSearchPerson=null;
 function searchBind(){
   const input=$('#search'),box=$('#searchResults'),wrap=input?.closest('.search');
   if(!input||!box||!wrap)return;
@@ -2748,6 +2761,7 @@ function searchBind(){
     const button=event.target.closest('.search-result');if(!button)return;
     const view=button.dataset.view,kind=button.dataset.kind,id=Number(button.dataset.id);
     hide();input.blur();
+    if(kind==='student'||kind==='teacher')pendingSearchPerson={kind,id,view};
     if(view)go(view);
     if(kind==='assignment'&&id)setTimeout(()=>openAssignment(id),80);
     else if(kind==='exam'&&id)setTimeout(()=>startExam(id),80);
