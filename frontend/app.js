@@ -928,8 +928,16 @@ function setupChatPosition(boxId){
   const box=document.getElementById(boxId);
   if(!box)return;
   restoreChatPosition(boxId);
+  if(box.__b4PositionBound)return;
+  box.__b4PositionBound=true;
   box.addEventListener('scroll',()=>{
     if(box.scrollHeight-box.scrollTop-box.clientHeight<80)markChatSeen(boxId);
+    if(box.__b4ReadTimer)clearTimeout(box.__b4ReadTimer);
+    box.__b4ReadTimer=setTimeout(()=>{
+      const type=boxId==='teacherMessages'?'teacher':'class';
+      const messages=type==='teacher'?S.teacherMessages:S.messages;
+      ackChatReceipts(type,messages||[],true);
+    },350);
   },{passive:true});
 }
 function setupChatJumpButton(boxId,buttonId){
