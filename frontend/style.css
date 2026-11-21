@@ -3316,3 +3316,36 @@ header{
 .search-result-tag{flex:0 0 auto;padding:5px 8px;border:1px solid var(--line);border-radius:999px;color:var(--p);font-size:10px;font-weight:750}
 .search-empty{padding:16px 12px;text-align:center;color:var(--m);font-size:12px}
 @media(max-width:800px){.search-results{left:0;right:0;max-height:55vh}.search{z-index:85}}
+
+
+/* ===== Search bar: responsive + premium interaction ===== */
+header{min-width:0}
+header>.search{flex:1 1 420px;width:min(100%,720px);max-width:720px;min-width:0;position:relative;gap:9px;padding-inline:13px}
+.search input{flex:1 1 auto;min-width:0;width:0;font-size:13px;line-height:1.4;text-overflow:ellipsis}
+.search input::placeholder{font-size:12px;opacity:.78;white-space:nowrap;text-overflow:ellipsis}
+.search-clear{flex:0 0 25px;width:25px;height:25px;border:0;border-radius:8px;background:transparent;color:var(--m);font-size:20px;line-height:1;cursor:pointer}
+.search-clear:hover{background:var(--s2);color:var(--t)}
+.search-clear[hidden]{display:none}
+.search-results{padding:8px;max-height:min(68vh,560px);overscroll-behavior:contain}
+.search-results-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px 11px;color:var(--t);font-size:11px;font-weight:800;border-bottom:1px solid var(--line);margin-bottom:5px}
+.search-results-head small{color:var(--m);font-size:9px;font-weight:600;text-align:end}
+.search-result{min-height:56px;padding:10px 12px}
+.search-result.is-active,.search-result:hover,.search-result:focus-visible{background:color-mix(in srgb,var(--p) 15%,var(--s2));outline:none}
+.search-result-copy strong{font-size:13px}
+.search-result-copy small{font-size:10px}
+.search-result-tag{font-size:9px;letter-spacing:.02em}
+.search-empty{padding:22px 14px}
+@media(max-width:800px){
+  header{gap:8px;padding-inline:10px}
+  header>.search{flex:1 1 0;width:auto;max-width:none;padding-inline:10px}
+  .search input{font-size:12px}
+  .search input::placeholder{font-size:11px}
+  .search-results{left:0;right:0;max-height:58vh}
+  .search-results-head small{display:none}
+}
+@media(max-width:380px){
+  header{gap:6px;padding-inline:8px}
+  header>.search{gap:6px}
+  .search input{font-size:11px}
+  .search input::placeholder{font-size:10px}
+}
