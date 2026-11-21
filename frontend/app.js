@@ -1664,6 +1664,7 @@ function chatLoop(){
   clearInterval(window.chatTimer);
   clearInterval(window.chatTypingTimer);
   if(!S.me||S.view!=='chat')return;
+  retryChatOutbox('class');
   ensureRealtime();
   const sync=async()=>{
     if(window.realtimeOnline===true)return;
@@ -1710,6 +1711,7 @@ function teacherChatLoop(){
   clearInterval(window.teacherTimer);
   clearInterval(window.teacherTypingTimer);
   if(!S.me||S.view!=='teacherChat')return;
+  retryChatOutbox('teacher');
   ensureTeacherRealtime();
   const sync=async()=>{
     if(window.teacherSyncBusy)return;
