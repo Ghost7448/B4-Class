@@ -3,11 +3,11 @@ const BROKEN_IMAGE_FALLBACK='data:image/svg+xml;charset=UTF-8,'+encodeURICompone
 document.addEventListener('error',e=>{const img=e.target;if(img instanceof HTMLImageElement&&!img.dataset.b4Fallback){img.dataset.b4Fallback='1';img.removeAttribute('srcset');img.classList.add('b4-image-fallback');img.src=BROKEN_IMAGE_FALLBACK;}},true);
 const API=(window.B4_API_URL||'').replace(/\/$/,'');
 const B4_THEME_MIGRATION='dark-default-v2';if(localStorage.getItem('b4ThemeMigration')!==B4_THEME_MIGRATION){localStorage.setItem('b4Theme','dark');localStorage.setItem('b4ThemeMigration',B4_THEME_MIGRATION)}
-const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'dark',view:'dashboard',me:null,linked:[],students:[],teachers:[],subjects:[],schedule:[],assignments:[],resources:[],exams:[],announcements:[],messages:[],developers:[],badges:[],accounts:[],permissions:[],users:[],teacherMessages:[],notifications:[],notificationSettings:{chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,system_notifications:1,push_enabled:0},examReview:null,examRun:null,examResult:null,examAnswers:null,serverNowMs:0,serverClockOffsetMs:0,serverTimeZone:'Africa/Cairo',error:''};
+const S={lang:localStorage.b4Lang||'en',theme:localStorage.b4Theme||'dark',view:'dashboard',me:null,linked:[],students:[],teachers:[],subjects:[],schedule:[],assignments:[],resources:[],exams:[],announcements:[],messages:[],developers:[],badges:[],accounts:[],permissions:[],users:[],teacherMessages:[],notifications:[],notificationSettings:{chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,system_notifications:1,push_enabled:0},examReview:null,examRun:null,examResult:null,examAnswers:null,serverNowMs:0,serverClockOffsetMs:0,serverTimeZone:'Africa/Cairo',error:'',offlineMode:false};
 const L={en:{dashboard:'Dashboard',students:'Students',teachers:'Teachers',subjects:'Subjects',schedule:'Schedule',assignments:'Assignments',resources:'Resources',exams:'Exam Center',announcements:'Announcements',chat:'Class Chat',teacherChat:'Teacher Chat',admin:'Admin Center',teacherCenter:'Teacher Center',settings:'Settings',developers:'Developers',reportBug:'Report Bug',login:'Login',logout:'Log out',activate:'Activation Key',ai:'B4 AI',search:'Search...',guest:'Guest',save:'Save',add:'Add',edit:'Edit',delete:'Delete',open:'Open resource',light:'Light mode',dark:'Dark mode',english:'English',arabic:'Arabic',administrator:'Administrator — all permissions',superAdmin:'Super Admin',classRole:'Class role',systemAccess:'System access'},ar:{dashboard:'الرئيسية',students:'الطلاب',teachers:'المدرسين',subjects:'المواد',schedule:'الجدول',assignments:'الواجبات',resources:'المصادر',exams:'الامتحانات',announcements:'الإعلانات',chat:'شات الفصل',teacherChat:'شات المدرسين',admin:'مركز الإدارة',teacherCenter:'مركز المدرس',settings:'الإعدادات',developers:'المطورون',reportBug:'الإبلاغ عن مشكلة',login:'تسجيل الدخول',logout:'تسجيل الخروج',activate:'مفتاح التفعيل',ai:'مساعد B4',search:'ابحث...',guest:'زائر',save:'حفظ',add:'إضافة',edit:'تعديل',delete:'حذف',open:'فتح المصدر',light:'الوضع النهاري',dark:'الوضع الليلي',english:'الإنجليزية',arabic:'العربية',administrator:'Administrator — كل الصلاحيات',superAdmin:'Super Admin',classRole:'دور الحساب',systemAccess:'صلاحية النظام'}};
 const t=k=>L[S.lang][k]||k;
 const PERMS=[['MANAGE_CHAT','Manage Chat / Moderate messages'],['MANAGE_ACCOUNTS','Manage Accounts'],['MANAGE_PERMISSIONS','Manage Permissions'],['VIEW_LOGS','View Logs'],['VIEW_ADMIN_CENTER','View Admin Center'],['MANAGE_STUDENTS','Manage Students'],['MANAGE_TEACHERS','Manage Teachers'],['MANAGE_ROLES','Manage Roles'],['MANAGE_ADMINS','Manage Admins'],['MANAGE_KEYS','Manage Activation Keys'],['MANAGE_BADGES','Manage Badges'],['MANAGE_SUBJECTS','Manage Subjects'],['MANAGE_SCHEDULE','Manage Schedule'],['MANAGE_ASSIGNMENTS','Manage Assignments'],['MANAGE_RESOURCES','Manage Resources / PDFs'],['MANAGE_EXAMS','Manage Exams'],['MANAGE_ANNOUNCEMENTS','Manage Announcements'],['MANAGE_TEACHER_CHAT','Teacher Chat'],['MANAGE_SITE','Manage Site'],['USE_AI','Use AI'],['MANAGE_DEVELOPERS','Manage Developers'],['MANAGE_REPORTS','Manage Bug Reports'],['VIEW_CLASS','View Class'],['ADMINISTRATOR','Administrator — ALL permissions']];
-const api=async(path,opt={})=>{const r=await fetch(API+path,{credentials:'include',...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(d.error||'Request failed');const submittedForm=$('#modal form');if(submittedForm?.dataset.b4Submitted==='1')submittedForm.dataset.b4SubmitSucceeded='1';return d};
+const api=async(path,opt={})=>{const r=await fetch(API+path,{credentials:'include',...opt,headers:{'Content-Type':'application/json',...(opt.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok){const error=new Error(d.error||'Request failed');error.status=r.status;throw error}const submittedForm=$('#modal form');if(submittedForm?.dataset.b4Submitted==='1')submittedForm.dataset.b4SubmitSucceeded='1';return d};
 const toast=m=>{const e=document.createElement('div');e.className='toast';e.textContent=m;document.body.append(e);setTimeout(()=>e.remove(),2500)};
 let deferredInstallPrompt=null;
 let b4InstallState='unknown';
@@ -595,7 +595,7 @@ async function syncLiveData(forceFull=false){
       S.me=nextMe;
     }catch(e){
       if(/Session expired|Not logged in|Login required/i.test(String(e?.message||''))){
-        S.me=null;
+        S.me=null;S.offlineMode=false;try{localStorage.removeItem('b4OfflineUser')}catch{}
         try{window.globalRealtimeStream?.close()}catch{}
         window.globalRealtimeStream=null;
         render();
@@ -1228,6 +1228,8 @@ async function loadMe(){
   try{
     const d=await api('/api/auth/me');
     S.me=d.user;
+    S.offlineMode=false;
+    try{localStorage.setItem('b4OfflineUser',JSON.stringify({user:S.me,savedAt:Date.now()}))}catch{}
     hydrateChatHistoryCache();
     S.linked=(await api('/api/auth/linked')).linked||[];
     try{
@@ -1240,8 +1242,11 @@ async function loadMe(){
     }
     ensureRealtime();
     ensureGlobalRealtime();
-  }catch{
-    S.me=null;S.linked=[];
+  }catch(error){
+    let cached=null;try{cached=JSON.parse(localStorage.getItem('b4OfflineUser')||'null')}catch{}
+    const canUseOffline=(!error?.status||error.status>=500)&&cached?.user?.id;
+    if(canUseOffline){S.me=cached.user;S.offlineMode=true;S.linked=[];hydrateChatHistoryCache()}
+    else{S.me=null;S.offlineMode=false;S.linked=[];try{localStorage.removeItem('b4OfflineUser')}catch{}}
     S.notificationSettings={chat_messages:1,class_chat_messages:1,class_chat_reply:1,teacher_chat_messages:1,teacher_chat_reply:1,exam_notifications:1,exam_results:1,announcement_notifications:1,assignment_notifications:1,resource_notifications:1,system_notifications:1,push_enabled:0};
     S.vapidPublicKey='';
   }
@@ -1575,7 +1580,7 @@ async function compressAvatarFile(file){
   }finally{bitmap.close?.();}
 }
 async function saveProfile(e){e.preventDefault();try{await api('/api/auth/profile',{method:'PATCH',body:JSON.stringify({displayName:$('#displayName').value.trim()})});const f=$('#profileAvatar')?.files?.[0];if(f){const compressed=await compressAvatarFile(f);const fd=new FormData();fd.append('file',compressed);const r=await fetch(API+'/api/auth/avatar',{method:'POST',credentials:'include',body:fd});const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Image upload failed')}await loadMe();toast('Saved ✓')}catch(x){toast(x.message)}}
-async function logout(){await api('/api/auth/logout',{method:'POST'}).catch(()=>{});if(window.realtimeStream){window.realtimeStream.close();window.realtimeStream=null}if(window.teacherRealtimeStream){window.teacherRealtimeStream.close();window.teacherRealtimeStream=null}if(window.globalRealtimeStream){window.globalRealtimeStream.close();window.globalRealtimeStream=null}clearInterval(window.liveFallbackTimer);S.me=null;clearInterval(window.profileSyncTimer);S.view='students';await loadData();render();toast('Logged out')}
+async function logout(){await api('/api/auth/logout',{method:'POST'}).catch(()=>{});if(window.realtimeStream){window.realtimeStream.close();window.realtimeStream=null}if(window.teacherRealtimeStream){window.teacherRealtimeStream.close();window.teacherRealtimeStream=null}if(window.globalRealtimeStream){window.globalRealtimeStream.close();window.globalRealtimeStream=null}clearInterval(window.liveFallbackTimer);S.me=null;S.offlineMode=false;try{localStorage.removeItem('b4OfflineUser')}catch{}clearInterval(window.profileSyncTimer);S.view='students';await loadData();render();toast('Logged out')}
 function googleLink(){location.href=API+'/api/auth/google/start'}async function unlinkGoogle(){try{await api('/api/auth/linked/GOOGLE',{method:'DELETE'});await loadMe()}catch(e){toast(e.message)}}
 function aiModal(){modal('<div class="modalhead"><h2>✦ '+t('ai')+'</h2><button class="close" onclick="b4Close()">×</button></div><div id="aiOut" class="card">Ask a study question.</div><form class="form" onsubmit="askAI(event)"><textarea id="aiInput" rows="4" placeholder="Ask about Telecommunication..."></textarea><button class="btn primary">Send</button></form>')}
 async function askAI(e){
