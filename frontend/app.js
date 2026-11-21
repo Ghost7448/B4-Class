@@ -951,18 +951,33 @@ function chatReceiptHTML(m){
   if(total>0&&delivered>=total)return '<span class="chat-receipt delivered" title="Delivered to everyone" aria-label="Delivered to everyone">✓✓</span>';
   return '<span class="chat-receipt sent" title="Sent" aria-label="Sent">✓</span>';
 }
+function isChatMessageVisible(type,id){
+  const box=document.getElementById(type==='teacher'?'teacherMessages':'messages');
+  if(!box||document.visibilityState!=='visible'||S.view!==(type==='teacher'?'teacherChat':'chat'))return false;
+  const node=[...box.querySelectorAll('[data-message-id]')].find(el=>Number(el.dataset.messageId)===Number(id));
+  if(!node)return false;
+  const a=node.getBoundingClientRect(),b=box.getBoundingClientRect();
+  return a.bottom>b.top+2&&a.top<b.bottom-2;
+}
 function ackChatReceipts(type,messages,read=false){
   if(!S.me||!Array.isArray(messages)||!messages.length)return;
   const ids=[...new Set(messages.filter(m=>Number(m.user_id)!==Number(S.me.id)&&Number(m.id)>0).map(m=>Number(m.id)))];
   if(!ids.length)return;
   const url=type==='teacher'?'/api/teacher-chat/receipts':'/api/chat/receipts';
-  api(url,{method:'POST',body:JSON.stringify({messageIds:ids,read:!!read})}).then(d=>{
-    const target=type==='teacher'?'teacherMessages':'messages';
+  const update=async(messageIds,markRead)=>{
+    if(!messageIds.length)return;
+    const d=await api(url,{method:'POST',body:JSON.stringify({messageIds,read:!!markRead})});
     const current=type==='teacher'?S.teacherMessages:S.messages;
     const updates=new Map((d.receipts||[]).map(x=>[Number(x.id),x]));
     if(!updates.size)return;
     const next=current.map(m=>updates.has(Number(m.id))?{...m,...updates.get(Number(m.id))}:m);
     if(type==='teacher')applyTeacherMessages(next);else applyChatMessages(next);
+  };
+  update(ids,false).then(()=>{
+    if(read){
+      const visibleIds=ids.filter(id=>isChatMessageVisible(type,id));
+      return update(visibleIds,true);
+    }
   }).catch(()=>{});
 }
 function chatOutboxKey(type){return 'b4ChatOutbox:'+String(S.me?.id||'')+':'+type}
