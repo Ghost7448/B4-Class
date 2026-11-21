@@ -751,8 +751,8 @@ app.get('/api/search',requireAuth,async(req,res)=>{
     const resourceMatch=match(['title','description']);
     const examMatch=match(['title','description']);
     const [students,teachers,subjects,assignments,announcements,resources,exams]=await Promise.all([
-      q(`SELECT id,COALESCE(NULLIF(display_name,''),official_name) title,official_name,student_code code FROM students WHERE class_name='B4' AND (${studentMatch.sql}) ORDER BY CASE WHEN LOWER(COALESCE(display_name,'')) LIKE ? THEN 0 ELSE 1 END,display_name LIMIT 15`,[...studentMatch.params,'%'+tokens[0]+'%']),
-      q(`SELECT id,COALESCE(NULLIF(display_name,''),official_name) title,official_name,teacher_code code FROM teachers WHERE class_name='B4' AND (${teacherMatch.sql}) ORDER BY CASE WHEN LOWER(COALESCE(display_name,'')) LIKE ? THEN 0 ELSE 1 END,display_name LIMIT 15`,[...teacherMatch.params,'%'+tokens[0]+'%']),
+      q(`SELECT id,COALESCE(NULLIF(display_name,''),official_name) title,official_name,student_code code FROM students WHERE class_name='B4' AND (${studentMatch.sql}) ORDER BY CASE WHEN LOWER(COALESCE(display_name,'')) LIKE ? THEN 0 ELSE 1 END,display_name LIMIT 30`,[...studentMatch.params,'%'+tokens[0]+'%']),
+      q(`SELECT id,COALESCE(NULLIF(display_name,''),official_name) title,official_name,teacher_code code FROM teachers WHERE class_name='B4' AND (${teacherMatch.sql}) ORDER BY CASE WHEN LOWER(COALESCE(display_name,'')) LIKE ? THEN 0 ELSE 1 END,display_name LIMIT 30`,[...teacherMatch.params,'%'+tokens[0]+'%']),
       q(`SELECT id,name title,teacher_name subtitle FROM subjects WHERE class_name='B4' AND (${subjectMatch.sql}) ORDER BY name LIMIT 12`,subjectMatch.params),
       q(`SELECT a.id,a.title,a.description,s.name subtitle FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id WHERE a.class_name='B4' AND (${assignmentMatch.sql}) ORDER BY a.created_at DESC LIMIT 12`,assignmentMatch.params),
       q(`SELECT id,title,body subtitle FROM announcements WHERE class_name='B4' AND (${announcementMatch.sql}) ORDER BY created_at DESC LIMIT 12`,announcementMatch.params),
@@ -769,7 +769,7 @@ app.get('/api/search',requireAuth,async(req,res)=>{
       ...exams[0].map(x=>({kind:'exam',view:'exams',id:x.id,title:x.title,subtitle:x.subtitle||'Exam',label:'Exam'}))
     ];
     res.set('Cache-Control','no-store');
-    res.json({results:results.slice(0,75)});
+    res.json({results:results.slice(0,100)});
   }catch(error){
     console.error('Global search failed:',error);
     res.status(500).json({error:'Search failed'});
