@@ -252,6 +252,39 @@ function pushChatEvent(event, payload) {
   const packet = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
   for (const client of chatStreams) { try { client.res.write(packet); } catch { chatStreams.delete(client); } }
 }
+
+let chatReceiptSchemaReady=null;
+async function ensureChatReceiptSchema(){
+  if(!chatReceiptSchemaReady)chatReceiptSchemaReady=q("CREATE TABLE IF NOT EXISTS b4_chat_receipts(chat_type VARCHAR(16) NOT NULL,message_id BIGINT UNSIGNED NOT NULL,user_id BIGINT UNSIGNED NOT NULL,delivered_at DATETIME NULL,read_at DATETIME NULL,PRIMARY KEY(chat_type,message_id,user_id),INDEX idx_b4_chat_receipt_user(chat_type,user_id,read_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4").catch(e=>{chatReceiptSchemaReady=null;throw e;});
+  return chatReceiptSchemaReady;
+}
+async function chatReceiptRecipients(type,senderId){
+  const sql=type==='teacher'
+    ? "SELECT id FROM users WHERE status='ACTIVE' AND id<>? AND (role='TEACHER' OR is_super_admin=1)"
+    : "SELECT id FROM users WHERE status='ACTIVE' AND role='STUDENT' AND id<>?";
+  const [rows]=await q(sql,[senderId]);
+  return rows.map(x=>Number(x.id)).filter(Boolean);
+}
+async function seedChatReceipts(type,messageId,senderId){
+  await ensureChatReceiptSchema();
+  const ids=await chatReceiptRecipients(type,senderId);
+  if(ids.length){
+    const values=ids.map(()=>"(?,?,?)").join(",");
+    const args=ids.flatMap(id=>[type,messageId,id]);
+    await q("INSERT IGNORE INTO b4_chat_receipts(chat_type,message_id,user_id) VALUES "+values,args);
+  }
+}
+async function attachChatReceiptStats(type,messages){
+  if(!messages?.length)return messages||[];
+  await ensureChatReceiptSchema();
+  const ids=messages.map(m=>Number(m.id)).filter(Number.isSafeInteger);
+  if(!ids.length)return messages;
+  const marks=ids.map(()=>"?").join(",");
+  const [rows]=await q("SELECT message_id,COUNT(*) receipt_total,SUM(delivered_at IS NOT NULL) receipt_delivered,SUM(read_at IS NOT NULL) receipt_read FROM b4_chat_receipts WHERE chat_type=? AND message_id IN ("+marks+") GROUP BY message_id",[type,...ids]);
+  const stats=new Map(rows.map(r=>[Number(r.message_id),r]));
+  return messages.map(m=>{const r=stats.get(Number(m.id));return {...m,receipt_total:Number(r?.receipt_total||0),receipt_delivered:Number(r?.receipt_delivered||0),receipt_read:Number(r?.receipt_read||0)};});
+}
+
 function pushTeacherChatEvent(event, payload) {
   const packet = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
   for (const client of teacherChatStreams) { try { client.res.write(packet); } catch { teacherChatStreams.delete(client); } }
@@ -1490,11 +1523,12 @@ app.get('/api/profile/live',requireAuth,async(req,res)=>{
 });
 
 app.get('/api/chat/messages',requireAuth,async(req,res)=>{
-  const [messages]=await q(`SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name
+  const [rows]=await q(`SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name
     FROM chat_messages m LEFT JOIN users u ON u.id=m.user_id
     LEFT JOIN chat_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id
     WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100`);
-  messages.reverse();
+  rows.reverse();
+  const messages=await attachChatReceiptStats('class',rows);
   res.json({messages});
 });
 
@@ -1505,13 +1539,15 @@ app.post('/api/chat/messages',requireAuth,async(req,res)=>{
   if(replyToId){const [reply]=await q('SELECT id FROM chat_messages WHERE id=? AND deleted_at IS NULL LIMIT 1',[replyToId]);if(!reply[0])return res.status(400).json({error:'Reply target not found'});}
   const [r]=await q('INSERT INTO chat_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);
   const [rows]=await q(`SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM chat_messages m JOIN users u ON u.id=m.user_id LEFT JOIN chat_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?`,[r.insertId]);
+  await seedChatReceipts('class',r.insertId,req.session.userId);
+  const [receiptMessage]=await attachChatReceiptStats('class',[rows[0]]);
   if(replyToId){
     const [target]=await q('SELECT user_id FROM chat_messages WHERE id=? LIMIT 1',[replyToId]);
     if(target[0]?.user_id && Number(target[0].user_id)!==Number(req.session.userId)) await createNotification(target[0].user_id,{type:'class_chat_reply',title:'Reply to your message',body:(rows[0].display_name||'Someone')+': '+String(rows[0].body||'').slice(0,180),entityId:r.insertId,url:'/?view=chat'});
   }
   await notifyClassExcept(req.session.userId,{type:'class_chat_message',title:'New Class Chat Message',body:(rows[0].display_name||'Someone')+': '+String(rows[0].body||'').slice(0,180),entityId:r.insertId,url:'/?view=chat'});
-  res.json({message:rows[0]});
-  pushChatEvent('chat',{type:'created',message:rows[0]});
+  res.json({message:receiptMessage});
+  pushChatEvent('chat',{type:'created',message:receiptMessage});
 });
 app.patch('/api/chat/messages/:id',requireAuth,async(req,res)=>{
   const id=Number(req.params.id),body=String(req.body?.body||'').trim();
@@ -1548,6 +1584,25 @@ app.get('/api/admin/chat/edit-logs',requirePermission('VIEW_LOGS'),async(req,res
   const [logs]=await q('SELECT e.id,e.message_id,e.old_body,e.new_body,e.created_at,u.display_name editor_name FROM chat_message_edits e LEFT JOIN users u ON u.id=e.editor_user_id ORDER BY e.created_at DESC LIMIT 200');
   res.json({logs});
 });
+
+
+async function updateChatReceipts(req,res,type){
+  const ids=[...new Set((Array.isArray(req.body?.messageIds)?req.body.messageIds:[]).map(Number).filter(id=>Number.isSafeInteger(id)&&id>0))].slice(0,100);
+  if(!ids.length)return res.json({receipts:[]});
+  await ensureChatReceiptSchema();
+  const read=!!req.body?.read;
+  const marks=ids.map(()=>"?").join(",");
+  await q("UPDATE b4_chat_receipts SET delivered_at=COALESCE(delivered_at,NOW()),read_at=IF(?,COALESCE(read_at,NOW()),read_at) WHERE chat_type=? AND user_id=? AND message_id IN ("+marks+")",[read?1:0,type,req.session.userId,...ids]);
+  const [rows]=await q("SELECT message_id,COUNT(*) receipt_total,SUM(delivered_at IS NOT NULL) receipt_delivered,SUM(read_at IS NOT NULL) receipt_read FROM b4_chat_receipts WHERE chat_type=? AND message_id IN ("+marks+") GROUP BY message_id",[type,...ids]);
+  const receipts=rows.map(r=>({id:Number(r.message_id),receipt_total:Number(r.receipt_total||0),receipt_delivered:Number(r.receipt_delivered||0),receipt_read:Number(r.receipt_read||0)}));
+  for(const receipt of receipts){
+    const payload={type:'receipts',message:{id:receipt.id,...receipt}};
+    if(type==='teacher')pushTeacherChatEvent('teacher-chat',payload);else pushChatEvent('chat',payload);
+  }
+  res.json({receipts});
+}
+app.post('/api/chat/receipts',requireAuth,async(req,res)=>updateChatReceipts(req,res,'class'));
+app.post('/api/teacher-chat/receipts',teacherOnly,async(req,res)=>updateChatReceipts(req,res,'teacher'));
 
 app.post('/api/chat/typing',requireAuth,async(req,res)=>{const typing=!!req.body?.typing;if(typing)await q('INSERT INTO chat_typing(user_id,typing) VALUES(?,1) ON DUPLICATE KEY UPDATE typing=1,updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM chat_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
 app.get('/api/chat/typing',requireAuth,async(req,res)=>{await q('DELETE FROM chat_typing WHERE updated_at < (NOW() - INTERVAL 5 SECOND)');const [users]=await q("SELECT t.user_id,t.updated_at,u.display_name FROM chat_typing t JOIN users u ON u.id=t.user_id WHERE t.typing=1 AND u.status='ACTIVE' ORDER BY t.updated_at DESC");res.json({users});});
@@ -2276,13 +2331,13 @@ app.get('/api/developers/:id/avatar',async(req,res)=>{const [r]=await q('SELECT 
 
 async function teacherOnly(req,res,next){if(!req.session.userId)return res.status(401).json({error:'Login required'});const [u]=await q('SELECT role,is_super_admin,status FROM users WHERE id=?',[req.session.userId]);if(!u[0]||u[0].status!=='ACTIVE')return res.status(401).json({error:'Account disabled'});if(!Number(u[0].is_super_admin)&&u[0].role!=='TEACHER'&&!(await getPermissionCodes(req.session.userId)).includes('MANAGE_TEACHER_CHAT'))return res.status(403).json({error:'Teacher chat only'});next();}
 app.get('/api/teacher-chat/stream',teacherOnly,async(req,res)=>{res.status(200).set({'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform','Connection':'keep-alive','X-Accel-Buffering':'no'});res.flushHeaders?.();const client={res,userId:req.session.userId};teacherChatStreams.add(client);res.write(': connected\\n\\n');const cleanup=()=>teacherChatStreams.delete(client);res.on('close',cleanup);res.on('error',cleanup);});
-app.get('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m LEFT JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100');rows.reverse();res.json({messages:rows});});
-app.post('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const body=String(req.body?.body||'').trim(),replyToId=req.body?.replyToId?Number(req.body.replyToId):null;if(!body||body.length>4000)return res.status(400).json({error:'Message is empty or too long'});if(replyToId){const [reply]=await q('SELECT id FROM b4_teacher_messages WHERE id=? AND deleted_at IS NULL LIMIT 1',[replyToId]);if(!reply[0])return res.status(400).json({error:'Reply target not found'});}const [r]=await q('INSERT INTO b4_teacher_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?',[r.insertId]);
+app.get('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m LEFT JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.deleted_at IS NULL ORDER BY m.created_at DESC LIMIT 100');rows.reverse();const messages=await attachChatReceiptStats('teacher',rows);res.json({messages});});
+app.post('/api/teacher-chat/messages',teacherOnly,async(req,res)=>{const body=String(req.body?.body||'').trim(),replyToId=req.body?.replyToId?Number(req.body.replyToId):null;if(!body||body.length>4000)return res.status(400).json({error:'Message is empty or too long'});if(replyToId){const [reply]=await q('SELECT id FROM b4_teacher_messages WHERE id=? AND deleted_at IS NULL LIMIT 1',[replyToId]);if(!reply[0])return res.status(400).json({error:'Reply target not found'});}const [r]=await q('INSERT INTO b4_teacher_messages(user_id,body,reply_to_id) VALUES(?,?,?)',[req.session.userId,body,replyToId||null]);const [rows]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?',[r.insertId]);await seedChatReceipts('teacher',r.insertId,req.session.userId);const [receiptMessage]=await attachChatReceiptStats('teacher',[rows[0]]);
   if(replyToId){
     const [target]=await q('SELECT user_id FROM b4_teacher_messages WHERE id=? LIMIT 1',[replyToId]);
     if(target[0]?.user_id && Number(target[0].user_id)!==Number(req.session.userId)) await createNotification(target[0].user_id,{type:'teacher_chat_reply',title:'Reply to your teacher message',body:(rows[0].display_name||'Someone')+': '+String(rows[0].body||'').slice(0,180),entityId:r.insertId,url:'/?view=teacherChat'});
   }
-  const [teacherRecipients]=await q("SELECT id FROM users WHERE status='ACTIVE' AND id<>? AND (role='TEACHER' OR is_super_admin=1)",[req.session.userId]);await notifyUsers(teacherRecipients.map(x=>x.id),{type:'teacher_chat_message',title:'New Teacher Chat Message',body:(rows[0].display_name||'Someone')+': '+String(rows[0].body||'').slice(0,180),entityId:r.insertId,url:'/?view=teacherChat'});await audit(req,'TEACHER_CHAT_MESSAGE','teacher_chat',r.insertId);res.json({message:rows[0]});pushTeacherChatEvent('teacher-chat',{type:'created',message:rows[0]});});
+  const [teacherRecipients]=await q("SELECT id FROM users WHERE status='ACTIVE' AND id<>? AND (role='TEACHER' OR is_super_admin=1)",[req.session.userId]);await notifyUsers(teacherRecipients.map(x=>x.id),{type:'teacher_chat_message',title:'New Teacher Chat Message',body:(rows[0].display_name||'Someone')+': '+String(rows[0].body||'').slice(0,180),entityId:r.insertId,url:'/?view=teacherChat'});await audit(req,'TEACHER_CHAT_MESSAGE','teacher_chat',r.insertId);res.json({message:receiptMessage});pushTeacherChatEvent('teacher-chat',{type:'created',message:receiptMessage});});
 app.patch('/api/teacher-chat/messages/:id',teacherOnly,async(req,res)=>{const id=Number(req.params.id),body=String(req.body?.body||'').trim();if(!Number.isSafeInteger(id)||!body||body.length>4000)return res.status(400).json({error:'Invalid message'});const [rows]=await q('SELECT id,user_id,body,deleted_at FROM b4_teacher_messages WHERE id=? LIMIT 1',[id]);const m=rows[0];if(!m)return res.status(404).json({error:'Message not found'});if(m.deleted_at)return res.status(400).json({error:'Deleted message cannot be edited'});const permissions=await getPermissionCodes(req.session.userId);const canEdit=Number(m.user_id)===Number(req.session.userId)||permissions.includes('MANAGE_TEACHER_CHAT');if(!canEdit)return res.status(403).json({error:'Permission denied'});if(body===m.body)return res.status(400).json({error:'No changes made'});await q('INSERT INTO b4_teacher_message_edits(message_id,editor_user_id,old_body,new_body) VALUES(?,?,?,?)',[id,req.session.userId,m.body,body]);await q('UPDATE b4_teacher_messages SET body=?,edited_at=NOW() WHERE id=?',[body,id]);await audit(req,'TEACHER_CHAT_MESSAGE_EDITED','teacher_chat',id,{old_body:m.body,new_body:body});const [updated]=await q('SELECT m.id,m.body,m.created_at,m.edited_at,m.user_id,m.reply_to_id,u.display_name,u.avatar_url,rm.body reply_body,ru.display_name reply_display_name FROM b4_teacher_messages m JOIN users u ON u.id=m.user_id LEFT JOIN b4_teacher_messages rm ON rm.id=m.reply_to_id LEFT JOIN users ru ON ru.id=rm.user_id WHERE m.id=?',[id]);res.json({message:updated[0]});pushTeacherChatEvent('teacher-chat',{type:'updated',message:updated[0]});});
 app.delete('/api/teacher-chat/messages/:id',teacherOnly,async(req,res)=>{const id=Number(req.params.id);const [rows]=await q('SELECT m.id,m.user_id,m.body,m.created_at,m.deleted_at,u.display_name owner_name FROM b4_teacher_messages m LEFT JOIN users u ON u.id=m.user_id WHERE m.id=? LIMIT 1',[id]);const m=rows[0];if(!m)return res.status(404).json({error:'Message not found'});const permissions=await getPermissionCodes(req.session.userId);const canDelete=Number(m.user_id)===Number(req.session.userId)||permissions.includes('MANAGE_TEACHER_CHAT');if(!canDelete)return res.status(403).json({error:'Permission denied'});if(m.deleted_at)return res.json({ok:true});await q('UPDATE b4_teacher_messages SET deleted_at=NOW(),deleted_by=? WHERE id=?',[req.session.userId,id]);const [deleter]=await q('SELECT display_name,role,is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);await audit(req,'TEACHER_CHAT_MESSAGE_DELETED','teacher_chat',id,{message_id:id,message_owner:m.owner_name||'Unknown',message_owner_user_id:m.user_id,message_content:m.body,created_at:m.created_at,deleted_at:new Date().toISOString(),deleted_by:deleter[0]?.display_name||'Unknown',deleted_by_user_id:req.session.userId,deleted_by_role:deleter[0]?.is_super_admin?'SUPER ADMIN':(deleter[0]?.role||'USER'),delete_type:Number(m.user_id)===Number(req.session.userId)?'OWNER':'ADMIN'});res.json({ok:true});pushTeacherChatEvent('teacher-chat',{type:'deleted',id});});
 app.post('/api/teacher-chat/typing',teacherOnly,async(req,res)=>{if(req.body?.typing)await q('INSERT INTO b4_teacher_typing(user_id) VALUES(?) ON DUPLICATE KEY UPDATE updated_at=CURRENT_TIMESTAMP',[req.session.userId]);else await q('DELETE FROM b4_teacher_typing WHERE user_id=?',[req.session.userId]);res.json({ok:true});});
