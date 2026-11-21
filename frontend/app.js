@@ -2674,7 +2674,64 @@ async function deleteExamSubmission(examId,attemptId){
 }
 
 async function delAPI(path,msg){if(!await confirmAction('Are you sure?'))return;try{await api(path,{method:'DELETE'});await loadData();render();toast(msg+' ✓')}catch(e){toast(e.message)}}
-function searchBind(){const i=$('#search');if(i)i.oninput=()=>{const q=i.value.toLowerCase().trim();if(!q)return;const all=[...S.students,...S.teachers,...S.subjects,...S.assignments,...S.resources];const x=all.find(a=>String(a.display_name||a.name||a.title||'').toLowerCase().includes(q));if(x)toast('Found: '+(x.display_name||x.name||x.title))}}
+function searchBind(){
+  const input=$('#search'), box=$('#searchResults');
+  if(!input||!box)return;
+  let timer=0, controller=null, requestId=0;
+  const hide=()=>{box.hidden=true;box.innerHTML='';};
+  const showMessage=(message)=>{box.innerHTML='';const row=document.createElement('div');row.className='search-empty';row.textContent=message;box.append(row);box.hidden=false;};
+  const renderResults=(items)=>{
+    box.innerHTML='';
+    if(!items.length){showMessage(S.lang==='ar'?'مفيش نتائج مطابقة':'No matching results');return;}
+    for(const item of items){
+      const button=document.createElement('button');
+      button.type='button';button.className='search-result';button.setAttribute('role','option');
+      button.dataset.view=item.view||'';button.dataset.kind=item.kind||'';button.dataset.id=item.id||'';
+      const copy=document.createElement('span');copy.className='search-result-copy';
+      const title=document.createElement('strong');title.textContent=item.title||'';
+      const sub=document.createElement('small');sub.textContent=item.subtitle||item.label||'';
+      copy.append(title,sub);
+      const tag=document.createElement('span');tag.className='search-result-tag';tag.textContent=item.label||'';
+      button.append(copy,tag);box.append(button);
+    }
+    box.hidden=false;
+  };
+  input.addEventListener('input',()=>{
+    clearTimeout(timer);
+    if(controller){controller.abort();controller=null;}
+    const query=input.value.trim();
+    if(query.length<2){hide();return;}
+    showMessage(S.lang==='ar'?'جاري البحث…':'Searching…');
+    timer=setTimeout(async()=>{
+      const current=++requestId;
+      controller=new AbortController();
+      try{
+        const data=await api('/api/search?q='+encodeURIComponent(query),{signal:controller.signal,cache:'no-store'});
+        if(current!==requestId||input.value.trim()!==query)return;
+        renderResults(data.results||[]);
+      }catch(error){
+        if(error.name==='AbortError')return;
+        if(current===requestId)showMessage(S.lang==='ar'?'تعذر إتمام البحث':'Search is temporarily unavailable');
+      }
+    },450);
+  });
+  input.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){hide();input.blur();}
+    if(event.key==='Enter'&&!box.hidden){
+      const first=box.querySelector('.search-result');
+      if(first)first.click();
+    }
+  });
+  box.addEventListener('click',event=>{
+    const button=event.target.closest('.search-result');if(!button)return;
+    const view=button.dataset.view,kind=button.dataset.kind,id=Number(button.dataset.id);
+    hide();input.blur();
+    if(view)go(view);
+    if(kind==='assignment'&&id)setTimeout(()=>openAssignment(id),80);
+    else if(kind==='exam'&&id)setTimeout(()=>startExam(id),80);
+  });
+  document.addEventListener('click',event=>{if(!event.target.closest('.search'))hide();});
+}
 function applyTheme(){render()}
 function toggleTheme(){S.theme=S.theme==='dark'?'light':'dark';localStorage.b4Theme=S.theme;if(document.startViewTransition&&!matchMedia('(prefers-reduced-motion: reduce)').matches){document.startViewTransition(()=>applyTheme())}else applyTheme()}
 function setLang(lang){S.lang=lang==='ar'?'ar':'en';localStorage.b4Lang=S.lang;document.documentElement.lang=S.lang;document.documentElement.dir=S.lang==='ar'?'rtl':'ltr';if($('#lang span'))$('#lang span').textContent=S.lang==='ar'?'EN':'عربي';render()}
