@@ -3367,3 +3367,23 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
 /* Global search: scroll to and briefly highlight the exact person card */
 .people-card[id^="person-"]{scroll-margin-top:110px}
 .people-card.search-target{border-color:var(--p)!important;box-shadow:0 0 0 3px color-mix(in srgb,var(--p) 28%,transparent),0 16px 42px rgba(0,0,0,.18)!important;}
+
+
+/* WhatsApp-style delivery and read receipts */
+.chat-receipt{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-inline-start:7px;
+  min-width:16px;
+  font-size:12px;
+  line-height:1;
+  font-weight:900;
+  letter-spacing:-3px;
+  vertical-align:middle;
+  opacity:.9;
+}
+.chat-receipt.pending{font-size:13px;letter-spacing:0;opacity:.8}
+.chat-receipt.sent{color:currentColor}
+.chat-receipt.delivered{color:currentColor;opacity:.95}
+.chat-receipt.read{color:#38bdf8;opacity:1;text-shadow:0 0 8px rgba(56,189,248,.22)}
