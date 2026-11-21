@@ -736,23 +736,23 @@ app.get('/api/students', async (req,res)=>{
 app.get('/api/search',requireAuth,async(req,res)=>{
   try{
     const term=String(req.query.q||'').trim().slice(0,80);
-    const tokens=[...new Set(term.toLocaleLowerCase().split(/\s+/).filter(Boolean))].slice(0,6);
+    const tokens=[...new Set(term.toLocaleLowerCase().split(/\\s+/).filter(Boolean))].slice(0,6);
     if(!tokens.length||term.length<2)return res.json({results:[]});
     const match=(fields)=>{
       const sql=tokens.map(()=>`(${fields.map(field=>`LOWER(COALESCE(${field},'')) LIKE ?`).join(' OR ')})`).join(' AND ');
       const params=tokens.flatMap(token=>fields.map(()=>'%'+token+'%'));
       return {sql,params};
     };
-    const studentMatch=match(['display_name','official_name','student_code']);
-    const teacherMatch=match(['display_name','official_name','teacher_code']);
+    const studentMatch=match(['u.display_name','s.display_name','s.official_name','s.student_code']);
+    const teacherMatch=match(['u.display_name','t.display_name','t.official_name','t.teacher_code']);
     const subjectMatch=match(['name','teacher_name']);
     const assignmentMatch=match(['title','description']);
     const announcementMatch=match(['title','body']);
     const resourceMatch=match(['title','description']);
     const examMatch=match(['title','description']);
     const [students,teachers,subjects,assignments,announcements,resources,exams]=await Promise.all([
-      q(`SELECT id,COALESCE(NULLIF(display_name,''),official_name) title,official_name,student_code code FROM students WHERE class_name='B4' AND (${studentMatch.sql}) ORDER BY CASE WHEN LOWER(COALESCE(display_name,'')) LIKE ? THEN 0 ELSE 1 END,display_name LIMIT 30`,[...studentMatch.params,'%'+tokens[0]+'%']),
-      q(`SELECT id,COALESCE(NULLIF(display_name,''),official_name) title,official_name,teacher_code code FROM teachers WHERE class_name='B4' AND (${teacherMatch.sql}) ORDER BY CASE WHEN LOWER(COALESCE(display_name,'')) LIKE ? THEN 0 ELSE 1 END,display_name LIMIT 30`,[...teacherMatch.params,'%'+tokens[0]+'%']),
+      q(`SELECT s.id,COALESCE(NULLIF(u.display_name,''),NULLIF(s.display_name,''),s.official_name) title,s.official_name,COALESCE(u.display_name,s.display_name) account_display_name,s.student_code code FROM students s LEFT JOIN users u ON u.student_id=s.id AND u.status='ACTIVE' WHERE s.class_name='B4' AND (${studentMatch.sql}) ORDER BY CASE WHEN LOWER(COALESCE(u.display_name,s.display_name,'')) LIKE ? THEN 0 ELSE 1 END,account_display_name LIMIT 30`,[...studentMatch.params,'%'+tokens[0]+'%']),
+      q(`SELECT t.id,COALESCE(NULLIF(u.display_name,''),NULLIF(t.display_name,''),t.official_name) title,t.official_name,COALESCE(u.display_name,t.display_name) account_display_name,t.teacher_code code FROM teachers t LEFT JOIN users u ON u.teacher_id=t.id AND u.status='ACTIVE' WHERE t.class_name='B4' AND (${teacherMatch.sql}) ORDER BY CASE WHEN LOWER(COALESCE(u.display_name,t.display_name,'')) LIKE ? THEN 0 ELSE 1 END,account_display_name LIMIT 30`,[...teacherMatch.params,'%'+tokens[0]+'%']),
       q(`SELECT id,name title,teacher_name subtitle FROM subjects WHERE class_name='B4' AND (${subjectMatch.sql}) ORDER BY name LIMIT 12`,subjectMatch.params),
       q(`SELECT a.id,a.title,a.description,s.name subtitle FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id WHERE a.class_name='B4' AND (${assignmentMatch.sql}) ORDER BY a.created_at DESC LIMIT 12`,assignmentMatch.params),
       q(`SELECT id,title,body subtitle FROM announcements WHERE class_name='B4' AND (${announcementMatch.sql}) ORDER BY created_at DESC LIMIT 12`,announcementMatch.params),
@@ -760,8 +760,8 @@ app.get('/api/search',requireAuth,async(req,res)=>{
       q(`SELECT id,title,description subtitle FROM exams WHERE class_name='B4' AND (${examMatch.sql}) ORDER BY created_at DESC LIMIT 12`,examMatch.params)
     ]);
     const results=[
-      ...students[0].map(x=>({kind:'student',view:'students',id:x.id,title:x.title,subtitle:x.code||x.official_name||'Class student',label:'Student'})),
-      ...teachers[0].map(x=>({kind:'teacher',view:'teachers',id:x.id,title:x.title,subtitle:x.code||x.official_name||'Class teacher',label:'Teacher'})),
+      ...students[0].map(x=>({kind:'student',view:'students',id:x.id,title:x.title,subtitle:x.account_display_name&&x.account_display_name!==x.official_name?x.official_name:(x.code||'Class student'),label:'Student'})),
+      ...teachers[0].map(x=>({kind:'teacher',view:'teachers',id:x.id,title:x.title,subtitle:x.account_display_name&&x.account_display_name!==x.official_name?x.official_name:(x.code||'Class teacher'),label:'Teacher'})),
       ...subjects[0].map(x=>({kind:'subject',view:'subjects',id:x.id,title:x.title,subtitle:x.subtitle||'Subject',label:'Subject'})),
       ...assignments[0].map(x=>({kind:'assignment',view:'assignments',id:x.id,title:x.title,subtitle:x.subtitle||x.description||'Assignment',label:'Task'})),
       ...announcements[0].map(x=>({kind:'announcement',view:'announcements',id:x.id,title:x.title,subtitle:x.subtitle||'Announcement',label:'Announcement'})),
