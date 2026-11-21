@@ -52,7 +52,11 @@
               id="search"
               placeholder="Search everything..."
               autocomplete="off"
+              aria-label="Search everything"
+              aria-autocomplete="list"
+              aria-controls="searchResults"
             />
+            <div id="searchResults" class="search-results" role="listbox" hidden></div>
           </div>
           <div class="top">
             <button id="ai">✦</button
