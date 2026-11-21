@@ -951,6 +951,28 @@ function setupChatJumpButton(boxId,buttonId){
   update();
 }
 
+
+function chatHistoryCacheKey(type,userId=S.me?.id){
+  return 'b4ChatHistory:'+String(userId||'guest')+':'+type;
+}
+function readChatHistoryCache(type,userId=S.me?.id){
+  try{
+    const value=JSON.parse(localStorage.getItem(chatHistoryCacheKey(type,userId))||'[]');
+    return Array.isArray(value)?value.slice(-150):[];
+  }catch{return []}
+}
+function saveChatHistoryCache(type,messages,userId=S.me?.id){
+  if(!userId||!Array.isArray(messages))return;
+  try{localStorage.setItem(chatHistoryCacheKey(type,userId),JSON.stringify(messages.slice(-150)))}catch{}
+}
+function hydrateChatHistoryCache(){
+  if(!S.me?.id)return;
+  const cachedClass=readChatHistoryCache('class');
+  const cachedTeacher=readChatHistoryCache('teacher');
+  if(!S.messages.length&&cachedClass.length)S.messages=cachedClass;
+  if(!S.teacherMessages.length&&cachedTeacher.length)S.teacherMessages=cachedTeacher;
+}
+
 function chatReceiptHTML(m){
   if(!S.me||Number(m.user_id)!==Number(S.me.id))return '';
   if(m.pending)return '<span class="chat-receipt pending" title="Not sent" aria-label="Not sent">◷</span>';
@@ -1206,6 +1228,7 @@ async function loadMe(){
   try{
     const d=await api('/api/auth/me');
     S.me=d.user;
+    hydrateChatHistoryCache();
     S.linked=(await api('/api/auth/linked')).linked||[];
     try{
       const ns=await api('/api/notifications/settings');
@@ -1225,7 +1248,7 @@ async function loadMe(){
   await loadData();render();updateNotificationBadge();profileSyncLoop();startAssignmentCountdown();liveDataLoop();
   if(S.me) maybeEnableDeviceNotifications();
 }
-async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],messages:d.messages||[],notifications:d.notifications||[]});try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}try{S.accounts=(await api('/api/admin/accounts')).accounts||[]}catch{}updateNotificationBadge();S.error=''}catch(e){S.error=e.message}}
+async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],messages:Array.isArray(d.messages)?d.messages:S.messages,notifications:d.notifications||[]});saveChatHistoryCache('class',S.messages);try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}try{S.accounts=(await api('/api/admin/accounts')).accounts||[]}catch{}updateNotificationBadge();S.error=''}catch(e){S.error=e.message}}
 
 
 async function login(e){e.preventDefault();try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({login:$('#loginName').value.trim(),password:$('#loginPassword').value})});close();await loadMe();toast('Login successful ✓');if(S.pendingExamId)startExam(S.pendingExamId)}catch(x){toast(x.message)}}
@@ -1653,6 +1676,7 @@ function applyChatMessages(messages){
   const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url,m.receipt_total,m.receipt_delivered,m.receipt_read,m.pending]))!==JSON.stringify((S.messages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url,m.receipt_total,m.receipt_delivered,m.receipt_read,m.pending]));
   if(!changed)return;
   S.messages=next;
+  saveChatHistoryCache('class',S.messages);
   const box=$('#messages');
   if(box){
     const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;
@@ -1723,6 +1747,7 @@ function applyTeacherMessages(messages){
   const changed=JSON.stringify(next.map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url,m.receipt_total,m.receipt_delivered,m.receipt_read,m.pending]))!==JSON.stringify((S.teacherMessages||[]).map(m=>[m.id,m.body,m.edited_at,m.deleted_at,m.avatar_url,m.receipt_total,m.receipt_delivered,m.receipt_read,m.pending]));
   if(!changed)return;
   S.teacherMessages=next;
+  saveChatHistoryCache('teacher',S.teacherMessages);
   const box=$('#teacherMessages');
   if(box){
     const wasNearBottom=box.scrollHeight-box.scrollTop-box.clientHeight<120;
