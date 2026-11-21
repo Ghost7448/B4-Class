@@ -1,4 +1,4 @@
-const CACHE='b4-v159';
+const CACHE='b4-v160';
 const FILES=['./','./index.html','./style.css','./schedule-polish.css','./app.js','./timetable-fix.js','./manifest.webmanifest','./assets/logo.svg'];
 self.addEventListener('install',function(event){
   event.waitUntil(caches.open(CACHE).then(function(cache){return cache.addAll(FILES);}).then(function(){return self.skipWaiting();}));
@@ -22,6 +22,15 @@ self.addEventListener('notificationclick',function(event){
 });
 self.addEventListener('fetch',function(event){
   if(event.request.method!=='GET')return;
+  // Never cache API responses (especially auth/session endpoints). A stale cached
+  // 401 can make an offline user look logged out; API calls must fail offline.
+  try{
+    var requestUrl=new URL(event.request.url);
+    if(requestUrl.pathname.startsWith('/api/')){
+      event.respondWith(fetch(event.request,{cache:'no-store'}));
+      return;
+    }
+  }catch(error){}
   event.respondWith(fetch(event.request).then(function(response){
     if(response.ok){var copy=response.clone();caches.open(CACHE).then(function(cache){return cache.put(event.request,copy);}).catch(function(){});}
     return response;
