@@ -736,7 +736,7 @@ app.get('/api/students', async (req,res)=>{
 app.get('/api/search',requireAuth,async(req,res)=>{
   try{
     const term=String(req.query.q||'').trim().slice(0,80);
-    const tokens=[...new Set(term.toLocaleLowerCase().split(/\\s+/).filter(Boolean))].slice(0,6);
+    const tokens=[...new Set(term.toLocaleLowerCase().split(/\s+/).filter(Boolean))].slice(0,6);
     if(!tokens.length||term.length<2)return res.json({results:[]});
     const match=(fields)=>{
       const sql=tokens.map(()=>`(${fields.map(field=>`LOWER(COALESCE(${field},'')) LIKE ?`).join(' OR ')})`).join(' AND ');
