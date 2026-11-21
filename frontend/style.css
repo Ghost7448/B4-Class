@@ -3191,3 +3191,30 @@ header{
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+
+/* ===== CLEAN SIDEBAR FOOTER CONTROLS ===== */
+.app aside .side-bottom{
+  padding:12px 0 0!important;
+  gap:5px!important;
+  background:linear-gradient(to bottom,transparent 0%,var(--s) 30%,var(--s) 100%)!important;
+}
+.app aside .side-bottom button{
+  min-height:44px;
+  border:1px solid transparent!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+  border-radius:13px;
+  padding:11px 14px!important;
+  color:var(--m);
+  transition:background .2s ease,color .2s ease,border-color .2s ease;
+}
+.app aside .side-bottom button:hover{
+  background:rgba(124,58,237,.09)!important;
+  border-color:rgba(124,58,237,.16)!important;
+  color:var(--t);
+  transform:none!important;
+  box-shadow:none!important;
+}
