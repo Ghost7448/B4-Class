@@ -3621,3 +3621,12 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
   .chat .bubble .bubble-edited{margin-top:6px}
   .chat .bubble .bubble-edited .chat-edited-pill{min-height:17px;padding:3px 7px;font-size:7px}
 }
+
+
+/* Keep EDITED aligned to the physical right edge inside every bubble */
+.chat .bubble .bubble-edited{
+  width:100%;
+  align-self:stretch;
+  justify-content:flex-end;
+  direction:ltr;
+}
