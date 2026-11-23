@@ -3630,3 +3630,47 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
   justify-content:flex-end;
   direction:ltr;
 }
+
+
+/* ===== FULL-SCREEN CHAT EXPERIENCE ===== */
+.app main:has(#content .chat){min-width:0;min-height:100dvh;display:flex;flex-direction:column}
+#content:has(>.page .chat),#content:has(>.chat){width:100%;max-width:none;flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 18px 18px}
+#content:has(.chat) .page{width:100%;flex:1;min-height:0;display:flex;flex-direction:column}
+#content:has(.chat) .title{flex:0 0 auto;margin-bottom:10px}
+#content:has(.chat) .chat{
+  width:100%;
+  flex:1 1 auto;
+  min-height:420px;
+  height:auto;
+  max-height:none;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  border-radius:22px;
+}
+#content:has(.chat) .chat .messages{flex:1 1 auto;height:0;min-height:0}
+#content:has(.chat) .chat .chatform{flex:0 0 auto}
+@media(max-width:800px){
+  .app main:has(#content .chat){height:100dvh;min-height:100dvh;overflow:hidden}
+  #content:has(.chat){
+    height:calc(100dvh - 70px - 78px - env(safe-area-inset-bottom));
+    min-height:0;
+    flex:0 0 auto;
+    padding:8px 9px 8px;
+    overflow:hidden;
+  }
+  #content:has(.chat) .page{min-height:0;height:100%}
+  #content:has(.chat) .title{margin:0 3px 7px;flex-direction:row;align-items:center}
+  #content:has(.chat) .title h1{font-size:18px;margin:2px 0}
+  #content:has(.chat) .title .eyebrow,#content:has(.chat) .title p{display:none}
+  #content:has(.chat) .chat{
+    flex:1 1 0;
+    height:auto;
+    min-height:0;
+    max-height:none;
+    padding:10px;
+    border-radius:18px;
+  }
+  #content:has(.chat) .chat .messages{height:0;min-height:0}
+  .mobile-dock{padding-bottom:calc(7px + env(safe-area-inset-bottom))}
+}
