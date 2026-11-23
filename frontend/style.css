@@ -3503,3 +3503,66 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
 @media(prefers-reduced-motion:reduce){
   .chat .msg{animation:none}
 }
+
+
+/* ===== CHAT MESSAGE DETAILS: REPLY + EDITED PILL ===== */
+.chat .msg-content{min-width:0;display:flex;flex-direction:column;align-items:flex-start}
+.chat .msg.me .msg-content{align-items:flex-end}
+.chat .reply-preview{
+  width:min(100%,560px);
+  min-width:0;
+  margin:2px 0 7px;
+  padding:9px 11px;
+  border:1px solid color-mix(in srgb,var(--p) 22%,var(--line));
+  border-inline-start:3px solid var(--p);
+  border-radius:13px;
+  background:color-mix(in srgb,var(--p) 7%,var(--s2));
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  overflow:hidden;
+}
+.chat .reply-preview-head{display:flex;align-items:center;gap:6px;min-width:0;color:var(--p);font-size:10px}
+.chat .reply-preview-head b{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat .reply-mark{font-size:14px;font-weight:900}
+.chat .reply-label{margin-inline-start:auto;font-size:8px;letter-spacing:.08em;opacity:.7;white-space:nowrap}
+.chat .reply-preview-body{
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  display:-webkit-box;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  line-height:1.5;
+  font-size:11px;
+  color:var(--m);
+  overflow-wrap:anywhere;
+  white-space:pre-wrap;
+}
+.chat .msg-meta-pills{display:flex;align-items:center;gap:5px;margin-top:7px}
+.chat .chat-edited-pill{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-height:22px;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid #22c55e55;
+  background:linear-gradient(135deg,#16a34a1c,#22c55e0d);
+  color:#22c55e;
+  font-size:9px;
+  line-height:1;
+  font-weight:900;
+  letter-spacing:.07em;
+  box-shadow:0 3px 12px #22c55e12;
+}
+.chat .msg-time{display:block;margin-top:5px}
+.chat .msg.me .reply-preview{border-inline-start-color:#22c55e}
+.chat .msg.me .reply-preview-head{color:#22c55e}
+@media(max-width:600px){
+  .chat .reply-preview{padding:8px 9px;border-radius:11px;margin-bottom:6px}
+  .chat .reply-preview-body{font-size:10px}
+  .chat .reply-preview-head b{font-size:10px}
+  .chat .chat-edited-pill{min-height:20px;padding:4px 9px;font-size:8px}
+  .chat .msg-meta-pills{margin-top:6px}
+}
