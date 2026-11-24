@@ -129,12 +129,14 @@ function captureModalDraft(){
   const fields=[...root.querySelectorAll('input,textarea,select')].filter(el=>el.type!=='password'&&el.type!=='file'&&(!activeModalDraftKey.includes('saveExam')||!el.closest('[data-qindex]')));
   const old=modalDrafts.get(activeModalDraftKey)||{};
   old.fields=fields.map(el=>({value:el.value,checked:!!el.checked}));
+  old.savedAt=Date.now();
   modalDrafts.set(activeModalDraftKey,old);
 }
 function restoreModalDraft(key){
   if(!key)return;
   const saved=modalDrafts.get(key);
   if(!saved)return;
+  if(saved.savedAt&&Date.now()-saved.savedAt>24*60*60*1000){modalDrafts.delete(key);return;}
   if(saved.examDraft&&key.includes('saveExam'))examDraft=JSON.parse(JSON.stringify(saved.examDraft));
   const fields=[...$('#modal').querySelectorAll('input,textarea,select')].filter(el=>el.type!=='password'&&el.type!=='file'&&(!key.includes('saveExam')||!el.closest('[data-qindex]')));
   (saved.fields||[]).forEach((item,i)=>{
@@ -2370,7 +2372,17 @@ async function saveExam(e,id){
   if(qs.some(q=>q.questionType==='MCQ'&&(!q.options||q.options.length<2||!q.correctAnswer)))return toast('Each MCQ needs at least 2 options and a correct answer');
   if(qs.some(q=>q.questionType==='TRUE_FALSE'&&!['TRUE','FALSE'].includes(String(q.correctAnswer||'').trim().toUpperCase())))return toast('Choose TRUE or FALSE for every true/false question');
   const b={title:$('#et').value.trim(),description:$('#ed').value,subjectId:Number($('#es').value)||null,endsAt:$('#een').value||null,durationMinutes:Number($('#dur').value)||null,questions:qs};
-  try{await api(id?'/api/admin/exams/'+id:'/api/admin/exams',{method:id?'PATCH':'POST',body:JSON.stringify(b)});if(!id)await clearExamBuilderDraft();close();await loadData();render();toast('Exam saved ✓')}catch(x){toast(x.message)}
+  try{
+    await api(id?'/api/admin/exams/'+id:'/api/admin/exams',{method:id?'PATCH':'POST',body:JSON.stringify(b)});
+    if(!id){
+      await clearExamBuilderDraft();
+      const key=activeModalDraftKey;
+      if(key)modalDrafts.delete(key);
+      const form=$('#modal form');if(form)form.dataset.b4SubmitSucceeded='1';
+      examDraft=[];
+    }
+    close();await loadData();render();toast('Exam saved ✓')
+  }catch(x){toast(x.message)}
 }
 async function startExam(id){
   if(!S.me){S.pendingExamId=Number(id);loginModal();return}
