@@ -3630,3 +3630,27 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
   justify-content:flex-end;
   direction:ltr;
 }
+
+/* ===== CONSISTENT TAP FEEDBACK: remove Android blue flash ===== */
+:where(button,a,[role="button"],[onclick],.clickable,summary){
+  -webkit-tap-highlight-color:transparent!important;
+  tap-highlight-color:transparent!important;
+}
+:where(button,a,[role="button"],[onclick],.clickable,summary):focus{
+  -webkit-tap-highlight-color:transparent!important;
+}
+@media(pointer:coarse){
+  :where(button,a,[role="button"],[onclick],.clickable,summary){
+    -webkit-tap-highlight-color:transparent!important;
+    outline:none;
+    transition:transform .16s cubic-bezier(.2,.75,.25,1),filter .16s ease,box-shadow .16s ease,background-color .16s ease!important;
+  }
+  :where(button,a,[role="button"],[onclick],.clickable,summary):active{
+    transform:scale(.96)!important;
+    filter:brightness(1.07);
+    box-shadow:0 0 0 2px rgba(168,85,247,.32),0 0 16px rgba(168,85,247,.22)!important;
+  }
+  :where(button,a,[role="button"],[onclick],.clickable,summary):focus:not(:focus-visible){
+    outline:none!important;
+  }
+}
