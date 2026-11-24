@@ -3654,3 +3654,38 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
     outline:none!important;
   }
 }
+
+
+/* ===== EXAM CHOICE: prevent Android blue pressed/selection overlay ===== */
+.exam-choice,
+.exam-choice *{
+  -webkit-tap-highlight-color:transparent!important;
+  -webkit-touch-callout:none;
+  -webkit-user-select:none!important;
+  user-select:none!important;
+}
+.exam-choice:focus,
+.exam-choice:focus-within{
+  outline:none!important;
+  -webkit-tap-highlight-color:transparent!important;
+}
+.exam-choice:active{
+  background:var(--s2)!important;
+  border-color:var(--line)!important;
+  box-shadow:none!important;
+  transform:scale(.99);
+}
+.exam-choice.true:has(input:checked){
+  background:#16a34a12!important;
+  border-color:#16a34a88!important;
+  box-shadow:0 8px 25px #16a34a12!important;
+}
+.exam-choice.false:has(input:checked){
+  background:#dc262612!important;
+  border-color:#dc262688!important;
+  box-shadow:0 8px 25px #dc262612!important;
+}
+.exam-choice.true:has(input:checked):active,
+.exam-choice.false:has(input:checked):active{
+  transform:scale(.99);
+}
