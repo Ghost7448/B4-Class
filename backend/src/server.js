@@ -1787,10 +1787,19 @@ app.post('/api/admin/resources/:id/pdf', requirePermission('MANAGE_RESOURCES'), 
 });
 
 app.get('/api/admin/exam-draft',requirePermission('MANAGE_EXAMS'),async(req,res)=>{
-  const [rows]=await q('SELECT draft_json,updated_at FROM b4_exam_drafts WHERE user_id=? LIMIT 1',[req.session.userId]);
+  const [rows]=await q('SELECT draft_json,updated_at,(updated_at < (NOW() - INTERVAL 24 HOUR)) AS expired FROM b4_exam_drafts WHERE user_id=? LIMIT 1',[req.session.userId]);
   if(!rows[0])return res.json({draft:null});
-  try{return res.json({draft:JSON.parse(rows[0].draft_json),updatedAt:rows[0].updated_at})}
-  catch{await q('DELETE FROM b4_exam_drafts WHERE user_id=?',[req.session.userId]);return res.json({draft:null})}
+  if(Number(rows[0].expired)===1){
+    await q('DELETE FROM b4_exam_drafts WHERE user_id=?',[req.session.userId]);
+    return res.json({draft:null,expired:true});
+  }
+  try{
+    await q('UPDATE b4_exam_drafts SET updated_at=CURRENT_TIMESTAMP WHERE user_id=?',[req.session.userId]);
+    return res.json({draft:JSON.parse(rows[0].draft_json),updatedAt:rows[0].updated_at});
+  }catch{
+    await q('DELETE FROM b4_exam_drafts WHERE user_id=?',[req.session.userId]);
+    return res.json({draft:null});
+  }
 });
 app.put('/api/admin/exam-draft',requirePermission('MANAGE_EXAMS'),async(req,res)=>{
   const draft=req.body?.draft;
@@ -1988,6 +1997,15 @@ setInterval(async()=>{
   }catch(e){console.error('Exam deadline sweep failed:',e)}
   finally{examDeadlineSweepBusy=false}
 },10000);
+
+let examDraftCleanupBusy=false;
+setInterval(async()=>{
+  if(examDraftCleanupBusy)return;
+  examDraftCleanupBusy=true;
+  try{await q('DELETE FROM b4_exam_drafts WHERE updated_at < (NOW() - INTERVAL 24 HOUR)')}
+  catch(e){console.error('Exam draft cleanup failed:',e)}
+  finally{examDraftCleanupBusy=false}
+},10*60*1000);
 
 async function sendExamStart(res,exam,attempt){
   const [questions]=await q('SELECT id,question_text,question_type,options_json,points,sort_order FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[exam.id]);
