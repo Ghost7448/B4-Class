@@ -3689,3 +3689,24 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
 .exam-choice.false:has(input:checked):active{
   transform:scale(.99);
 }
+
+
+/* ===== MOBILE SIDEBAR ENTRY DIRECTION FOLLOWS ACTIVE LANGUAGE ===== */
+@media(max-width:800px){
+  html[dir="ltr"] .app aside{
+    left:0;
+    right:auto;
+    transform:translateX(-110%);
+    box-shadow:20px 0 55px #0002;
+  }
+  html[dir="rtl"] .app aside{
+    left:auto;
+    right:0;
+    transform:translateX(110%);
+    box-shadow:-20px 0 55px #0002;
+  }
+  html[dir="ltr"] .app aside.open,
+  html[dir="rtl"] .app aside.open{
+    transform:translateX(0);
+  }
+}
