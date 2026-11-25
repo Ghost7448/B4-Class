@@ -3710,3 +3710,25 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
     transform:translateX(0);
   }
 }
+
+
+/* Keep chat layout stable when the site language changes. Text direction
+   inside messages remains automatic so Arabic and English messages read naturally. */
+.chat,
+.chat .messages,
+.chat .chatform,
+.chat .msg{
+  direction:ltr;
+}
+.chat .bubble-text,
+.chat .reply-preview-body,
+.chat .reply-preview-head{
+  direction:auto;
+  unicode-bidi:plaintext;
+  text-align:start;
+}
+.chat .chatform textarea{
+  direction:auto;
+  unicode-bidi:plaintext;
+  text-align:start;
+}
