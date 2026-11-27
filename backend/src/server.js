@@ -1717,6 +1717,29 @@ app.get('/api/classroom/connect',requireAuth,async(req,res)=>{
     res.redirect(u.toString());
   }catch(e){console.error('Classroom OAuth start failed:',e.message);res.status(500).json({error:'Could not start Google Classroom connection'});}
 });
+app.get('/api/classroom/disconnect',requireAuth,async(req,res)=>{
+  try{
+    const [admin]=await q('SELECT is_super_admin,status FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+    if(!admin[0]||admin[0].status!=='ACTIVE'||Number(admin[0].is_super_admin)!==1)return res.status(403).json({error:'Super administrator access required'});
+    const [rows]=await q('SELECT refresh_token_enc FROM b4_classroom_connection WHERE id=1 LIMIT 1');
+    if(!rows[0])return res.json({ok:true,connected:false,message:'Google Classroom is already disconnected'});
+    let revoked=false;
+    try{
+      const refreshToken=decryptClassroomToken(rows[0].refresh_token_enc);
+      const revokeRes=await fetch('https://oauth2.googleapis.com/revoke',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({token:refreshToken})});
+      revoked=revokeRes.ok;
+      if(!revokeRes.ok)console.warn('Google Classroom token revocation failed:',revokeRes.status);
+    }catch(error){
+      console.warn('Google Classroom token revocation skipped:',error.message);
+    }
+    await q('DELETE FROM b4_classroom_connection WHERE id=1');
+    await audit(req,'GOOGLE_CLASSROOM_DISCONNECTED','google_classroom',null,{token_revoked:revoked});
+    return res.json({ok:true,connected:false,tokenRevoked:revoked,message:'Google Classroom disconnected. Existing imported announcements were preserved.'});
+  }catch(e){
+    console.error('Classroom disconnect failed:',e.message);
+    return res.status(500).json({error:'Could not disconnect Google Classroom'});
+  }
+});
 app.get('/api/classroom/status',requireAuth,async(req,res)=>{
   const [admin]=await q('SELECT is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);
   if(!Number(admin[0]?.is_super_admin))return res.status(403).json({error:'Super administrator access required'});
