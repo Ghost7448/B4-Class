@@ -175,7 +175,7 @@ async function sendPushToUser(userId,{title='B4 Class — Test Notification',bod
   const results=[];
   for(const sub of subs){
     try{
-      const response=await webpush.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},payload,{TTL:60,urgency:'high'});
+      const response=await webpush.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},payload,{TTL:86400,urgency:'high'});
       results.push({id:sub.id,ok:true,statusCode:Number(response?.statusCode||201)});
     }catch(e){
       const status=Number(e.statusCode||0);
