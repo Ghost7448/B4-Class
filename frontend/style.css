@@ -3878,3 +3878,55 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
 .visitor-field small{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
 .visitor-field b{display:block;font-size:13px;overflow-wrap:anywhere;word-break:break-word;font-weight:600}
 @media(max-width:600px){.visitor-head{flex-direction:column}.visitor-fields{grid-template-columns:minmax(0,1fr)}}
+
+
+/* ===== NOTIFICATION ROW HEIGHT FIX ===== */
+/* Keep notification cards content-sized; prevent inherited grid/flex sizing
+   from stretching a single notification to the full available modal height. */
+.notification-list{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:stretch!important;
+  justify-content:flex-start!important;
+  grid-auto-rows:unset!important;
+}
+.notification-list > .notification-row{
+  box-sizing:border-box!important;
+  flex:0 0 auto!important;
+  width:100%;
+  height:auto!important;
+  min-height:76px!important;
+  max-height:140px;
+  align-self:stretch!important;
+}
+.notification-list > .notification-row > .notification-main{
+  box-sizing:border-box;
+  flex:1 1 auto!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:100%;
+  align-self:center!important;
+}
+.notification-list .notification-icon{
+  box-sizing:border-box;
+  flex:0 0 48px!important;
+  width:48px!important;
+  height:48px!important;
+  min-height:48px!important;
+  max-height:48px!important;
+  align-self:center!important;
+}
+.notification-list .notification-row-actions{
+  flex:0 0 auto!important;
+  align-self:center!important;
+}
+@media(max-width:700px){
+  .notification-list > .notification-row{min-height:68px!important;max-height:120px}
+  .notification-list .notification-icon{
+    flex-basis:42px!important;
+    width:42px!important;
+    height:42px!important;
+    min-height:42px!important;
+    max-height:42px!important;
+  }
+}
