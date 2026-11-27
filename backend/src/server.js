@@ -777,6 +777,22 @@ app.post('/api/notifications/push/subscribe',requireAuth,async(req,res)=>{
   await q('UPDATE notification_settings SET push_enabled=1 WHERE user_id=?',[req.session.userId]);
   res.json({ok:true});
 });
+app.post('/api/notifications/test',requireAuth,async(req,res)=>{
+  try{
+    const id=await createNotification(req.session.userId,{
+      type:'system',
+      title:'B4 Class — Test Notification',
+      body:'This is a test notification inside the B4 Class website.',
+      url:'/?view=settings'
+    });
+    if(!id)return res.status(400).json({ok:false,error:'System notifications are disabled in your notification settings'});
+    const [rows]=await q('SELECT id,type,entity_id,title,body,target_url,read_at,created_at FROM notifications WHERE id=? AND user_id=? LIMIT 1',[id,req.session.userId]);
+    res.json({ok:true,notification:rows[0]||null});
+  }catch(e){
+    console.error('In-app notification test failed:',e);
+    res.status(500).json({ok:false,error:'Could not create in-app test notification'});
+  }
+});
 app.post('/api/notifications/push/test',requireAuth,async(req,res)=>{
   try{
     const result=await sendPushToUser(req.session.userId);
