@@ -79,7 +79,6 @@ window.addEventListener('beforeinstallprompt',e=>{
 window.addEventListener('appinstalled',()=>{
   deferredInstallPrompt=null;
   b4InstallState='installed';
-  localStorage.setItem('b4Installed','1');
   toast('B4 installed ✓');
 });
 function isB4Standalone(){
@@ -93,12 +92,11 @@ function isB4Standalone(){
 }
 async function detectB4Installed(){
   if(isB4Standalone())return true;
-  if(localStorage.getItem('b4Installed')==='1')return true;
+  // Avoid stale install flags: an uninstalled PWA can leave localStorage behind.
   try{
     if(typeof navigator.getInstalledRelatedApps==='function'){
       const apps=await navigator.getInstalledRelatedApps();
       if(Array.isArray(apps)&&apps.some(x=>x?.platform==='webapp')){
-        localStorage.setItem('b4Installed','1');
         return true;
       }
     }
@@ -147,7 +145,6 @@ async function triggerB4Install(){
     const result=await prompt.userChoice;
     if(result?.outcome==='accepted'){
       b4InstallState='installed';
-      localStorage.setItem('b4Installed','1');
       toast('Installing B4…');
     }else{
       b4InstallState='available';
@@ -165,8 +162,8 @@ async function installB4(){
     return openInstallModal('installed');
   }
   if(!deferredInstallPrompt){
-    b4InstallState='installed';
-    return openInstallModal('installed');
+    b4InstallState='unavailable';
+    return openInstallModal('unavailable');
   }
   openInstallModal('ready');
 }
