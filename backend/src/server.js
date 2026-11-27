@@ -1472,6 +1472,27 @@ app.post('/api/announcements/:id/comments',requireAuth,async(req,res)=>{
     res.json({ok:true,comment:rows[0]});
   }catch(e){console.error('Announcement comment failed:',e);res.status(500).json({error:'Could not post comment'});}
 });
+app.patch('/api/announcements/comments/:commentId',requireAuth,async(req,res)=>{
+  try{
+    const id=Number(req.params.commentId),body=String(req.body?.body||'').trim();
+    if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({error:'Invalid comment'});
+    if(!body||body.length>2000)return res.status(400).json({error:'Comment must be 1–2000 characters'});
+    const [r]=await q('UPDATE b4_announcement_comments SET body=? WHERE id=? AND user_id=?',[body,id,req.session.userId]);
+    if(!r.affectedRows)return res.status(404).json({error:'Comment not found or not yours'});
+    const [rows]=await q("SELECT c.id,c.announcement_ref,c.body,c.created_at,c.user_id,COALESCE(u.display_name,u.official_name,'B4 User') author_name FROM b4_announcement_comments c JOIN users u ON u.id=c.user_id WHERE c.id=? LIMIT 1",[id]);
+    pushGlobalEvent('data-changed',{type:'announcement-comment-updated'});
+    res.json({ok:true,comment:rows[0]});
+  }catch(e){console.error('Announcement comment update failed:',e);res.status(500).json({error:'Could not update comment'});}
+});
+app.delete('/api/announcements/comments/:commentId',requireAuth,async(req,res)=>{
+  try{
+    const id=Number(req.params.commentId);if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({error:'Invalid comment'});
+    const [r]=await q('DELETE FROM b4_announcement_comments WHERE id=? AND user_id=?',[id,req.session.userId]);
+    if(!r.affectedRows)return res.status(404).json({error:'Comment not found or not yours'});
+    pushGlobalEvent('data-changed',{type:'announcement-comment-deleted'});
+    res.json({ok:true});
+  }catch(e){console.error('Announcement comment delete failed:',e);res.status(500).json({error:'Could not delete comment'});}
+});
 app.post('/api/admin/announcements', requirePermission('MANAGE_ANNOUNCEMENTS'), async (req,res) => {
   const {title,body,category='General'} = req.body || {};
   if(!title?.trim() || !body?.trim()) return res.status(400).json({error:'Title and body are required'});
