@@ -2600,11 +2600,13 @@ async function syncGoogleClassroomAnnouncements(){
       let profile=null;
       for(const role of ['teachers','students']){
         try{
-          const profileUrl='https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/'+role+'/'+encodeURIComponent(id)+'?fields=userProfile(name(fullName),photoUrl,emailAddress)';
+          // Classroom Teacher and Student resources expose the UserProfile as "profile", not "userProfile".
+          const profileUrl='https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/'+role+'/'+encodeURIComponent(id)+'?fields=profile(name(fullName),photoUrl,emailAddress)';
           const profileResponse=await fetch(profileUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
           const profileData=await profileResponse.json();
-          if(profileResponse.ok&&profileData.userProfile){profile=profileData.userProfile;break;}
-        }catch{}
+          if(profileResponse.ok&&profileData.profile){profile=profileData.profile;break;}
+          console.warn('Classroom creator profile lookup failed',{role,userId:id,status:profileResponse.status,message:profileData?.error?.message||'Profile not returned'});
+        }catch(error){console.warn('Classroom creator profile lookup error',{role,userId:id,message:error.message});}
       }
       const result={name:String(profile?.name?.fullName||profile?.emailAddress||'Google Classroom').slice(0,255),photoUrl:/^https:\/\//i.test(String(profile?.photoUrl||''))?String(profile.photoUrl).slice(0,1000):null};
       classroomCreatorCache.set(id,result);return result;
