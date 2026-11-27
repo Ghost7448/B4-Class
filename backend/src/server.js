@@ -1712,7 +1712,7 @@ app.get('/api/classroom/connect',requireAuth,async(req,res)=>{
     const state=crypto.randomBytes(32).toString('hex');req.session.googleOAuthState=state;req.session.googleOAuthMode='classroom';
     const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');
     u.searchParams.set('client_id',clientId);u.searchParams.set('redirect_uri',redirectUri);u.searchParams.set('response_type','code');
-    u.searchParams.set('scope','openid email profile https://www.googleapis.com/auth/classroom.announcements.readonly https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/drive.readonly');
+    u.searchParams.set('scope','openid email profile https://www.googleapis.com/auth/classroom.announcements.readonly https://www.googleapis.com/auth/classroom.courses.readonly https://www.googleapis.com/auth/classroom.rosters.readonly https://www.googleapis.com/auth/classroom.profile.photos https://www.googleapis.com/auth/classroom.profile.emails https://www.googleapis.com/auth/drive.readonly');
     u.searchParams.set('state',state);u.searchParams.set('access_type','offline');u.searchParams.set('prompt','consent select_account');
     await new Promise((resolve,reject)=>req.session.save(error=>error?reject(error):resolve()));
     res.redirect(u.toString());
