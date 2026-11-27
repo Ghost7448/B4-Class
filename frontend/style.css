@@ -3833,3 +3833,10 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
   background:var(--s2)!important;
   border-color:rgba(168,85,247,.5)!important;
 }
+
+/* Google Classroom announcement attachments */
+.classroom-attachments{display:grid;gap:10px;margin-top:14px}
+.classroom-attachment-image{display:flex;flex-direction:column;gap:6px;max-width:100%;text-decoration:none}
+.classroom-attachment-image img{display:block;width:100%;max-height:360px;object-fit:contain;border-radius:12px;background:var(--surface-2,#222)}
+.classroom-attachment-image span,.classroom-attachment-file{font-size:.9rem;overflow-wrap:anywhere}
+.classroom-attachment-file{display:flex;align-items:center;gap:8px;padding:11px 13px;border:1px solid var(--border-color,rgba(128,128,128,.25));border-radius:10px;text-decoration:none}
