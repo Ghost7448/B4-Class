@@ -168,6 +168,7 @@ async function sendPushToUser(userId,{title='B4 Class — Test Notification',bod
   if(!userId)return {ok:false,code:'NO_USER',message:'No user selected'};
   if(!VAPID_READY)return {ok:false,code:'VAPID_NOT_CONFIGURED',message:'VAPID keys are not configured on the server'};
   const settings=await ensureNotificationSettings(userId);
+  if(Number(settings.push_enabled)!==1)return {ok:false,code:'PUSH_DISABLED',message:'Device notifications are disabled for this account'};
   const [subs]=await q('SELECT id,endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=?',[userId]);
   if(!subs.length)return {ok:false,code:'NO_SUBSCRIPTION',message:'No push subscription is registered for this device'};
   const payload=JSON.stringify({title,body,url,type});
@@ -796,7 +797,7 @@ app.post('/api/notifications/test',requireAuth,async(req,res)=>{
 app.post('/api/notifications/push/test',requireAuth,async(req,res)=>{
   try{
     const result=await sendPushToUser(req.session.userId);
-    const status=result.ok?200:(result.code==='NO_SUBSCRIPTION'||result.code==='PUSH_DISABLED'?400:500);
+    const status=result.ok?200:(['NO_SUBSCRIPTION','PUSH_DISABLED','VAPID_NOT_CONFIGURED'].includes(result.code)?400:500);
     res.status(status).json(result);
   }catch(e){
     console.error('Push test failed:',e);
