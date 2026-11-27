@@ -2678,7 +2678,7 @@ async function syncGoogleClassroomAnnouncements(){
           if(!cachedPhoto.length || previousPhotoHash!==photoHash){
             try{
               const photoUrlObject=new URL(creator.photoUrl);
-              if(photoUrlObject.protocol!=='https:' || !/(^|\\.)googleusercontent\\.com$/i.test(photoUrlObject.hostname))throw new Error('Unexpected Google profile photo host');
+              if(photoUrlObject.protocol!=='https:' || !/(^|\.)googleusercontent\.com$/i.test(photoUrlObject.hostname))throw new Error('Unexpected Google profile photo host');
               let photoResponse=await fetch(creator.photoUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
               if(!photoResponse.ok)photoResponse=await fetch(creator.photoUrl);
               const photoType=String(photoResponse.headers.get('content-type')||'').toLowerCase();
