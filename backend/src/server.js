@@ -2507,6 +2507,7 @@ async function syncGoogleClassroomAnnouncements(){
     const tokenRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:process.env.GOOGLE_CLIENT_ID,client_secret:process.env.GOOGLE_CLIENT_SECRET,refresh_token:refreshToken,grant_type:'refresh_token'})});
     const tokens=await tokenRes.json();if(!tokenRes.ok||!tokens.access_token)throw new Error('Google access token refresh failed');
     let pageToken=null,imported=0;
+    const currentAnnouncementIds=[];
     do{
       const url=new URL('https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/announcements');
       url.searchParams.set('pageSize','100');url.searchParams.set('orderBy','updateTime desc');
@@ -2515,6 +2516,8 @@ async function syncGoogleClassroomAnnouncements(){
       const response=await fetch(url,{headers:{Authorization:'Bearer '+tokens.access_token}});
       const data=await response.json();if(!response.ok)throw new Error(data.error?.message||'Google Classroom announcements request failed');
       for(const item of data.announcements||[]){
+        if(!item.id)continue;
+        currentAnnouncementIds.push(String(item.id));
         const title=String(item.text||'إعلان من Google Classroom').trim().slice(0,220)||'إعلان من Google Classroom';
         const body=String(item.text||'').trim();
         const created=item.creationTime?new Date(item.creationTime):new Date();
@@ -2528,8 +2531,15 @@ async function syncGoogleClassroomAnnouncements(){
       }
       pageToken=data.nextPageToken||null;
     }while(pageToken);
+    if(currentAnnouncementIds.length){
+      const placeholders=currentAnnouncementIds.map(()=>'?').join(',');
+      await q('DELETE FROM b4_classroom_announcements WHERE course_id=? AND google_announcement_id NOT IN ('+placeholders+')',[String(rows[0].course_id),...currentAnnouncementIds]);
+    }else{
+      await q('DELETE FROM b4_classroom_announcements WHERE course_id=?',[String(rows[0].course_id)]);
+    }
     await q('UPDATE b4_classroom_connection SET last_synced_at=NOW(),last_error=NULL WHERE id=1');
-    if(imported)console.log('Google Classroom sync completed',{courseId:rows[0].course_id,items:imported});
+    pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_SYNC'});
+    console.log('Google Classroom sync completed',{courseId:rows[0].course_id,items:imported});
   }catch(e){
     console.error('Google Classroom sync failed:',e.message);
     try{await q('UPDATE b4_classroom_connection SET last_error=? WHERE id=1',[String(e.message||'Sync failed').slice(0,500)]);}catch{}
@@ -2555,4 +2565,4 @@ app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-ensurePermissionSchema().then(()=>migratePushDefaultOff()).then(()=>app.listen(PORT,()=>{console.log('B4 backend + frontend listening on '+PORT);checkSchoolEndPushSchedule();setInterval(checkSchoolEndPushSchedule,30000);syncGoogleClassroomAnnouncements();setInterval(syncGoogleClassroomAnnouncements,5*60*1000);})).catch(e=>{console.error('Startup schema/migration failed:',e);process.exit(1)});
+ensurePermissionSchema().then(()=>migratePushDefaultOff()).then(()=>app.listen(PORT,()=>{console.log('B4 backend + frontend listening on '+PORT);checkSchoolEndPushSchedule();setInterval(checkSchoolEndPushSchedule,30000);syncGoogleClassroomAnnouncements();setInterval(syncGoogleClassroomAnnouncements,15*1000);})).catch(e=>{console.error('Startup schema/migration failed:',e);process.exit(1)});
