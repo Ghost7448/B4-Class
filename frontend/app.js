@@ -701,7 +701,7 @@ async function syncLiveData(forceFull=false){
       return;
     }
     if(S.view==='announcements'){
-      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
+      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
       return;
     }
     render();
@@ -899,7 +899,16 @@ function formatAnnouncementBody(value){
  });
  return '<div class="announcement-body">'+linked+'</div>';
 }
-function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
+function renderClassroomAttachments(items){
+ if(!Array.isArray(items)||!items.length)return '';
+ return '<div class="classroom-attachments">'+items.map(file=>{
+  const url=esc(file.url||'#'),name=esc(file.title||file.original_name||'Attachment'),mime=String(file.mime_type||'');
+  if(file.is_image||mime.startsWith('image/'))return '<a class="classroom-attachment-image" href="'+url+'" target="_blank" rel="noopener noreferrer"><img src="'+url+'" alt="'+name+'" loading="lazy"><span>🖼 '+name+'</span></a>';
+  const icon=mime==='application/pdf'?'📕':mime.includes('word')?'📘':mime.includes('sheet')||mime.includes('excel')?'📗':mime.includes('presentation')||mime.includes('powerpoint')?'📙':'📎';
+  return '<a class="classroom-attachment-file" href="'+url+'" target="_blank" rel="noopener noreferrer">'+icon+' '+name+' <span>↗</span></a>';
+ }).join('')+'</div>';
+}
+function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
 function chatTime(value){
   const d=new Date(value);
   if(!Number.isFinite(d.getTime()))return String(value||'');
