@@ -3946,3 +3946,5 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
 .announcement-comment-form input{flex:1;min-width:0}
 .announcement-comment-form .btn{flex:0 0 auto}
 @media(max-width:600px){.announcement-comment-form{align-items:stretch}.announcement-comment-form .btn{padding-inline:12px}}
+
+.announcement-comment-top{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}.announcement-comment-tools{display:flex;gap:5px}.announcement-comment-tools .btn{padding:4px 9px;min-height:28px;font-size:11px}
