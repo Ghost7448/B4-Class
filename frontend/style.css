@@ -3867,3 +3867,14 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
 .classroom-author strong{font-size:.92rem;overflow-wrap:anywhere}
 .classroom-author-classroom{padding:8px 12px}
 .classroom-author-classroom div{display:flex;flex-direction:column;gap:2px}
+
+/* Visitors admin center */
+.visitor-list{display:grid;gap:14px;align-items:start}
+.visitor-card{align-self:start;min-width:0}
+.visitor-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.visitor-head h3{margin:5px 0}
+.visitor-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.visitor-field{min-width:0;padding:10px 12px;border:1px solid var(--line,rgba(148,163,184,.18));border-radius:12px;background:rgba(148,163,184,.045)}
+.visitor-field small{display:block;color:var(--muted);font-size:11px;margin-bottom:5px}
+.visitor-field b{display:block;font-size:13px;overflow-wrap:anywhere;word-break:break-word;font-weight:600}
+@media(max-width:600px){.visitor-head{flex-direction:column}.visitor-fields{grid-template-columns:minmax(0,1fr)}}
