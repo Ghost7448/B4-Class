@@ -2526,6 +2526,15 @@ async function saveClassroomDriveAttachment(accessToken,announcementId,driveFile
   const meta=await metaResponse.json();if(!metaResponse.ok)throw new Error(meta.error?.message||'Drive metadata request failed');
   const exportTypes={'application/vnd.google-apps.document':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.google-apps.spreadsheet':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.google-apps.presentation':'application/vnd.openxmlformats-officedocument.presentationml.presentation'};
   const exportMime=exportTypes[meta.mimeType];
+  // Keep PDFs in Google Drive and store only their metadata + viewing link in MySQL.
+  if(meta.mimeType==='application/pdf'){
+    const pdfUrl=String(meta.webViewLink||driveFile.alternateLink||'');
+    if(!/^https:\/\//i.test(pdfUrl))throw new Error('PDF viewing link is unavailable');
+    const pdfName=String(meta.name||driveFile.title||'PDF document').slice(0,250);
+    await q('INSERT INTO b4_classroom_attachments(announcement_id,attachment_key,drive_file_id,title,original_name,mime_type,size_bytes,data,external_url) VALUES(?,?,?,?,?,\'application/pdf\',0,NULL,?) ON DUPLICATE KEY UPDATE announcement_id=VALUES(announcement_id),title=VALUES(title),original_name=VALUES(original_name),mime_type=VALUES(mime_type),size_bytes=0,data=NULL,external_url=VALUES(external_url)',[announcementId,key,fileId,pdfName,pdfName,pdfUrl]);
+    const [savedPdf]=await q('SELECT id FROM b4_classroom_attachments WHERE attachment_key=? LIMIT 1',[key]);
+    return savedPdf[0]?Number(savedPdf[0].id):null;
+  }
   const downloadUrl=exportMime?'https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'/export?mimeType='+encodeURIComponent(exportMime):'https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'?alt=media';
   const response=await fetch(downloadUrl,{headers:{Authorization:'Bearer '+accessToken}});
   if(!response.ok)throw new Error('Drive download failed ('+response.status+')');
