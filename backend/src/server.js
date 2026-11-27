@@ -1544,6 +1544,8 @@ app.delete('/api/admin/announcements/:id',requirePermission('MANAGE_ANNOUNCEMENT
 app.put('/api/admin/schedule',requirePermission('MANAGE_SCHEDULE'),async(req,res)=>{const rows=Array.isArray(req.body?.schedule)?req.body.schedule:[],conn=await pool.getConnection();try{await conn.beginTransaction();await conn.execute("DELETE FROM schedule WHERE class_name='B4'");for(const [i,row] of rows.entries())await conn.execute("INSERT INTO schedule(class_name,day_order,day_name,p1,p2,p3,p4,p5,p6,p7,p8) VALUES('B4',?,?,?,?,?,?,?,?,?,?)",[i+1,String(row.day_name||'Day '+(i+1)),...Array.from({length:8},(_,n)=>String(row['p'+(n+1)]||''))]);await conn.commit();await audit(req,'SCHEDULE_UPDATED','schedule',null,{rows:rows.length});res.json({ok:true});}catch(e){await conn.rollback();res.status(400).json({error:e.message})}finally{conn.release()}});
 app.get('/api/admin/visitors',requirePermission('VIEW_LOGS'),async(req,res)=>{
   try{
+    const [adminRows]=await q('SELECT is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+    if(Number(adminRows[0]?.is_super_admin)!==1)return res.status(403).json({error:'Super Admin access required'});
     const [visitors]=await q(`SELECT v.id,v.ip_address,v.user_agent,v.browser,v.operating_system,v.device_type,v.device_info,v.screen_resolution,v.language,v.timezone,v.referrer,v.cookies_enabled,v.platform,v.hardware_concurrency,v.device_memory,v.touch_points,v.first_seen,v.last_seen,u.display_name account_name,u.official_name,la.provider_email google_email
       FROM b4_visitors v LEFT JOIN users u ON u.id=v.user_id
       LEFT JOIN linked_accounts la ON la.user_id=v.user_id AND la.provider='GOOGLE'
