@@ -858,10 +858,24 @@ body{overflow-x:hidden}
 }
 .notification-list{
   display:grid;
+  grid-auto-rows:max-content;
+  align-content:start;
   gap:10px;
   max-height:65vh;
   overflow:auto;
   padding:2px 3px 4px;
+}
+.notification-row{
+  align-self:start;
+  height:auto;
+  min-height:76px;
+}
+.notification-icon{
+  flex:0 0 48px;
+  width:48px;
+  height:48px;
+  min-height:48px;
+  align-self:center;
 }
 .notification-row{
   position:relative;
@@ -999,7 +1013,9 @@ body{overflow-x:hidden}
     align-items:flex-start;
     flex-direction:column;
   }
-  .notification-actions{width:100%;justify-content:flex-end}
+  .notification-actions{width:100%;justify-content:flex-start;flex-wrap:wrap;gap:7px}
+  .notification-actions .btn{flex:0 1 auto;min-width:0;white-space:normal}
+  .notification-close{margin-left:auto;flex:0 0 42px!important}
   .notification-heading h2{font-size:22px}
    .notification-row{
     display:flex;
