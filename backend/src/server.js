@@ -2698,8 +2698,10 @@ async function syncGoogleClassroomAnnouncements(){
         if(Number.isNaN(created.getTime()))continue;
         const safeBody=body.slice(0,60000);
         const creator=await getClassroomCreator(item.creatorUserId);
-        const [previousCreatorPhoto]=await q('SELECT creator_photo_source_hash FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
-        const previousPhotoHash=previousCreatorPhoto[0]?.creator_photo_source_hash||null;
+        const [previousCreatorPhoto]=await q('SELECT id,title,body,creator_photo_source_hash FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
+        const previous=previousCreatorPhoto[0]||null;
+        const previousPhotoHash=previous?.creator_photo_source_hash||null;
+        const announcementChanged=!previous||String(previous.title||'')!==title||String(previous.body||'')!==safeBody;
         await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_google_email,creator_photo_url,creator_photo_source_hash)
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
           ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_google_email=COALESCE(VALUES(creator_google_email),creator_google_email),creator_photo_url=VALUES(creator_photo_url),creator_photo_source_hash=VALUES(creator_photo_source_hash)`,
@@ -2745,7 +2747,9 @@ async function syncGoogleClassroomAnnouncements(){
         }
         if(keepKeys.length){const marks=keepKeys.map(()=>'?').join(',');await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=? AND attachment_key NOT IN ('+marks+')',[announcementId,...keepKeys]);}else await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=?',[announcementId]);
         imported++;
-        pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_ANNOUNCEMENT_SYNC',announcementId});
+        if(announcementChanged||previousPhotoHash!==(creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null)){
+          pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_ANNOUNCEMENT_SYNC',announcementId});
+        }
       }
       pageToken=data.nextPageToken||null;
     }while(pageToken);
