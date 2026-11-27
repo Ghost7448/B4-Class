@@ -2641,8 +2641,7 @@ async function syncGoogleClassroomAnnouncements(){
     const refreshToken=decryptClassroomToken(rows[0].refresh_token_enc);
     const tokenRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:process.env.GOOGLE_CLIENT_ID,client_secret:process.env.GOOGLE_CLIENT_SECRET,refresh_token:refreshToken,grant_type:'refresh_token'})});
     const tokens=await tokenRes.json();if(!tokenRes.ok||!tokens.access_token)throw new Error('Google access token refresh failed');
-    let pageToken=null,imported=0;
-    const currentAnnouncementIds=[];
+    let pageToken=null,imported=0,stopPaging=false;
     // Load course roster profiles in bulk once per sync. This is faster than
     // making up to three sequential profile requests for every announcement.
     const classroomCreatorCache=new Map();
@@ -2709,7 +2708,14 @@ async function syncGoogleClassroomAnnouncements(){
       const data=await response.json();if(!response.ok)throw new Error(data.error?.message||'Google Classroom announcements request failed');
       for(const item of data.announcements||[]){
         if(!item.id)continue;
-        currentAnnouncementIds.push(String(item.id));
+        // Classroom results are ordered by updateTime desc. Once we reach entries
+        // older than the last successful sync (with a 30-second overlap), stop
+        // paging: newer announcements and edits are always at the front.
+        const itemTimestamp=Date.parse(item.updateTime||item.creationTime||'');
+        if(Number.isFinite(previousSyncAt)&&Number.isFinite(itemTimestamp)&&itemTimestamp<previousSyncAt-30000){
+          stopPaging=true;
+          break;
+        }
         const classroomText=String(item.text||'').replace(/\r\n?/g,'\n').trim();
         const classroomLines=classroomText.split('\n');
         const firstContentLine=classroomLines.findIndex(line=>line.trim());
@@ -2793,14 +2799,9 @@ async function syncGoogleClassroomAnnouncements(){
           pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_CREATOR_PHOTO_SYNC',announcementId});
         }
       }
+      if(stopPaging)break;
       pageToken=data.nextPageToken||null;
     }while(pageToken);
-    if(currentAnnouncementIds.length){
-      const placeholders=currentAnnouncementIds.map(()=>'?').join(',');
-      await q('DELETE FROM b4_classroom_announcements WHERE course_id=? AND google_announcement_id NOT IN ('+placeholders+')',[String(rows[0].course_id),...currentAnnouncementIds]);
-    }else{
-      await q('DELETE FROM b4_classroom_announcements WHERE course_id=?',[String(rows[0].course_id)]);
-    }
     await q('UPDATE b4_classroom_connection SET last_synced_at=NOW(),last_error=NULL WHERE id=1');
     pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_SYNC'});
     console.log('Google Classroom sync completed',{courseId:rows[0].course_id,items:imported});
