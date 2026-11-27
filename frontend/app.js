@@ -1331,7 +1331,20 @@ async function loadMe(){
     S.vapidPublicKey='';
   }
   await loadData();render();updateNotificationBadge();profileSyncLoop();startAssignmentCountdown();liveDataLoop();
-  if(S.me) maybeEnableDeviceNotifications();
+  if(S.me){
+    maybeEnableDeviceNotifications();
+    // Ask each signed-in user to enable device notifications on their first visit in this tab session.
+    // The browser's native permission prompt must be opened by the user's tap in the modal.
+    try{
+      const promptKey='b4DeviceNotificationPrompt:'+S.me.id;
+      const canAsk=typeof Notification!=='undefined' && Notification.permission!=='denied';
+      const needsSetup=canAsk && (Notification.permission==='default' || Number(S.notificationSettings?.push_enabled)!==1);
+      if(needsSetup && !sessionStorage.getItem(promptKey)){
+        sessionStorage.setItem(promptKey,'1');
+        notificationPermissionModal();
+      }
+    }catch{}
+  }
 }
 async function loadData(){try{const d=await api('/api/bootstrap');const server=Number(d.server_now_ms)||Date.now();S.serverNowMs=server;if(!Number.isFinite(Number(S.serverClockOffsetMs))||!S.serverClockOffsetMs)S.serverClockOffsetMs=server-Date.now();Object.assign(S,{students:d.students||[],teachers:d.teachers||[],subjects:d.subjects||[],schedule:d.schedule||[],assignments:d.assignments||[],announcements:d.announcements||[],resources:d.resources||[],exams:d.exams||[],messages:Array.isArray(d.messages)?d.messages:S.messages,notifications:d.notifications||[]});saveChatHistoryCache('class',S.messages);try{S.developers=(await api('/api/admin/developers/public')).developers||[]}catch{}try{S.accounts=(await api('/api/admin/accounts')).accounts||[]}catch{}updateNotificationBadge();S.error=''}catch(e){S.error=e.message}}
 
