@@ -1143,7 +1143,7 @@ function settingsV(){
   '<div class="grid c2"><div class="card"><h3>'+ (ar?'الملف الشخصي':'Profile') +'</h3><form class="form" onsubmit="saveProfile(event)"><label>'+ (ar?'اسم العرض':'Display name') +'<input id="displayName" value="'+esc(S.me?.display_name||'')+'" required></label><label>'+ (ar?'صورة الملف الشخصي':'Profile image') +'<input id="profileAvatar" type="file" accept="image/png,image/jpeg,image/webp"></label><button class="btn primary">'+t('save')+'</button></form><button class="btn ghost" onclick="passwordModal()">'+(ar?'تغيير كلمة المرور':'Change password')+'</button><button class="btn danger" onclick="logout()"> '+t('logout')+'</button></div>'+
   '<div class="card"><h3>'+ (ar?'التفضيلات':'Preferences') +'</h3><div class="settings-lang"><span class="muted">'+t('arabic')+' / '+t('english')+'</span><div><button class="btn '+(S.lang==='en'?'primary':'ghost')+'" onclick="setLang(\'en\')">EN</button><button class="btn '+(S.lang==='ar'?'primary':'ghost')+'" onclick="setLang(\'ar\')">عربي</button></div></div><button class="btn ghost" onclick="toggleTheme()">'+(S.theme==='dark'?t('light'):t('dark'))+'</button><hr><h3>Google</h3><p class="muted">'+(S.linked.length?(ar?'Google مرتبط':'Google linked'):(ar?'Google غير مرتبط':'Google not linked'))+'</p><button class="btn primary" onclick="googleLink()">'+(S.linked.length?(ar?'إعادة ربط Google':'Relink Google'):(ar?'ربط Google':'Link Google'))+'</button>'+(S.linked.length?'<button class="btn danger" onclick="unlinkGoogle()">'+(ar?'إلغاء ربط Google':'Unlink Google')+'</button>':'')+'</div>'+
   '<div class="card" style="grid-column:1/-1"><div class="head"><div><h3>🔔 '+(ar?'Alerts / إشعارات B4':'B4 Alerts')+'</h3><p class="muted">'+(ar?'الاختيارات دي تتحكم في التنبيهات اللي تظهر داخل B4 ويمكن إرسالها كإشعارات للجهاز':'These control the Alerts shown inside B4 and the event types that may be pushed to your device.')+'</p></div></div>'+alertRows+
-  '<div class="actions-row" style="margin:12px 0"><button type="button" class="btn ghost" onclick="sendTestPush()">🔔 '+(ar?'تجربة إشعار داخل الموقع':'Test in-app notification')+'</button></div>'+
+  '<div class="actions-row" style="margin:12px 0"><button type="button" class="btn ghost" onclick="sendTestPush()">🔔 '+(ar?'تجربة إشعار على التليفون':'Test phone notification')+'</button></div>'+
   '<div class="settings-lang notification-setting-row" style="margin-top:8px"><div><b>📱 '+(ar?'إشعارات الجهاز':'Device Notifications')+'</b><small class="muted" style="display:block;margin-top:3px">'+(ar?'تظهر حتى لو B4 مقفول — فعّلها مرة واحدة من جهازك':'Can appear even when B4 is closed — enable them once on your device')+'</small></div><div class="actions-row"><button type="button" class="btn '+(pushOn?'primary':'ghost')+'" onclick="togglePushNotifications('+(pushOn?'false':'true')+')">'+(pushOn?(ar?'مفعلة ✓':'Enabled ✓'):(ar?'تفعيل':'Enable'))+'</button>'+'</div></div>'+
   '</div></div>';
 }
@@ -1400,12 +1400,12 @@ async function syncPushSubscription(showErrors=true){
 async function sendTestPush(){
   try{
     const ar=S.lang==='ar';
-    toast(ar?'جاري إنشاء إشعار تجريبي داخل B4…':'Creating an in-app B4 test notification…');
-    await api('/api/notifications/test',{method:'POST',body:JSON.stringify({})});
-    await openNotifications('all');
-    toast(ar?'تم إنشاء إشعار تجريبي داخل الموقع ✓':'In-app test notification created ✓');
+    toast(ar?'جاري إرسال إشعار تجريبي لهاتفك…':'Sending a test notification to your phone…');
+    const result=await api('/api/notifications/push/test',{method:'POST',body:JSON.stringify({})});
+    toast(ar?'تم إرسال إشعار تجريبي لهاتفك ✓':'Test notification sent to your phone ✓');
+    return result;
   }catch(e){
-    toast((S.lang==='ar'?'فشل إنشاء الإشعار: ':'Could not create in-app notification: ')+(e.message||'Unknown error'));
+    toast((S.lang==='ar'?'فشل إرسال إشعار الهاتف: ':'Phone notification failed: ')+(e.message||'Unknown error'));
   }
 }
 async function togglePushNotifications(enabled){
