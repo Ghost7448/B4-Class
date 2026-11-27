@@ -374,6 +374,8 @@ async function ensurePermissionSchema() {
   if(!creatorNameColumn.length)await q("ALTER TABLE b4_classroom_announcements ADD COLUMN creator_name VARCHAR(255) NULL");
   const [creatorPhotoColumn]=await q("SHOW COLUMNS FROM b4_classroom_announcements LIKE 'creator_photo_url'");
   if(!creatorPhotoColumn.length)await q("ALTER TABLE b4_classroom_announcements ADD COLUMN creator_photo_url VARCHAR(1000) NULL");
+  const [creatorPhotoHashColumn]=await q("SHOW COLUMNS FROM b4_classroom_announcements LIKE 'creator_photo_source_hash'");
+  if(!creatorPhotoHashColumn.length)await q("ALTER TABLE b4_classroom_announcements ADD COLUMN creator_photo_source_hash CHAR(64) NULL");
   await q("CREATE TABLE IF NOT EXISTS b4_classroom_attachments(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,announcement_id BIGINT UNSIGNED NOT NULL,attachment_key VARCHAR(500) NOT NULL UNIQUE,drive_file_id VARCHAR(180) NULL,title VARCHAR(255) NOT NULL,original_name VARCHAR(255) NULL,mime_type VARCHAR(160) NOT NULL DEFAULT 'application/octet-stream',size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,data LONGBLOB NULL,external_url VARCHAR(1000) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_classroom_attachment_announcement(announcement_id),FOREIGN KEY(announcement_id) REFERENCES b4_classroom_announcements(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_account_link_tokens(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,token_hash CHAR(64) NOT NULL UNIQUE,expires_at DATETIME NOT NULL,used_at DATETIME NULL,created_by BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE,INDEX idx_account_link_expiry(expires_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS exam_security_events(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,attempt_id BIGINT UNSIGNED NOT NULL,exam_id BIGINT UNSIGNED NOT NULL,user_id BIGINT UNSIGNED NOT NULL,event_type VARCHAR(40) NOT NULL,source VARCHAR(60) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_exam_security_attempt(attempt_id,event_type,created_at),INDEX idx_exam_security_exam(exam_id,created_at),FOREIGN KEY(attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,FOREIGN KEY(exam_id) REFERENCES exams(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -2649,24 +2651,29 @@ async function syncGoogleClassroomAnnouncements(){
         const creator=await getClassroomCreator(item.creatorUserId);
         await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_photo_url)
           VALUES(?,?,?,?,?,?,?,?,?,?)
-          ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_photo_url=VALUES(creator_photo_url)`,
-          [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id),creator.name,creator.photoUrl]);
+          ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_photo_url=VALUES(creator_photo_url),creator_photo_source_hash=VALUES(creator_photo_source_hash)`,
+          [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id),creator.name,creator.photoUrl,creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null]);
         const [savedAnnouncement]=await q('SELECT id FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
         const announcementId=Number(savedAnnouncement[0]?.id||0);
         // Classroom photoUrl is often protected; fetch it server-side with the OAuth token
         // and cache a small WebP avatar so every signed-in student can display it reliably.
         if(announcementId && creator.photoUrl){
-          try{
-            const photoResponse=await fetch(creator.photoUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
-            const photoType=String(photoResponse.headers.get('content-type')||'').toLowerCase();
-            if(photoResponse.ok && photoType.startsWith('image/')){
-              const photoBuffer=Buffer.from(await photoResponse.arrayBuffer());
-              if(photoBuffer.length>0 && photoBuffer.length<=5*1024*1024){
-                const avatar=await sharp(photoBuffer).rotate().resize(160,160,{fit:'cover'}).webp({quality:78, effort:4}).toBuffer();
-                await q("INSERT INTO profile_images(entity_type,entity_id,mime_type,data) VALUES('classroom',?,'image/webp',?) ON DUPLICATE KEY UPDATE mime_type=VALUES(mime_type),data=VALUES(data)",[announcementId,avatar]);
+          const photoHash=crypto.createHash('sha256').update(creator.photoUrl).digest('hex');
+          const [cachedPhoto]=await q("SELECT 1 FROM profile_images WHERE entity_type='classroom' AND entity_id=? LIMIT 1",[announcementId]);
+          const [cachedSource]=await q('SELECT creator_photo_source_hash FROM b4_classroom_announcements WHERE id=? LIMIT 1',[announcementId]);
+          if(!cachedPhoto.length || cachedSource[0]?.creator_photo_source_hash!==photoHash){
+            try{
+              const photoResponse=await fetch(creator.photoUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
+              const photoType=String(photoResponse.headers.get('content-type')||'').toLowerCase();
+              if(photoResponse.ok && photoType.startsWith('image/')){
+                const photoBuffer=Buffer.from(await photoResponse.arrayBuffer());
+                if(photoBuffer.length>0 && photoBuffer.length<=5*1024*1024){
+                  const avatar=await sharp(photoBuffer).rotate().resize(160,160,{fit:'cover'}).webp({quality:78,effort:4}).toBuffer();
+                  await q("INSERT INTO profile_images(entity_type,entity_id,mime_type,data) VALUES('classroom',?,'image/webp',?) ON DUPLICATE KEY UPDATE mime_type=VALUES(mime_type),data=VALUES(data)",[announcementId,avatar]);
+                }
               }
-            }
-          }catch(photoError){console.warn('Classroom creator photo cache failed',{announcementId,message:photoError.message});}
+            }catch(photoError){console.warn('Classroom creator photo cache failed',{announcementId,message:photoError.message});}
+          }
         }else if(announcementId){
           await q("DELETE FROM profile_images WHERE entity_type='classroom' AND entity_id=?",[announcementId]);
         }
