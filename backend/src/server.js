@@ -2611,6 +2611,7 @@ async function saveClassroomDriveAttachment(accessToken,announcementId,driveFile
 }
 
 let classroomSyncRunning=false;
+const classroomCreatorCacheGlobal=new Map();
 async function syncGoogleClassroomAnnouncements(){
   if(classroomSyncRunning||!process.env.GOOGLE_CLIENT_ID||!process.env.GOOGLE_CLIENT_SECRET)return;
   classroomSyncRunning=true;let hasLock=false;
@@ -2624,37 +2625,62 @@ async function syncGoogleClassroomAnnouncements(){
     const tokens=await tokenRes.json();if(!tokenRes.ok||!tokens.access_token)throw new Error('Google access token refresh failed');
     let pageToken=null,imported=0;
     const currentAnnouncementIds=[];
+    // Load course roster profiles in bulk once per sync. This is faster than
+    // making up to three sequential profile requests for every announcement.
     const classroomCreatorCache=new Map();
-    async function getClassroomCreator(userId){
-      const id=String(userId||'');if(!id)return {name:'Google Classroom',photoUrl:null};
-      if(classroomCreatorCache.has(id))return classroomCreatorCache.get(id);
-      let profile=null;
-      // Use the documented userProfiles.get endpoint first. It returns photoUrl
-      // when classroom.profile.photos is present on the OAuth grant.
+    const rosterProfiles=new Map();
+    async function loadRoster(role,collection){
       try{
-        const profileUrl='https://classroom.googleapis.com/v1/userProfiles/'+encodeURIComponent(id)+'?fields=id,name(fullName),photoUrl,emailAddress';
-        const profileResponse=await fetch(profileUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
-        const profileData=await profileResponse.json();
-        if(profileResponse.ok)profile=profileData;
-        else console.warn('Classroom userProfiles.get failed',{userId:id,status:profileResponse.status,message:profileData?.error?.message||'Profile not returned'});
-      }catch(error){console.warn('Classroom userProfiles.get error',{userId:id,message:error.message});}
-      // Keep course roster lookup as a compatibility fallback for course members.
-      if(!profile?.name?.fullName&&!profile?.photoUrl){
-        for(const role of ['teachers','students']){
-          try{
-            const profileUrl='https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/'+role+'/'+encodeURIComponent(id)+'?fields=profile(name(fullName),photoUrl,emailAddress)';
-            const profileResponse=await fetch(profileUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
-            const profileData=await profileResponse.json();
-            if(profileResponse.ok&&profileData.profile){profile=profileData.profile;break;}
-            console.warn('Classroom creator roster lookup failed',{role,userId:id,status:profileResponse.status,message:profileData?.error?.message||'Profile not returned'});
-          }catch(error){console.warn('Classroom creator roster lookup error',{role,userId:id,message:error.message});}
+        const rosterUrl=new URL('https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/'+role);
+        rosterUrl.searchParams.set('pageSize','100');
+        rosterUrl.searchParams.set('fields',collection+'(userId,profile(name(fullName),photoUrl,emailAddress)),nextPageToken');
+        const rosterResponse=await fetch(rosterUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
+        const rosterData=await rosterResponse.json();
+        if(!rosterResponse.ok)throw new Error(rosterData.error?.message||'Roster request failed');
+        for(const member of rosterData[collection]||[]){
+          if(member.userId&&member.profile)rosterProfiles.set(String(member.userId),member.profile);
+        }
+      }catch(error){
+        console.warn('Classroom bulk roster lookup failed',{role,message:error.message});
+      }
+    }
+    await Promise.all([loadRoster('students','students'),loadRoster('teachers','teachers')]);
+    async function getClassroomCreator(userId){
+      const id=String(userId||'');if(!id)return {name:'Google Classroom',photoUrl:null,email:null};
+      if(classroomCreatorCache.has(id))return classroomCreatorCache.get(id);
+      const cached=classroomCreatorCacheGlobal.get(id);
+      if(cached&&cached.expiresAt>Date.now()){
+        classroomCreatorCache.set(id,cached.value);
+        return cached.value;
+      }
+      let profile=rosterProfiles.get(id)||null;
+      if(!profile?.photoUrl||!profile?.name?.fullName){
+        try{
+          const profileUrl='https://classroom.googleapis.com/v1/userProfiles/'+encodeURIComponent(id)+'?fields=id,name(fullName),photoUrl,emailAddress';
+          const profileResponse=await fetch(profileUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
+          const profileData=await profileResponse.json();
+          if(profileResponse.ok){
+            profile={...(profile||{}),...profileData};
+          }else{
+            console.warn('Classroom userProfiles.get failed',{userId:id,status:profileResponse.status,message:profileData?.error?.message||'Profile not returned'});
+          }
+        }catch(error){
+          console.warn('Classroom userProfiles.get error',{userId:id,message:error.message});
         }
       }
       const photoUrl=String(profile?.photoUrl||'').trim();
       const email=String(profile?.emailAddress||'').trim().toLowerCase();
-      const result={name:String(profile?.name?.fullName||email||'Google Classroom').slice(0,255),email:/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)?email:null,photoUrl:/^https:\/\//i.test(photoUrl)?photoUrl.slice(0,1000):null};
-      if(!result.photoUrl)console.warn('Classroom creator has no photoUrl; check OAuth grant and Google Workspace contact-sharing settings',{userId:id,hasProfile:!!profile});
-      classroomCreatorCache.set(id,result);return result;
+      const result={
+        name:String(profile?.name?.fullName||email||'Google Classroom').slice(0,255),
+        email:/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)?email:null,
+        photoUrl:/^https:\\/\\//i.test(photoUrl)?photoUrl.slice(0,1000):null
+      };
+      if(!result.photoUrl)console.warn('Classroom creator has no photoUrl; Google did not return a visible profile photo',{userId:id,hasProfile:!!profile});
+      classroomCreatorCache.set(id,result);
+      // Cache both successful and unavailable lookups so a large old class
+      // history is not re-requested on every 15-second sync cycle.
+      classroomCreatorCacheGlobal.set(id,{value:result,expiresAt:Date.now()+(result.photoUrl?6:2)*60*60*1000});
+      return result;
     }
     do{
       const url=new URL('https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/announcements');
@@ -2719,6 +2745,7 @@ async function syncGoogleClassroomAnnouncements(){
         }
         if(keepKeys.length){const marks=keepKeys.map(()=>'?').join(',');await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=? AND attachment_key NOT IN ('+marks+')',[announcementId,...keepKeys]);}else await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=?',[announcementId]);
         imported++;
+        pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_ANNOUNCEMENT_SYNC',announcementId});
       }
       pageToken=data.nextPageToken||null;
     }while(pageToken);
