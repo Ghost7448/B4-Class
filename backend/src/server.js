@@ -674,7 +674,7 @@ async function getBootstrap(req) {
            COALESCE(la.google_picture_url,CASE WHEN pi.entity_id IS NOT NULL THEN CONCAT('/api/classroom/creator-photo/',a.id) ELSE NULL END) AS creator_photo_url
     FROM b4_classroom_announcements a
     LEFT JOIN profile_images pi ON pi.entity_type='classroom' AND pi.entity_id=a.id
-    LEFT JOIN linked_accounts la ON la.provider='GOOGLE' AND LOWER(la.provider_email)=LOWER(a.creator_google_email)
+    LEFT JOIN linked_accounts la ON la.provider='GOOGLE' AND (la.provider_user_id=a.created_by_email OR LOWER(la.provider_email)=LOWER(a.creator_google_email))
     WHERE a.course_id=? ORDER BY a.created_at DESC LIMIT 30
   `,[CLASSROOM_COURSE_ID]);
   if(classroomAnnouncements.length){
