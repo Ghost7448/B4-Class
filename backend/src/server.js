@@ -2649,8 +2649,8 @@ async function syncGoogleClassroomAnnouncements(){
         if(Number.isNaN(created.getTime()))continue;
         const safeBody=body.slice(0,60000);
         const creator=await getClassroomCreator(item.creatorUserId);
-        await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_photo_url)
-          VALUES(?,?,?,?,?,?,?,?,?,?)
+        await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_photo_url,creator_photo_source_hash)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?)
           ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_photo_url=VALUES(creator_photo_url),creator_photo_source_hash=VALUES(creator_photo_source_hash)`,
           [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id),creator.name,creator.photoUrl,creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null]);
         const [savedAnnouncement]=await q('SELECT id FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
