@@ -2620,17 +2620,30 @@ async function syncGoogleClassroomAnnouncements(){
       const id=String(userId||'');if(!id)return {name:'Google Classroom',photoUrl:null};
       if(classroomCreatorCache.has(id))return classroomCreatorCache.get(id);
       let profile=null;
-      for(const role of ['teachers','students']){
-        try{
-          // Classroom Teacher and Student resources expose the UserProfile as "profile", not "userProfile".
-          const profileUrl='https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/'+role+'/'+encodeURIComponent(id)+'?fields=profile(name(fullName),photoUrl,emailAddress)';
-          const profileResponse=await fetch(profileUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
-          const profileData=await profileResponse.json();
-          if(profileResponse.ok&&profileData.profile){profile=profileData.profile;break;}
-          console.warn('Classroom creator profile lookup failed',{role,userId:id,status:profileResponse.status,message:profileData?.error?.message||'Profile not returned'});
-        }catch(error){console.warn('Classroom creator profile lookup error',{role,userId:id,message:error.message});}
+      // Use the documented userProfiles.get endpoint first. It returns photoUrl
+      // when classroom.profile.photos is present on the OAuth grant.
+      try{
+        const profileUrl='https://classroom.googleapis.com/v1/userProfiles/'+encodeURIComponent(id)+'?fields=id,name(fullName),photoUrl,emailAddress';
+        const profileResponse=await fetch(profileUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
+        const profileData=await profileResponse.json();
+        if(profileResponse.ok)profile=profileData;
+        else console.warn('Classroom userProfiles.get failed',{userId:id,status:profileResponse.status,message:profileData?.error?.message||'Profile not returned'});
+      }catch(error){console.warn('Classroom userProfiles.get error',{userId:id,message:error.message});}
+      // Keep course roster lookup as a compatibility fallback for course members.
+      if(!profile?.name?.fullName&&!profile?.photoUrl){
+        for(const role of ['teachers','students']){
+          try{
+            const profileUrl='https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/'+role+'/'+encodeURIComponent(id)+'?fields=profile(name(fullName),photoUrl,emailAddress)';
+            const profileResponse=await fetch(profileUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
+            const profileData=await profileResponse.json();
+            if(profileResponse.ok&&profileData.profile){profile=profileData.profile;break;}
+            console.warn('Classroom creator roster lookup failed',{role,userId:id,status:profileResponse.status,message:profileData?.error?.message||'Profile not returned'});
+          }catch(error){console.warn('Classroom creator roster lookup error',{role,userId:id,message:error.message});}
+        }
       }
-      const result={name:String(profile?.name?.fullName||profile?.emailAddress||'Google Classroom').slice(0,255),photoUrl:/^https:\/\//i.test(String(profile?.photoUrl||''))?String(profile.photoUrl).slice(0,1000):null};
+      const photoUrl=String(profile?.photoUrl||'').trim();
+      const result={name:String(profile?.name?.fullName||profile?.emailAddress||'Google Classroom').slice(0,255),photoUrl:/^https:\/\//i.test(photoUrl)?photoUrl.slice(0,1000):null};
+      if(!result.photoUrl)console.warn('Classroom creator has no photoUrl; check OAuth grant and Google Workspace contact-sharing settings',{userId:id,hasProfile:!!profile});
       classroomCreatorCache.set(id,result);return result;
     }
     do{
@@ -2649,6 +2662,8 @@ async function syncGoogleClassroomAnnouncements(){
         if(Number.isNaN(created.getTime()))continue;
         const safeBody=body.slice(0,60000);
         const creator=await getClassroomCreator(item.creatorUserId);
+        const [previousCreatorPhoto]=await q('SELECT creator_photo_source_hash FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
+        const previousPhotoHash=previousCreatorPhoto[0]?.creator_photo_source_hash||null;
         await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_photo_url,creator_photo_source_hash)
           VALUES(?,?,?,?,?,?,?,?,?,?,?)
           ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_photo_url=VALUES(creator_photo_url),creator_photo_source_hash=VALUES(creator_photo_source_hash)`,
@@ -2660,18 +2675,21 @@ async function syncGoogleClassroomAnnouncements(){
         if(announcementId && creator.photoUrl){
           const photoHash=crypto.createHash('sha256').update(creator.photoUrl).digest('hex');
           const [cachedPhoto]=await q("SELECT 1 FROM profile_images WHERE entity_type='classroom' AND entity_id=? LIMIT 1",[announcementId]);
-          const [cachedSource]=await q('SELECT creator_photo_source_hash FROM b4_classroom_announcements WHERE id=? LIMIT 1',[announcementId]);
-          if(!cachedPhoto.length || cachedSource[0]?.creator_photo_source_hash!==photoHash){
+          if(!cachedPhoto.length || previousPhotoHash!==photoHash){
             try{
-              const photoResponse=await fetch(creator.photoUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
+              const photoUrlObject=new URL(creator.photoUrl);
+              if(photoUrlObject.protocol!=='https:' || !/(^|\\.)googleusercontent\\.com$/i.test(photoUrlObject.hostname))throw new Error('Unexpected Google profile photo host');
+              let photoResponse=await fetch(creator.photoUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
+              if(!photoResponse.ok)photoResponse=await fetch(creator.photoUrl);
               const photoType=String(photoResponse.headers.get('content-type')||'').toLowerCase();
               if(photoResponse.ok && photoType.startsWith('image/')){
                 const photoBuffer=Buffer.from(await photoResponse.arrayBuffer());
                 if(photoBuffer.length>0 && photoBuffer.length<=5*1024*1024){
                   const avatar=await sharp(photoBuffer).rotate().resize(160,160,{fit:'cover'}).webp({quality:78,effort:4}).toBuffer();
                   await q("INSERT INTO profile_images(entity_type,entity_id,mime_type,data) VALUES('classroom',?,'image/webp',?) ON DUPLICATE KEY UPDATE mime_type=VALUES(mime_type),data=VALUES(data)",[announcementId,avatar]);
-                }
-              }
+                  console.log('Classroom creator photo cached',{announcementId,bytes:avatar.length});
+                }else console.warn('Classroom creator photo has invalid size',{announcementId,bytes:photoBuffer.length});
+              }else console.warn('Classroom creator photo download failed',{announcementId,status:photoResponse.status,contentType:photoType});
             }catch(photoError){console.warn('Classroom creator photo cache failed',{announcementId,message:photoError.message});}
           }
         }else if(announcementId){
