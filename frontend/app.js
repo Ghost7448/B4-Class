@@ -1401,9 +1401,11 @@ async function syncPushSubscription(showErrors=true){
     const cfg=S.vapidPublicKey?{vapidPublicKey:S.vapidPublicKey}:await api('/api/notifications/settings');
     const publicKey=cfg.vapidPublicKey;if(!publicKey)throw Error('Push notifications are not configured on the server');
     if(Notification.permission!=='granted')throw Error(Notification.permission==='denied'?'Browser notifications are blocked. Allow them for this site.':'Notification permission is required');
-    let registration=await navigator.serviceWorker.getRegistration();
-    if(!registration)registration=await navigator.serviceWorker.register('/sw.js?v=push12');
-    await navigator.serviceWorker.ready;
+    // Always register the current worker script. getRegistration() alone does not
+    // trigger an update check, so returning users could remain on a stale worker.
+    let registration=await navigator.serviceWorker.register('/sw.js?v=push13',{scope:'/',updateViaCache:'none'});
+    try{await registration.update();}catch(updateError){console.warn('B4 service worker update check failed:',updateError?.message||updateError);}
+    registration=await navigator.serviceWorker.ready;
     let subscription=await registration.pushManager.getSubscription();
     if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:base64ToUint8Array(publicKey)});
     await api('/api/notifications/push/subscribe',{method:'POST',body:JSON.stringify(subscription.toJSON())});
