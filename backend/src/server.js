@@ -498,6 +498,10 @@ await q('CREATE TABLE IF NOT EXISTS resource_files( id BIGINT UNSIGNED AUTO_INCR
   for(const code of teacherPerms) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'TEACHER',id FROM permissions WHERE code=?",[code]);
 
   for(const code of ['VIEW_CLASS','USE_AI']) await q("INSERT IGNORE INTO role_permissions(role,permission_id) SELECT 'STUDENT',id FROM permissions WHERE code=?",[code]);
+  const [googlePictureCol]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='linked_accounts' AND COLUMN_NAME='google_picture_url' LIMIT 1");
+  if(!googlePictureCol.length)await q("ALTER TABLE linked_accounts ADD COLUMN google_picture_url VARCHAR(1000) NULL AFTER provider_email");
+  const [creatorEmailCol]=await q("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='b4_classroom_announcements' AND COLUMN_NAME='creator_google_email' LIMIT 1");
+  if(!creatorEmailCol.length)await q("ALTER TABLE b4_classroom_announcements ADD COLUMN creator_google_email VARCHAR(255) NULL AFTER creator_name");
 }
 
 async function getPermissionCodes(userId) {
@@ -667,9 +671,10 @@ async function getBootstrap(req) {
   const [classroomAnnouncements] = await q(`
     SELECT a.id AS classroom_id,-a.id AS id,a.title,a.body,'Google Classroom' AS category,a.created_at,NULL AS created_by,
            'GOOGLE_CLASSROOM' AS source,a.source_url,a.creator_name,
-           CASE WHEN pi.entity_id IS NOT NULL THEN CONCAT('/api/classroom/creator-photo/',a.id) ELSE NULL END AS creator_photo_url
+           COALESCE(la.google_picture_url,CASE WHEN pi.entity_id IS NOT NULL THEN CONCAT('/api/classroom/creator-photo/',a.id) ELSE NULL END) AS creator_photo_url
     FROM b4_classroom_announcements a
     LEFT JOIN profile_images pi ON pi.entity_type='classroom' AND pi.entity_id=a.id
+    LEFT JOIN linked_accounts la ON la.provider='GOOGLE' AND LOWER(la.provider_email)=LOWER(a.creator_google_email)
     WHERE a.course_id=? ORDER BY a.created_at DESC LIMIT 30
   `,[CLASSROOM_COURSE_ID]);
   if(classroomAnnouncements.length){
@@ -1721,7 +1726,9 @@ async function startGoogleOAuth(req,res,mode){
   const clientId=process.env.GOOGLE_CLIENT_ID,redirectUri=process.env.GOOGLE_REDIRECT_URI||process.env.GOOGLE_CALLBACK_URL;
   if(!clientId||!redirectUri)return res.status(503).json({error:'Google linking is not configured'});
   const state=crypto.randomBytes(32).toString('hex');req.session.googleOAuthState=state;req.session.googleOAuthMode=mode;
-  const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');u.searchParams.set('client_id',clientId);u.searchParams.set('redirect_uri',redirectUri);u.searchParams.set('response_type','code');u.searchParams.set('scope','openid email profile');u.searchParams.set('state',state);u.searchParams.set('access_type','online');u.searchParams.set('prompt','select_account');res.redirect(u.toString());
+  const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');u.searchParams.set('client_id',clientId);u.searchParams.set('redirect_uri',redirectUri);u.searchParams.set('response_type','code');u.searchParams.set('scope','openid email profile');u.searchParams.set('state',state);u.searchParams.set('access_type','online');u.searchParams.set('prompt','select_account');
+  await new Promise((resolve,reject)=>req.session.save(error=>error?reject(error):resolve()));
+  res.redirect(u.toString());
 }
 app.get('/api/auth/google/start',requireAuth,(req,res)=>startGoogleOAuth(req,res,'link'));
 app.get('/api/auth/google/login',(req,res)=>startGoogleOAuth(req,res,'login'));
@@ -1807,7 +1814,9 @@ app.get('/api/auth/google/callback',async(req,res)=>{
     }
     if(!req.session.userId)return res.redirect('/?google=login-required');
     if(owner[0]&&Number(owner[0].user_id)!==Number(req.session.userId))return res.redirect('/?google=already-linked');
-    if(!owner[0]){await q("INSERT INTO linked_accounts(user_id,provider,provider_user_id,provider_email) VALUES(?,'GOOGLE',?,?)",[req.session.userId,String(info.sub),info.email||null]);await audit(req,'GOOGLE_LINKED','user',req.session.userId,{email:info.email||null});}
+    const picture=(()=>{try{const u=new URL(String(info.picture||''));return u.protocol==='https:'&&/(^|\\.)googleusercontent\\.com$/i.test(u.hostname)?u.toString().slice(0,1000):null;}catch{return null;}})();
+    if(!owner[0]){await q("INSERT INTO linked_accounts(user_id,provider,provider_user_id,provider_email,google_picture_url) VALUES(?,'GOOGLE',?,?,?)",[req.session.userId,String(info.sub),info.email||null,picture]);await audit(req,'GOOGLE_LINKED','user',req.session.userId,{email:info.email||null,has_picture:!!picture});}
+    else await q("UPDATE linked_accounts SET provider_email=?,google_picture_url=COALESCE(?,google_picture_url) WHERE provider='GOOGLE' AND provider_user_id=? AND user_id=?",[info.email||null,picture,String(info.sub),req.session.userId]);
     delete req.session.googleOAuthState;delete req.session.googleOAuthMode;res.redirect('/?google=linked');
   }catch(e){console.error('Google OAuth failed:',e.message);res.redirect('/?google=error');}
 });
@@ -2642,7 +2651,8 @@ async function syncGoogleClassroomAnnouncements(){
         }
       }
       const photoUrl=String(profile?.photoUrl||'').trim();
-      const result={name:String(profile?.name?.fullName||profile?.emailAddress||'Google Classroom').slice(0,255),photoUrl:/^https:\/\//i.test(photoUrl)?photoUrl.slice(0,1000):null};
+      const email=String(profile?.emailAddress||'').trim().toLowerCase();
+      const result={name:String(profile?.name?.fullName||email||'Google Classroom').slice(0,255),email:/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)?email:null,photoUrl:/^https:\/\//i.test(photoUrl)?photoUrl.slice(0,1000):null};
       if(!result.photoUrl)console.warn('Classroom creator has no photoUrl; check OAuth grant and Google Workspace contact-sharing settings',{userId:id,hasProfile:!!profile});
       classroomCreatorCache.set(id,result);return result;
     }
@@ -2664,10 +2674,10 @@ async function syncGoogleClassroomAnnouncements(){
         const creator=await getClassroomCreator(item.creatorUserId);
         const [previousCreatorPhoto]=await q('SELECT creator_photo_source_hash FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
         const previousPhotoHash=previousCreatorPhoto[0]?.creator_photo_source_hash||null;
-        await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_photo_url,creator_photo_source_hash)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?)
-          ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_photo_url=VALUES(creator_photo_url),creator_photo_source_hash=VALUES(creator_photo_source_hash)`,
-          [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id),creator.name,creator.photoUrl,creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null]);
+        await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_google_email,creator_photo_url,creator_photo_source_hash)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+          ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_google_email=COALESCE(VALUES(creator_google_email),creator_google_email),creator_photo_url=VALUES(creator_photo_url),creator_photo_source_hash=VALUES(creator_photo_source_hash)`,
+          [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id),creator.name,creator.email,creator.photoUrl,creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null]);
         const [savedAnnouncement]=await q('SELECT id FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
         const announcementId=Number(savedAnnouncement[0]?.id||0);
         // Classroom photoUrl is often protected; fetch it server-side with the OAuth token
