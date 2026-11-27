@@ -531,6 +531,9 @@ const requirePermission = permission => async (req,res,next) => {
 };
 app.post('/api/visitors/track',async(req,res)=>{
   try{
+    // Persist a lightweight anonymous session cookie so repeat page loads
+    // update the same visitor record instead of creating a new row each time.
+    req.session.visitorSession=true;
     const sessionKey=crypto.createHash('sha256').update(String(req.sessionID||'anonymous')).digest('hex');
     const body=req.body||{};
     const clip=(v,n)=>String(v??'').trim().slice(0,n)||null;
