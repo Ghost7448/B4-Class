@@ -2692,8 +2692,17 @@ async function syncGoogleClassroomAnnouncements(){
       for(const item of data.announcements||[]){
         if(!item.id)continue;
         currentAnnouncementIds.push(String(item.id));
-        const title=String(item.text||'إعلان من Google Classroom').trim().slice(0,220)||'إعلان من Google Classroom';
-        const body=String(item.text||'').trim();
+        const classroomText=String(item.text||'').replace(/\r\n?/g,'\n').trim();
+        const classroomLines=classroomText.split('\n');
+        const firstContentLine=classroomLines.findIndex(line=>line.trim());
+        const remainingText=firstContentLine>=0?classroomLines.slice(firstContentLine+1).join('\n').trim():'';
+        // Classroom announcements have one text field, not separate title/body fields.
+        // Use the first line as the title and the remaining lines as the description.
+        // For one-line announcements, keep all text in the description to avoid duplication.
+        const title=remainingText
+          ? classroomLines[firstContentLine].trim().slice(0,220)||'إعلان من Google Classroom'
+          : 'إعلان من Google Classroom';
+        const body=remainingText||classroomText;
         const created=item.creationTime?new Date(item.creationTime):new Date();
         if(Number.isNaN(created.getTime()))continue;
         const safeBody=body.slice(0,60000);
