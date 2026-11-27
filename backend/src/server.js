@@ -2672,8 +2672,8 @@ async function syncGoogleClassroomAnnouncements(){
       const email=String(profile?.emailAddress||'').trim().toLowerCase();
       const result={
         name:String(profile?.name?.fullName||email||'Google Classroom').slice(0,255),
-        email:/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)?email:null,
-        photoUrl:/^https:\\/\\//i.test(photoUrl)?photoUrl.slice(0,1000):null
+        email:/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)?email:null,
+        photoUrl:photoUrl.toLowerCase().startsWith('https://')?photoUrl.slice(0,1000):null
       };
       if(!result.photoUrl)console.warn('Classroom creator has no photoUrl; Google did not return a visible profile photo',{userId:id,hasProfile:!!profile});
       classroomCreatorCache.set(id,result);
