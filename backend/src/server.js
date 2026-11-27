@@ -369,6 +369,7 @@ const PERMISSION_DEFS = [
 ];
 
 async function ensurePermissionSchema() {
+  await q("CREATE TABLE IF NOT EXISTS b4_visitors (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,session_key CHAR(64) NOT NULL UNIQUE,user_id BIGINT UNSIGNED NULL,ip_address VARCHAR(64) NULL,user_agent TEXT NULL,browser VARCHAR(120) NULL,operating_system VARCHAR(120) NULL,device_type VARCHAR(80) NULL,device_info VARCHAR(255) NULL,screen_resolution VARCHAR(40) NULL,language VARCHAR(80) NULL,timezone VARCHAR(100) NULL,referrer TEXT NULL,cookies_enabled TINYINT(1) NOT NULL DEFAULT 0,platform VARCHAR(120) NULL,hardware_concurrency SMALLINT UNSIGNED NULL,device_memory DECIMAL(5,2) NULL,touch_points SMALLINT UNSIGNED NULL,first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,INDEX idx_visitors_last_seen(last_seen),INDEX idx_visitors_user(user_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_classroom_connection(id TINYINT UNSIGNED PRIMARY KEY,course_id VARCHAR(80) NOT NULL,account_email VARCHAR(255) NULL,refresh_token_enc TEXT NOT NULL,last_synced_at DATETIME NULL,last_error VARCHAR(500) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_classroom_announcements(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,google_announcement_id VARCHAR(180) NOT NULL UNIQUE,title VARCHAR(220) NOT NULL,body MEDIUMTEXT NULL,created_at DATETIME NULL,updated_at DATETIME NULL,created_by_email VARCHAR(255) NULL,course_id VARCHAR(80) NOT NULL,source_url VARCHAR(500) NULL,synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_classroom_course_created(course_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   const [creatorNameColumn]=await q("SHOW COLUMNS FROM b4_classroom_announcements LIKE 'creator_name'");
@@ -528,6 +529,25 @@ const requirePermission = permission => async (req,res,next) => {
     req.permissions=permissions; next();
   } catch(e) { console.error('Permission check failed:',e.message); res.status(500).json({error:'Permission check failed'}); }
 };
+app.post('/api/visitors/track',async(req,res)=>{
+  try{
+    const sessionKey=crypto.createHash('sha256').update(String(req.sessionID||'anonymous')).digest('hex');
+    const body=req.body||{};
+    const clip=(v,n)=>String(v??'').trim().slice(0,n)||null;
+    const ua=clip(req.get('user-agent'),2000);
+    const browser=clip(body.browser,120),os=clip(body.operatingSystem,120);
+    const deviceType=clip(body.deviceType,80),deviceInfo=clip(body.deviceInfo,255);
+    const screen=clip(body.screenResolution,40),language=clip(body.language,80),timezone=clip(body.timezone,100);
+    const referrer=clip(body.referrer,1000),platform=clip(body.platform,120);
+    const cores=Number(body.hardwareConcurrency),memory=Number(body.deviceMemory),touch=Number(body.touchPoints);
+    const ip=clip(req.ip||req.socket?.remoteAddress,64);
+    await q(`INSERT INTO b4_visitors(session_key,user_id,ip_address,user_agent,browser,operating_system,device_type,device_info,screen_resolution,language,timezone,referrer,cookies_enabled,platform,hardware_concurrency,device_memory,touch_points,first_seen,last_seen)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())
+      ON DUPLICATE KEY UPDATE user_id=COALESCE(VALUES(user_id),user_id),ip_address=VALUES(ip_address),user_agent=VALUES(user_agent),browser=VALUES(browser),operating_system=VALUES(operating_system),device_type=VALUES(device_type),device_info=VALUES(device_info),screen_resolution=VALUES(screen_resolution),language=VALUES(language),timezone=VALUES(timezone),referrer=VALUES(referrer),cookies_enabled=VALUES(cookies_enabled),platform=VALUES(platform),hardware_concurrency=VALUES(hardware_concurrency),device_memory=VALUES(device_memory),touch_points=VALUES(touch_points),last_seen=NOW()`,
+      [sessionKey,req.session.userId||null,ip,ua,browser,os,deviceType,deviceInfo,screen,language,timezone,referrer,body.cookiesEnabled?1:0,platform,Number.isFinite(cores)&&cores>0?Math.min(cores,1024):null,Number.isFinite(memory)&&memory>0?Math.min(memory,1024):null,Number.isFinite(touch)&&touch>=0?Math.min(touch,1024):null]);
+    res.json({ok:true});
+  }catch(e){console.error('Visitor tracking failed:',e.message);res.status(500).json({error:'Could not record visit'});}
+});
 const requireAnyPermission = permissions => async (req,res,next) => {
   if (!req.session.userId) return res.status(401).json({error:'Login required'});
   const [sv]=await q('SELECT session_version,status FROM users WHERE id=? LIMIT 1',[req.session.userId]); if(!sv[0]||sv[0].status!=='ACTIVE'||Number(sv[0].session_version)!==Number(req.session.sessionVersion||0)){req.session.destroy(()=>{});return res.status(401).json({error:'Session expired. Please log in again'});}
@@ -1477,6 +1497,16 @@ app.delete('/api/admin/exams/:id',requirePermission('MANAGE_EXAMS'),async(req,re
 app.patch('/api/admin/announcements/:id',requirePermission('MANAGE_ANNOUNCEMENTS'),async(req,res)=>{const id=Number(req.params.id),{title,body,category='General'}=req.body||{};const [r]=await q("UPDATE announcements SET title=?,body=?,category=? WHERE id=? AND class_name='B4'",[String(title||'').trim(),String(body||'').trim(),String(category||'General').trim(),id]);if(!r.affectedRows)return res.status(404).json({error:'Announcement not found'});await audit(req,'ANNOUNCEMENT_UPDATED','announcement',id);res.json({ok:true});});
 app.delete('/api/admin/announcements/:id',requirePermission('MANAGE_ANNOUNCEMENTS'),async(req,res)=>{const id=Number(req.params.id),[r]=await q("DELETE FROM announcements WHERE id=? AND class_name='B4'",[id]);if(!r.affectedRows)return res.status(404).json({error:'Announcement not found'});await audit(req,'ANNOUNCEMENT_DELETED','announcement',id);res.json({ok:true});});
 app.put('/api/admin/schedule',requirePermission('MANAGE_SCHEDULE'),async(req,res)=>{const rows=Array.isArray(req.body?.schedule)?req.body.schedule:[],conn=await pool.getConnection();try{await conn.beginTransaction();await conn.execute("DELETE FROM schedule WHERE class_name='B4'");for(const [i,row] of rows.entries())await conn.execute("INSERT INTO schedule(class_name,day_order,day_name,p1,p2,p3,p4,p5,p6,p7,p8) VALUES('B4',?,?,?,?,?,?,?,?,?,?)",[i+1,String(row.day_name||'Day '+(i+1)),...Array.from({length:8},(_,n)=>String(row['p'+(n+1)]||''))]);await conn.commit();await audit(req,'SCHEDULE_UPDATED','schedule',null,{rows:rows.length});res.json({ok:true});}catch(e){await conn.rollback();res.status(400).json({error:e.message})}finally{conn.release()}});
+app.get('/api/admin/visitors',requirePermission('VIEW_LOGS'),async(req,res)=>{
+  try{
+    const [visitors]=await q(`SELECT v.id,v.ip_address,v.user_agent,v.browser,v.operating_system,v.device_type,v.device_info,v.screen_resolution,v.language,v.timezone,v.referrer,v.cookies_enabled,v.platform,v.hardware_concurrency,v.device_memory,v.touch_points,v.first_seen,v.last_seen,u.display_name account_name,u.official_name,la.provider_email google_email
+      FROM b4_visitors v LEFT JOIN users u ON u.id=v.user_id
+      LEFT JOIN linked_accounts la ON la.user_id=v.user_id AND la.provider='GOOGLE'
+      ORDER BY v.last_seen DESC LIMIT 1000`);
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({visitors});
+  }catch(e){console.error('Visitors list failed:',e.message);res.status(500).json({error:'Could not load visitors'});}
+});
 app.get('/api/admin/logs',requirePermission('VIEW_LOGS'),async(req,res)=>{const [activity]=await q('SELECT l.id,l.actor_user_id,l.action,l.entity_type,l.entity_id,l.details,l.created_at,u.display_name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_user_id ORDER BY l.created_at DESC LIMIT 500');const [security]=await q('SELECT l.id,l.actor_user_id,l.action,l.details,l.created_at,u.display_name actor_name FROM security_logs l LEFT JOIN users u ON u.id=l.actor_user_id ORDER BY l.created_at DESC LIMIT 500');res.json({activity,security});});
 app.get('/api/teacher/exam-logs',requirePermission('MANAGE_EXAMS'),async(req,res)=>{try{const [actor]=await q('SELECT role,is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);const isSuper=Number(actor[0]?.is_super_admin)===1;if(actor[0]?.role!=='TEACHER'&&!isSuper)return res.status(403).json({error:'Teacher access required'});const where=isSuper?'(l.action LIKE \'EXAM\\_%\' OR l.entity_type IN (\'exam\',\'exam_attempt\',\'exam_submission\'))':'((l.action LIKE \'EXAM\\_%\' OR l.entity_type IN (\'exam\',\'exam_attempt\',\'exam_submission\')) AND l.entity_id IN (SELECT e.id FROM exams e WHERE e.created_by=?))';const args=isSuper?[]:[req.session.userId];const [activity]=await q('SELECT l.id,l.actor_user_id,l.action,l.entity_type,l.entity_id,l.details,l.created_at,u.display_name actor_name FROM activity_logs l LEFT JOIN users u ON u.id=l.actor_user_id WHERE '+where+' ORDER BY l.created_at DESC LIMIT 500',args);res.setHeader('Cache-Control','private, no-store');res.json({activity,security:[]});}catch(e){console.error('Teacher exam logs failed:',e);res.status(500).json({error:'Could not load exam logs'});}});
 app.get('/api/exams/:id/edit',requirePermission('MANAGE_EXAMS'),async(req,res)=>{const id=Number(req.params.id);try{await assertTeacherOwner(req,'exams',id)}catch(e){return res.status(e.statusCode||403).json({error:e.message})}const [rows]=await q("SELECT id,title,description,subject_id,starts_at,ends_at,duration_minutes,status,created_by FROM exams WHERE id=? AND class_name='B4' LIMIT 1",[id]);if(!rows[0])return res.status(404).json({error:'Exam not found'});const [questions]=await q('SELECT id,question_text,question_type,options_json,correct_answer,points,sort_order FROM exam_questions WHERE exam_id=? ORDER BY sort_order',[id]);res.json({exam:rows[0],questions:questions.map(x=>({...x,options_json:typeof x.options_json==='string'?(JSON.parse(x.options_json||'[]')):(x.options_json||[])}))});});
