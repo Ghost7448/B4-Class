@@ -370,6 +370,7 @@ const PERMISSION_DEFS = [
 
 async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS b4_visitors (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,session_key CHAR(64) NOT NULL UNIQUE,user_id BIGINT UNSIGNED NULL,ip_address VARCHAR(64) NULL,user_agent TEXT NULL,browser VARCHAR(120) NULL,operating_system VARCHAR(120) NULL,device_type VARCHAR(80) NULL,device_info VARCHAR(255) NULL,screen_resolution VARCHAR(40) NULL,language VARCHAR(80) NULL,timezone VARCHAR(100) NULL,referrer TEXT NULL,cookies_enabled TINYINT(1) NOT NULL DEFAULT 0,platform VARCHAR(120) NULL,hardware_concurrency SMALLINT UNSIGNED NULL,device_memory DECIMAL(5,2) NULL,touch_points SMALLINT UNSIGNED NULL,first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,INDEX idx_visitors_last_seen(last_seen),INDEX idx_visitors_user(user_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS b4_announcement_comments(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,announcement_ref VARCHAR(100) NOT NULL,user_id BIGINT UNSIGNED NOT NULL,body TEXT NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_announcement_comments_ref(announcement_ref),FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_classroom_connection(id TINYINT UNSIGNED PRIMARY KEY,course_id VARCHAR(80) NOT NULL,account_email VARCHAR(255) NULL,refresh_token_enc TEXT NOT NULL,last_synced_at DATETIME NULL,last_error VARCHAR(500) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_classroom_announcements(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,google_announcement_id VARCHAR(180) NOT NULL UNIQUE,title VARCHAR(220) NOT NULL,body MEDIUMTEXT NULL,created_at DATETIME NULL,updated_at DATETIME NULL,created_by_email VARCHAR(255) NULL,course_id VARCHAR(80) NOT NULL,source_url VARCHAR(500) NULL,synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_classroom_course_created(course_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   const [creatorNameColumn]=await q("SHOW COLUMNS FROM b4_classroom_announcements LIKE 'creator_name'");
@@ -711,6 +712,13 @@ async function getBootstrap(req) {
   }
   const announcements=[...manualAnnouncements.map(a=>({...a,source:'B4'})),...classroomAnnouncements]
     .sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).slice(0,30);
+  if(req.session.userId && announcements.length){
+    const refs=announcements.map(a=>(Number(a.id)<0?'CLASSROOM:':'B4:')+Math.abs(Number(a.id)));
+    const marks=refs.map(()=>'?').join(',');
+    const [comments]=await q(`SELECT c.id,c.announcement_ref,c.body,c.created_at,c.user_id,COALESCE(u.display_name,u.official_name,'B4 User') author_name FROM b4_announcement_comments c JOIN users u ON u.id=c.user_id WHERE c.announcement_ref IN (${marks}) ORDER BY c.created_at ASC`,refs);
+    const grouped=new Map(); for(const c of comments){if(!grouped.has(c.announcement_ref))grouped.set(c.announcement_ref,[]);grouped.get(c.announcement_ref).push(c)}
+    for(const a of announcements)a.comments=grouped.get((Number(a.id)<0?'CLASSROOM:':'B4:')+Math.abs(Number(a.id)))||[];
+  }
   const [schedule] = await q(`SELECT day_name,p1,p2,p3,p4,p5,p6,p7,p8 FROM schedule WHERE class_name='B4' ORDER BY day_order`);
   const [resources] = await q(`
     SELECT r.id,r.title,r.description,r.url,r.created_by,
@@ -1450,6 +1458,19 @@ app.get('/api/admin/assignment-submissions/files/:id', requirePermission('MANAGE
     res.setHeader('Content-Disposition','inline; filename="'+encodeURIComponent(rows[0].filename)+'"');
     res.send(rows[0].data);
   }catch(e){console.error('Assignment submission file failed:',e);res.status(500).end()}
+});
+app.post('/api/announcements/:id/comments',requireAuth,async(req,res)=>{
+  try{
+    const raw=Number(req.params.id);if(!Number.isSafeInteger(raw)||raw===0)return res.status(400).json({error:'Invalid announcement'});
+    const body=String(req.body?.body||'').trim();if(!body||body.length>2000)return res.status(400).json({error:'Comment must be 1–2000 characters'});
+    const ref=(raw<0?'CLASSROOM:':'B4:')+Math.abs(raw);
+    if(raw<0){const [rows]=await q('SELECT id FROM b4_classroom_announcements WHERE id=? AND course_id=? LIMIT 1',[Math.abs(raw),CLASSROOM_COURSE_ID]);if(!rows.length)return res.status(404).json({error:'Announcement not found'});}
+    else{const [rows]=await q("SELECT id FROM announcements WHERE id=? AND class_name='B4' LIMIT 1",[raw]);if(!rows.length)return res.status(404).json({error:'Announcement not found'});}
+    const [r]=await q('INSERT INTO b4_announcement_comments(announcement_ref,user_id,body) VALUES(?,?,?)',[ref,req.session.userId,body]);
+    const [rows]=await q("SELECT c.id,c.announcement_ref,c.body,c.created_at,c.user_id,COALESCE(u.display_name,u.official_name,'B4 User') author_name FROM b4_announcement_comments c JOIN users u ON u.id=c.user_id WHERE c.id=? LIMIT 1",[r.insertId]);
+    pushGlobalEvent('data-changed',{type:'announcement-comment',announcementId:raw});
+    res.json({ok:true,comment:rows[0]});
+  }catch(e){console.error('Announcement comment failed:',e);res.status(500).json({error:'Could not post comment'});}
 });
 app.post('/api/admin/announcements', requirePermission('MANAGE_ANNOUNCEMENTS'), async (req,res) => {
   const {title,body,category='General'} = req.body || {};
