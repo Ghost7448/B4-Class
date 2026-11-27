@@ -700,7 +700,7 @@ async function syncLiveData(forceFull=false){
       return;
     }
     if(S.view==='announcements'){
-      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div>'+(a.creator_name||a.creator_photo_url?renderAnnouncementAuthor(a):'')+'<h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
+      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div>'+(a.creator_name||a.creator_photo_url?renderAnnouncementAuthor(a):'')+'<h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+renderAnnouncementComments(a)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
       return;
     }
     render();
@@ -916,6 +916,19 @@ function renderClassroomAttachments(items){
   const icon=mime==='application/pdf'?'📕':mime.includes('word')?'📘':mime.includes('sheet')||mime.includes('excel')?'📗':mime.includes('presentation')||mime.includes('powerpoint')?'📙':'📎';
   return '<a class="classroom-attachment-file" href="'+url+'" target="_blank" rel="noopener noreferrer">'+icon+' '+name+' <span>↗</span></a>';
  }).join('')+'</div>';
+}
+function renderAnnouncementComments(a){
+  const comments=Array.isArray(a.comments)?a.comments:[];
+  const ar=S.lang==='ar';
+  return '<section class="announcement-comments"><div class="announcement-comments-title">💬 '+(ar?'التعليقات':'Comments')+' <span>'+comments.length+'</span></div>'+
+   (comments.length?'<div class="announcement-comment-list">'+comments.map(x=>'<div class="announcement-comment"><b>'+esc(x.author_name||'B4 User')+'</b><p>'+esc(x.body||'')+'</p><small>'+esc(announcementTime(x.created_at))+'</small></div>').join('')+'</div>':'<p class="muted announcement-no-comments">'+(ar?'مفيش تعليقات لسه':'No comments yet')+'</p>')+
+   (S.me?'<form class="announcement-comment-form" onsubmit="postAnnouncementComment(event,'+Number(a.id)+')"><input name="comment" maxlength="2000" placeholder="'+(ar?'اكتب تعليقك...':'Write a comment...')+'" required><button class="btn primary" type="submit">'+(ar?'إرسال':'Comment')+'</button></form>':'<small class="muted">'+(ar?'سجل الدخول للتعليق':'Log in to comment')+'</small>')+'</section>';
+}
+async function postAnnouncementComment(e,id){
+  e.preventDefault();const form=e.currentTarget,field=form.elements.comment,body=field.value.trim();if(!body)return;
+  const button=form.querySelector('button');button.disabled=true;
+  try{const result=await api('/api/announcements/'+id+'/comments',{method:'POST',body:JSON.stringify({body})});const item=S.announcements.find(x=>Number(x.id)===Number(id));if(item){item.comments=item.comments||[];item.comments.push(result.comment)}render();toast(S.lang==='ar'?'تم نشر التعليق ✓':'Comment posted ✓')}
+  catch(err){toast(err.message||'Could not post comment');button.disabled=false}
 }
 function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div>'+(a.creator_name||a.creator_photo_url?renderAnnouncementAuthor(a):'')+'<h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
 function chatTime(value){
