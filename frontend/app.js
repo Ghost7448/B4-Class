@@ -2216,7 +2216,7 @@ function openLogDetails(index){
   const rows=window.__b4LogRows||[],x=rows[index];
   if(x)openLogDetailsByKey(logKey(x));
 }
-async async function trackVisitor(){
+async function trackVisitor(){
   if(!window.fetch||!navigator)return;
   const ua=String(navigator.userAgent||'');
   const pick=(re)=>{const m=ua.match(re);return m?m[1]+' '+(m[2]||''):''};
