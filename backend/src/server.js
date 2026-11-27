@@ -69,6 +69,21 @@ app.use(session({
 
 const q = (sql, args = []) => pool.execute(sql, args);
 
+const CLASSROOM_COURSE_ID = String(process.env.GOOGLE_CLASSROOM_COURSE_ID || '869768458551');
+const classroomKey = crypto.createHash('sha256').update(String(process.env.CLASSROOM_TOKEN_ENCRYPTION_KEY || process.env.SESSION_SECRET || 'b4-classroom-token-key')).digest();
+function encryptClassroomToken(value){
+  const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv('aes-256-gcm',classroomKey,iv);
+  const encrypted=Buffer.concat([cipher.update(String(value),'utf8'),cipher.final()]);
+  return [iv.toString('base64'),cipher.getAuthTag().toString('base64'),encrypted.toString('base64')].join('.');
+}
+function decryptClassroomToken(value){
+  const [iv,tag,data]=String(value||'').split('.');
+  if(!iv||!tag||!data)throw new Error('Invalid encrypted Classroom token');
+  const decipher=crypto.createDecipheriv('aes-256-gcm',classroomKey,Buffer.from(iv,'base64'));
+  decipher.setAuthTag(Buffer.from(tag,'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(data,'base64')),decipher.final()]).toString('utf8');
+}
+
 const VAPID_READY=!!(process.env.VAPID_PUBLIC_KEY&&process.env.VAPID_PRIVATE_KEY&&process.env.VAPID_SUBJECT);
 const RESEND_READY=!!(process.env.RESEND_API_KEY&&process.env.RESEND_FROM);
 function maskResetEmail(email){
@@ -353,6 +368,8 @@ const PERMISSION_DEFS = [
 ];
 
 async function ensurePermissionSchema() {
+  await q("CREATE TABLE IF NOT EXISTS b4_classroom_connection(id TINYINT UNSIGNED PRIMARY KEY,course_id VARCHAR(80) NOT NULL,account_email VARCHAR(255) NULL,refresh_token_enc TEXT NOT NULL,last_synced_at DATETIME NULL,last_error VARCHAR(500) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS b4_classroom_announcements(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,google_announcement_id VARCHAR(180) NOT NULL UNIQUE,title VARCHAR(220) NOT NULL,body MEDIUMTEXT NULL,created_at DATETIME NULL,updated_at DATETIME NULL,created_by_email VARCHAR(255) NULL,course_id VARCHAR(80) NOT NULL,source_url VARCHAR(500) NULL,synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_classroom_course_created(course_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_account_link_tokens(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,token_hash CHAR(64) NOT NULL UNIQUE,expires_at DATETIME NOT NULL,used_at DATETIME NULL,created_by BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE,INDEX idx_account_link_expiry(expires_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS exam_security_events(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,attempt_id BIGINT UNSIGNED NOT NULL,exam_id BIGINT UNSIGNED NOT NULL,user_id BIGINT UNSIGNED NOT NULL,event_type VARCHAR(40) NOT NULL,source VARCHAR(60) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_exam_security_attempt(attempt_id,event_type,created_at),INDEX idx_exam_security_exam(exam_id,created_at),FOREIGN KEY(attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,FOREIGN KEY(exam_id) REFERENCES exams(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_exam_drafts(user_id BIGINT UNSIGNED PRIMARY KEY,draft_json LONGTEXT NOT NULL,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -629,10 +646,17 @@ async function getBootstrap(req) {
     FROM assignments a LEFT JOIN subjects s ON s.id=a.subject_id LEFT JOIN assignment_files af ON af.assignment_id=a.id
     WHERE a.class_name='B4' ORDER BY a.due_at IS NULL,a.due_at
   `);
-  const [announcements] = await q(`
+  const [manualAnnouncements] = await q(`
     SELECT id,title,body,category,created_at,created_by FROM announcements
     WHERE class_name='B4' ORDER BY created_at DESC LIMIT 20
   `);
+  const [classroomAnnouncements] = await q(`
+    SELECT -id AS id,title,body,'Google Classroom' AS category,created_at,NULL AS created_by,
+           'GOOGLE_CLASSROOM' AS source,source_url
+    FROM b4_classroom_announcements WHERE course_id=? ORDER BY created_at DESC LIMIT 30
+  `,[CLASSROOM_COURSE_ID]);
+  const announcements=[...manualAnnouncements.map(a=>({...a,source:'B4'})),...classroomAnnouncements]
+    .sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).slice(0,30);
   const [schedule] = await q(`SELECT day_name,p1,p2,p3,p4,p5,p6,p7,p8 FROM schedule WHERE class_name='B4' ORDER BY day_order`);
   const [resources] = await q(`
     SELECT r.id,r.title,r.description,r.url,r.created_by,
@@ -1652,15 +1676,52 @@ async function startGoogleOAuth(req,res,mode){
 }
 app.get('/api/auth/google/start',requireAuth,(req,res)=>startGoogleOAuth(req,res,'link'));
 app.get('/api/auth/google/login',(req,res)=>startGoogleOAuth(req,res,'login'));
+app.get('/api/classroom/connect',requireAuth,async(req,res)=>{
+  try{
+    const [admin]=await q('SELECT is_super_admin,status FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+    if(!admin[0]||admin[0].status!=='ACTIVE'||Number(admin[0].is_super_admin)!==1)return res.status(403).json({error:'Super administrator access required'});
+    const clientId=process.env.GOOGLE_CLIENT_ID,redirectUri=process.env.GOOGLE_REDIRECT_URI||process.env.GOOGLE_CALLBACK_URL;
+    if(!clientId||!redirectUri||!process.env.GOOGLE_CLIENT_SECRET)return res.status(503).json({error:'Google OAuth is not configured'});
+    const state=crypto.randomBytes(32).toString('hex');req.session.googleOAuthState=state;req.session.googleOAuthMode='classroom';
+    const u=new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    u.searchParams.set('client_id',clientId);u.searchParams.set('redirect_uri',redirectUri);u.searchParams.set('response_type','code');
+    u.searchParams.set('scope','openid email profile https://www.googleapis.com/auth/classroom.announcements.readonly https://www.googleapis.com/auth/classroom.courses.readonly');
+    u.searchParams.set('state',state);u.searchParams.set('access_type','offline');u.searchParams.set('prompt','consent select_account');
+    res.redirect(u.toString());
+  }catch(e){console.error('Classroom OAuth start failed:',e.message);res.status(500).json({error:'Could not start Google Classroom connection'});}
+});
+app.get('/api/classroom/status',requireAuth,async(req,res)=>{
+  const [admin]=await q('SELECT is_super_admin FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+  if(!Number(admin[0]?.is_super_admin))return res.status(403).json({error:'Super administrator access required'});
+  const [rows]=await q('SELECT course_id,account_email,last_synced_at,last_error FROM b4_classroom_connection WHERE id=1 LIMIT 1');
+  res.json({connected:!!rows[0],courseId:CLASSROOM_COURSE_ID,accountEmail:rows[0]?.account_email||null,lastSyncedAt:rows[0]?.last_synced_at||null,lastError:rows[0]?.last_error||null});
+});
+
 app.get('/api/auth/google/callback',async(req,res)=>{
   try{
     const mode=req.session.googleOAuthMode||'link';
-    if(req.query.error)return res.redirect('/?google=cancelled');
+    if(req.query.error)return res.redirect(mode==='classroom'?'/?classroom=cancelled':'/?google=cancelled');
     if(!req.query.code||req.query.state!==req.session.googleOAuthState)return res.status(400).send('Google OAuth state mismatch.');
     const clientId=process.env.GOOGLE_CLIENT_ID,clientSecret=process.env.GOOGLE_CLIENT_SECRET,redirectUri=process.env.GOOGLE_REDIRECT_URI||process.env.GOOGLE_CALLBACK_URL;
     if(!clientId||!clientSecret||!redirectUri)return res.status(503).send('Google linking is not configured.');
     const tokenRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({code:String(req.query.code),client_id:clientId,client_secret:clientSecret,redirect_uri:redirectUri,grant_type:'authorization_code'})});
     const tokens=await tokenRes.json();if(!tokenRes.ok||!tokens.access_token)throw new Error('Google token exchange failed');
+    if(mode==='classroom'){
+      if(!req.session.userId)return res.redirect('/?classroom=login-required');
+      const [admin]=await q('SELECT is_super_admin,status FROM users WHERE id=? LIMIT 1',[req.session.userId]);
+      if(!admin[0]||admin[0].status!=='ACTIVE'||Number(admin[0].is_super_admin)!==1)return res.status(403).send('Super administrator access required.');
+      const infoRes=await fetch('https://openidconnect.googleapis.com/v1/userinfo',{headers:{Authorization:'Bearer '+tokens.access_token}});
+      const info=await infoRes.json();if(!infoRes.ok||!info.sub)throw new Error('Google account verification failed');
+      let refreshToken=tokens.refresh_token;
+      if(!refreshToken){
+        const [existing]=await q('SELECT refresh_token_enc FROM b4_classroom_connection WHERE id=1');
+        if(!existing[0])throw new Error('Google did not return a refresh token. Reconnect and grant access.');
+        refreshToken=decryptClassroomToken(existing[0].refresh_token_enc);
+      }
+      await q('INSERT INTO b4_classroom_connection(id,course_id,account_email,refresh_token_enc,last_error) VALUES(1,?,?,?,NULL) ON DUPLICATE KEY UPDATE course_id=VALUES(course_id),account_email=VALUES(account_email),refresh_token_enc=VALUES(refresh_token_enc),last_error=NULL',[CLASSROOM_COURSE_ID,info.email||null,encryptClassroomToken(refreshToken)]);
+      delete req.session.googleOAuthState;delete req.session.googleOAuthMode;
+      return res.redirect('/?classroom=connected');
+    }
     const infoRes=await fetch('https://openidconnect.googleapis.com/v1/userinfo',{headers:{Authorization:'Bearer '+tokens.access_token}});
     const info=await infoRes.json();if(!infoRes.ok||!info.sub)throw new Error('Google user info failed');
     const [owner]=await q("SELECT user_id FROM linked_accounts WHERE provider='GOOGLE' AND provider_user_id=? LIMIT 1",[String(info.sub)]);
@@ -2432,6 +2493,52 @@ async function checkSchoolEndPushSchedule(){
   }
 }
 
+
+let classroomSyncRunning=false;
+async function syncGoogleClassroomAnnouncements(){
+  if(classroomSyncRunning||!process.env.GOOGLE_CLIENT_ID||!process.env.GOOGLE_CLIENT_SECRET)return;
+  classroomSyncRunning=true;let hasLock=false;
+  try{
+    const [locks]=await q("SELECT GET_LOCK('b4_google_classroom_sync',0) acquired");
+    hasLock=Number(locks?.[0]?.acquired)===1;if(!hasLock)return;
+    const [rows]=await q('SELECT refresh_token_enc,course_id FROM b4_classroom_connection WHERE id=1 LIMIT 1');
+    if(!rows[0])return;
+    const refreshToken=decryptClassroomToken(rows[0].refresh_token_enc);
+    const tokenRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:process.env.GOOGLE_CLIENT_ID,client_secret:process.env.GOOGLE_CLIENT_SECRET,refresh_token:refreshToken,grant_type:'refresh_token'})});
+    const tokens=await tokenRes.json();if(!tokenRes.ok||!tokens.access_token)throw new Error('Google access token refresh failed');
+    let pageToken=null,imported=0;
+    do{
+      const url=new URL('https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/announcements');
+      url.searchParams.set('pageSize','100');url.searchParams.set('orderBy','updateTime desc');
+      url.searchParams.set('fields','announcements(id,text,creationTime,updateTime,creatorUserId,materials),nextPageToken');
+      if(pageToken)url.searchParams.set('pageToken',pageToken);
+      const response=await fetch(url,{headers:{Authorization:'Bearer '+tokens.access_token}});
+      const data=await response.json();if(!response.ok)throw new Error(data.error?.message||'Google Classroom announcements request failed');
+      for(const item of data.announcements||[]){
+        const title=String(item.text||'إعلان من Google Classroom').trim().slice(0,220)||'إعلان من Google Classroom';
+        const body=String(item.text||'').trim();
+        const created=item.creationTime?new Date(item.creationTime):new Date();
+        if(Number.isNaN(created.getTime()))continue;
+        const safeBody=body.slice(0,60000);
+        await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url)
+          VALUES(?,?,?,?,?,?,?,?)
+          ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url)`,
+          [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id)]);
+        imported++;
+      }
+      pageToken=data.nextPageToken||null;
+    }while(pageToken);
+    await q('UPDATE b4_classroom_connection SET last_synced_at=NOW(),last_error=NULL WHERE id=1');
+    if(imported)console.log('Google Classroom sync completed',{courseId:rows[0].course_id,items:imported});
+  }catch(e){
+    console.error('Google Classroom sync failed:',e.message);
+    try{await q('UPDATE b4_classroom_connection SET last_error=? WHERE id=1',[String(e.message||'Sync failed').slice(0,500)]);}catch{}
+  }finally{
+    if(hasLock){try{await q("SELECT RELEASE_LOCK('b4_google_classroom_sync')");}catch{}}
+    classroomSyncRunning=false;
+  }
+}
+
 // Serve shared assets from the repository root before the SPA fallback.
 // The manifest references /assets/logo.svg, so this route must be public.
 const assetsPath = path.resolve(__dirname, '../../assets');
@@ -2448,4 +2555,4 @@ app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
-ensurePermissionSchema().then(()=>migratePushDefaultOff()).then(()=>app.listen(PORT,()=>{console.log('B4 backend + frontend listening on '+PORT);checkSchoolEndPushSchedule();setInterval(checkSchoolEndPushSchedule,30000);})).catch(e=>{console.error('Startup schema/migration failed:',e);process.exit(1)});
+ensurePermissionSchema().then(()=>migratePushDefaultOff()).then(()=>app.listen(PORT,()=>{console.log('B4 backend + frontend listening on '+PORT);checkSchoolEndPushSchedule();setInterval(checkSchoolEndPushSchedule,30000);syncGoogleClassroomAnnouncements();setInterval(syncGoogleClassroomAnnouncements,5*60*1000);})).catch(e=>{console.error('Startup schema/migration failed:',e);process.exit(1)});
