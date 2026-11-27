@@ -252,7 +252,9 @@ function confirmAction(message,options={}){
       settled=true;
       activeConfirmCancel=null;
       $('#back')?.classList.remove('show');
-      if(history.state?.b4Modal)history.back();
+      // Do not let closing a confirmation modal navigate to an older view.
+      // This was sending users from Chat back to Dashboard after deletion.
+      if(history.state?.b4Modal)history.replaceState({...history.state,b4Modal:false,b4View:S.view},'',location.href);
       resolve(value)
     };
     activeConfirmCancel=()=>finish(false);
