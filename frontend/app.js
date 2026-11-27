@@ -701,7 +701,7 @@ async function syncLiveData(forceFull=false){
       return;
     }
     if(S.view==='announcements'){
-      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
+      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+(a.source==='GOOGLE_CLASSROOM'?renderClassroomAuthor(a):'')+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
       return;
     }
     render();
@@ -899,6 +899,11 @@ function formatAnnouncementBody(value){
  });
  return '<div class="announcement-body">'+linked+'</div>';
 }
+function renderClassroomAuthor(a){
+ const name=esc(a.creator_name||'Google Classroom'),photo=String(a.creator_photo_url||'');
+ const avatar=/^https:\/\//i.test(photo)?'<img src="'+esc(photo)+'" alt="" loading="lazy">':'<span class="classroom-author-fallback">G</span>';
+ return '<div class="classroom-author">'+avatar+'<div><small>Posted by</small><strong>'+name+'</strong></div></div>';
+}
 function renderClassroomAttachments(items){
  if(!Array.isArray(items)||!items.length)return '';
  return '<div class="classroom-attachments">'+items.map(file=>{
@@ -908,7 +913,7 @@ function renderClassroomAttachments(items){
   return '<a class="classroom-attachment-file" href="'+url+'" target="_blank" rel="noopener noreferrer">'+icon+' '+name+' <span>↗</span></a>';
  }).join('')+'</div>';
 }
-function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
+function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+(a.source==='GOOGLE_CLASSROOM'?renderClassroomAuthor(a):'')+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
 function chatTime(value){
   const d=new Date(value);
   if(!Number.isFinite(d.getTime()))return String(value||'');
