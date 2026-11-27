@@ -2245,7 +2245,7 @@ async function loadVisitors(){
   }catch(e){root.innerHTML='<div class="card notice">'+esc(e.message)+'</div>'}
   finally{window.b4VisitorsBusy=false}
 }
-function loadLogs(options={}){
+async function loadLogs(options={}){
   const r=$('#adminRoot');
   if(!r||window.b4LogsLoadBusy)return;
   const silent=!!options.silent;
