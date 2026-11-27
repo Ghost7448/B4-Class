@@ -652,13 +652,23 @@ async function getBootstrap(req) {
     WHERE a.class_name='B4' ORDER BY a.due_at IS NULL,a.due_at
   `);
   const [manualAnnouncements] = await q(`
-    SELECT id,title,body,category,created_at,created_by FROM announcements
-    WHERE class_name='B4' ORDER BY created_at DESC LIMIT 20
+    SELECT a.id,a.title,a.body,a.category,a.created_at,a.created_by,
+           'B4' AS source,
+           COALESCE(NULLIF(u.display_name,''),NULLIF(u.official_name,''),'B4 User') AS creator_name,
+           CASE WHEN pi.entity_id IS NOT NULL THEN CONCAT('/api/profile-images/user/',u.id)
+                ELSE u.avatar_url END AS creator_photo_url
+    FROM announcements a
+    LEFT JOIN users u ON u.id=a.created_by
+    LEFT JOIN profile_images pi ON pi.entity_type='user' AND pi.entity_id=u.id
+    WHERE a.class_name='B4' ORDER BY a.created_at DESC LIMIT 20
   `);
   const [classroomAnnouncements] = await q(`
-    SELECT id AS classroom_id,-id AS id,title,body,'Google Classroom' AS category,created_at,NULL AS created_by,
-           'GOOGLE_CLASSROOM' AS source,source_url,creator_name,creator_photo_url
-    FROM b4_classroom_announcements WHERE course_id=? ORDER BY created_at DESC LIMIT 30
+    SELECT a.id AS classroom_id,-a.id AS id,a.title,a.body,'Google Classroom' AS category,a.created_at,NULL AS created_by,
+           'GOOGLE_CLASSROOM' AS source,a.source_url,a.creator_name,
+           CASE WHEN pi.entity_id IS NOT NULL THEN CONCAT('/api/classroom/creator-photo/',a.id) ELSE NULL END AS creator_photo_url
+    FROM b4_classroom_announcements a
+    LEFT JOIN profile_images pi ON pi.entity_type='classroom' AND pi.entity_id=a.id
+    WHERE a.course_id=? ORDER BY a.created_at DESC LIMIT 30
   `,[CLASSROOM_COURSE_ID]);
   if(classroomAnnouncements.length){
     const ids=classroomAnnouncements.map(a=>Number(a.classroom_id));
@@ -1332,6 +1342,16 @@ app.delete('/api/admin/students/:id',requirePermission('MANAGE_STUDENTS'),async(
 async function compressAvatarBuffer(buffer){return sharp(buffer,{failOn:'error'}).rotate().resize({width:512,height:512,fit:'inside',withoutEnlargement:true}).webp({quality:78,effort:4}).toBuffer();}
 async function saveAvatar(type,id,file){const compressed=await compressAvatarBuffer(file.buffer);await q('INSERT INTO profile_images(entity_type,entity_id,mime_type,data) VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE mime_type=VALUES(mime_type),data=VALUES(data)',[type,id,'image/webp',compressed]);return '/api/profile-images/'+type+'/'+id;}
 app.get('/api/profile-images/:type/:id',async(req,res)=>{const type=String(req.params.type),id=Number(req.params.id);if(!['user','student','teacher'].includes(type)||!Number.isSafeInteger(id))return res.status(400).end();const [r]=await q('SELECT mime_type,data FROM profile_images WHERE entity_type=? AND entity_id=? LIMIT 1',[type,id]);if(!r[0])return res.status(404).end();res.setHeader('Content-Type',r[0].mime_type);res.setHeader('Cache-Control','public,max-age=300');res.send(r[0].data);});
+app.get('/api/classroom/creator-photo/:id',async(req,res)=>{
+  const id=Number(req.params.id);
+  if(!Number.isSafeInteger(id)||id<=0)return res.status(400).end();
+  const [rows]=await q("SELECT mime_type,data FROM profile_images WHERE entity_type='classroom' AND entity_id=? LIMIT 1",[id]);
+  if(!rows[0])return res.status(404).end();
+  res.setHeader('Content-Type',rows[0].mime_type||'image/webp');
+  res.setHeader('Cache-Control','public,max-age=3600,stale-while-revalidate=86400');
+  res.setHeader('X-Content-Type-Options','nosniff');
+  res.send(rows[0].data);
+});
 app.post('/api/auth/avatar',requireAuth,imageUpload.single('file'),async(req,res)=>{
   if(!req.file)return res.status(400).json({error:'PNG, JPG or WEBP image required'});
   const url=await saveAvatar('user',req.session.userId,req.file);
@@ -2632,7 +2652,25 @@ async function syncGoogleClassroomAnnouncements(){
           ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_photo_url=VALUES(creator_photo_url)`,
           [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id),creator.name,creator.photoUrl]);
         const [savedAnnouncement]=await q('SELECT id FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
-        const announcementId=Number(savedAnnouncement[0]?.id||0);const keepKeys=[];
+        const announcementId=Number(savedAnnouncement[0]?.id||0);
+        // Classroom photoUrl is often protected; fetch it server-side with the OAuth token
+        // and cache a small WebP avatar so every signed-in student can display it reliably.
+        if(announcementId && creator.photoUrl){
+          try{
+            const photoResponse=await fetch(creator.photoUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
+            const photoType=String(photoResponse.headers.get('content-type')||'').toLowerCase();
+            if(photoResponse.ok && photoType.startsWith('image/')){
+              const photoBuffer=Buffer.from(await photoResponse.arrayBuffer());
+              if(photoBuffer.length>0 && photoBuffer.length<=5*1024*1024){
+                const avatar=await sharp(photoBuffer).rotate().resize(160,160,{fit:'cover'}).webp({quality:78, effort:4}).toBuffer();
+                await q("INSERT INTO profile_images(entity_type,entity_id,mime_type,data) VALUES('classroom',?,'image/webp',?) ON DUPLICATE KEY UPDATE mime_type=VALUES(mime_type),data=VALUES(data)",[announcementId,avatar]);
+              }
+            }
+          }catch(photoError){console.warn('Classroom creator photo cache failed',{announcementId,message:photoError.message});}
+        }else if(announcementId){
+          await q("DELETE FROM profile_images WHERE entity_type='classroom' AND entity_id=?",[announcementId]);
+        }
+        const keepKeys=[];
         for(const material of item.materials||[]){
           const drive=material?.driveFile?.driveFile;
           if(drive?.id){
