@@ -2618,8 +2618,9 @@ async function syncGoogleClassroomAnnouncements(){
   try{
     const [locks]=await q("SELECT GET_LOCK('b4_google_classroom_sync',0) acquired");
     hasLock=Number(locks?.[0]?.acquired)===1;if(!hasLock)return;
-    const [rows]=await q('SELECT refresh_token_enc,course_id FROM b4_classroom_connection WHERE id=1 LIMIT 1');
+    const [rows]=await q('SELECT refresh_token_enc,course_id,last_synced_at FROM b4_classroom_connection WHERE id=1 LIMIT 1');
     if(!rows[0])return;
+    const previousSyncAt=rows[0].last_synced_at?new Date(rows[0].last_synced_at).getTime():null;
     const refreshToken=decryptClassroomToken(rows[0].refresh_token_enc);
     const tokenRes=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({client_id:process.env.GOOGLE_CLIENT_ID,client_secret:process.env.GOOGLE_CLIENT_SECRET,refresh_token:refreshToken,grant_type:'refresh_token'})});
     const tokens=await tokenRes.json();if(!tokenRes.ok||!tokens.access_token)throw new Error('Google access token refresh failed');
@@ -2761,6 +2762,16 @@ async function syncGoogleClassroomAnnouncements(){
         }
         }
         imported++;
+        // Only notify about announcements discovered since the previous successful sync.
+        // The initial import stays silent to avoid flooding the class with old posts.
+        if(!previous && Number.isFinite(previousSyncAt) && created.getTime()>previousSyncAt){
+          await notifyClassExcept(0,{
+            type:'announcement',
+            title:title==='إعلان من Google Classroom'?'إعلان جديد من Google Classroom':title,
+            body:safeBody,
+            url:'/?view=announcements'
+          });
+        }
         if(previousPhotoHash!==(creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null)){
           pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_CREATOR_PHOTO_SYNC',announcementId});
         }
