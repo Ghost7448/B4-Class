@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS chat_message_edits(
 CREATE TABLE IF NOT EXISTS linked_accounts(
  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,
  provider ENUM('GOOGLE','DISCORD','FACEBOOK') NOT NULL,provider_user_id VARCHAR(255) NOT NULL,
- provider_email VARCHAR(255),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ provider_email VARCHAR(255),google_picture_url VARCHAR(1000),created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
  UNIQUE KEY uq_provider(provider,provider_user_id),UNIQUE KEY uq_user_provider(user_id,provider),
  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
