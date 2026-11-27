@@ -3732,3 +3732,60 @@ header>.search{display:flex;align-items:center;min-height:44px;overflow:visible}
   unicode-bidi:plaintext;
   text-align:start;
 }
+
+
+/* ===== FINAL TOUCH FEEDBACK POLISH ===== */
+/* Prevent Android's blue text-selection flash on submission rows. */
+.submission-card,
+.submission-card *{
+  -webkit-tap-highlight-color:transparent!important;
+}
+.submission-card{
+  -webkit-user-select:none;
+  user-select:none;
+}
+.submission-card a,
+.submission-card button{
+  -webkit-user-select:none;
+  user-select:none;
+}
+
+/* Consistent branded press feedback for interactive UI elements. */
+:where(
+  button,a,[role="button"],[onclick],.clickable,summary,
+  .more-option,.notification-row,.permission-tile,.exam-choice,
+  .answer-option,.person-card,.admin-card,.quick,.file-picker,
+  .chat-jump-bottom,.b4-time-unit button,.mobile-dock button,
+  .app aside .side-bottom button
+){
+  -webkit-tap-highlight-color:transparent!important;
+  touch-action:manipulation;
+  transition:
+    transform .16s cubic-bezier(.2,.75,.25,1),
+    filter .16s ease,
+    box-shadow .16s ease,
+    background-color .16s ease,
+    border-color .16s ease;
+}
+:where(
+  button,a,[role="button"],[onclick],.clickable,summary,
+  .more-option,.notification-row,.permission-tile,.exam-choice,
+  .answer-option,.person-card,.admin-card,.quick,.file-picker,
+  .chat-jump-bottom,.b4-time-unit button,.mobile-dock button,
+  .app aside .side-bottom button
+):active{
+  transform:scale(.975);
+  filter:brightness(1.06);
+  box-shadow:0 0 0 2px rgba(168,85,247,.28),0 0 16px rgba(168,85,247,.16);
+}
+@media(prefers-reduced-motion:reduce){
+  :where(
+    button,a,[role="button"],[onclick],.clickable,summary,
+    .more-option,.notification-row,.permission-tile,.exam-choice,
+    .answer-option,.person-card,.admin-card,.quick,.file-picker,
+    .chat-jump-bottom,.b4-time-unit button,.mobile-dock button,
+    .app aside .side-bottom button
+  ){
+    transition:none!important;
+  }
+}
