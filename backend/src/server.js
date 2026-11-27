@@ -671,7 +671,7 @@ async function getBootstrap(req) {
   const [classroomAnnouncements] = await q(`
     SELECT a.id AS classroom_id,-a.id AS id,a.title,a.body,'Google Classroom' AS category,a.created_at,NULL AS created_by,
            'GOOGLE_CLASSROOM' AS source,a.source_url,a.creator_name,
-           CASE WHEN pi.entity_id IS NOT NULL THEN CONCAT('/api/classroom/creator-photo/',a.id) ELSE NULLIF(la.google_picture_url,'') END AS creator_photo_url
+           COALESCE(CASE WHEN pi.entity_id IS NOT NULL THEN CONCAT('/api/classroom/creator-photo/',a.id) END,NULLIF(a.creator_photo_url,''),NULLIF(la.google_picture_url,'')) AS creator_photo_url
     FROM b4_classroom_announcements a
     LEFT JOIN profile_images pi ON pi.entity_type='classroom' AND pi.entity_id=a.id
     LEFT JOIN linked_accounts la ON la.provider='GOOGLE' AND (la.provider_user_id=a.created_by_email OR LOWER(la.provider_email)=LOWER(a.creator_google_email))
@@ -1814,7 +1814,7 @@ app.get('/api/auth/google/callback',async(req,res)=>{
     }
     if(!req.session.userId)return res.redirect('/?google=login-required');
     if(owner[0]&&Number(owner[0].user_id)!==Number(req.session.userId))return res.redirect('/?google=already-linked');
-    const picture=(()=>{try{const u=new URL(String(info.picture||''));return u.protocol==='https:'&&/(^|\\.)googleusercontent\\.com$/i.test(u.hostname)?u.toString().slice(0,1000):null;}catch{return null;}})();
+    const picture=(()=>{try{const u=new URL(String(info.picture||''));return u.protocol==='https:'&&/(^|\.)googleusercontent\.com$/i.test(u.hostname)?u.toString().slice(0,1000):null;}catch{return null;}})();
     if(!owner[0]){await q("INSERT INTO linked_accounts(user_id,provider,provider_user_id,provider_email,google_picture_url) VALUES(?,'GOOGLE',?,?,?)",[req.session.userId,String(info.sub),info.email||null,picture]);await audit(req,'GOOGLE_LINKED','user',req.session.userId,{email:info.email||null,has_picture:!!picture});}
     else await q("UPDATE linked_accounts SET provider_email=?,google_picture_url=COALESCE(?,google_picture_url) WHERE provider='GOOGLE' AND provider_user_id=? AND user_id=?",[info.email||null,picture,String(info.sub),req.session.userId]);
     delete req.session.googleOAuthState;delete req.session.googleOAuthMode;res.redirect('/?google=linked');
@@ -2679,7 +2679,7 @@ async function syncGoogleClassroomAnnouncements(){
       classroomCreatorCache.set(id,result);
       // Cache both successful and unavailable lookups so a large old class
       // history is not re-requested on every 15-second sync cycle.
-      classroomCreatorCacheGlobal.set(id,{value:result,expiresAt:Date.now()+(result.photoUrl?6:2)*60*60*1000});
+      classroomCreatorCacheGlobal.set(id,{value:result,expiresAt:Date.now()+(result.photoUrl?6*60*60:60)*1000});
       return result;
     }
     do{
@@ -2698,16 +2698,19 @@ async function syncGoogleClassroomAnnouncements(){
         if(Number.isNaN(created.getTime()))continue;
         const safeBody=body.slice(0,60000);
         const creator=await getClassroomCreator(item.creatorUserId);
-        const [previousCreatorPhoto]=await q('SELECT id,title,body,creator_photo_source_hash FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
+        const [previousCreatorPhoto]=await q('SELECT id,title,body,updated_at,creator_photo_source_hash FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
         const previous=previousCreatorPhoto[0]||null;
         const previousPhotoHash=previous?.creator_photo_source_hash||null;
-        const announcementChanged=!previous||String(previous.title||'')!==title||String(previous.body||'')!==safeBody;
+        const incomingUpdateTime=item.updateTime?new Date(item.updateTime).getTime():null;
+        const previousUpdateTime=previous?.updated_at?new Date(previous.updated_at).getTime():null;
+        const announcementChanged=!previous||String(previous.title||'')!==title||String(previous.body||'')!==safeBody||(incomingUpdateTime!==null&&Number.isFinite(previousUpdateTime)&&Math.abs(previousUpdateTime-incomingUpdateTime)>1000);
         await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_google_email,creator_photo_url,creator_photo_source_hash)
           VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-          ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_google_email=COALESCE(VALUES(creator_google_email),creator_google_email),creator_photo_url=VALUES(creator_photo_url),creator_photo_source_hash=VALUES(creator_photo_source_hash)`,
+          ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_google_email=COALESCE(VALUES(creator_google_email),creator_google_email),creator_photo_url=COALESCE(VALUES(creator_photo_url),creator_photo_url),creator_photo_source_hash=COALESCE(VALUES(creator_photo_source_hash),creator_photo_source_hash)`,
           [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id),creator.name,creator.email,creator.photoUrl,creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null]);
         const [savedAnnouncement]=await q('SELECT id FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
         const announcementId=Number(savedAnnouncement[0]?.id||0);
+        if(announcementChanged)pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_ANNOUNCEMENT_SYNC',announcementId});
         // Classroom photoUrl is often protected; fetch it server-side with the OAuth token
         // and cache a small WebP avatar so every signed-in student can display it reliably.
         if(announcementId && creator.photoUrl){
@@ -2730,10 +2733,9 @@ async function syncGoogleClassroomAnnouncements(){
               }else console.warn('Classroom creator photo download failed',{announcementId,status:photoResponse.status,contentType:photoType});
             }catch(photoError){console.warn('Classroom creator photo cache failed',{announcementId,message:photoError.message});}
           }
-        }else if(announcementId){
-          await q("DELETE FROM profile_images WHERE entity_type='classroom' AND entity_id=?",[announcementId]);
         }
         const keepKeys=[];
+        if(announcementChanged){
         for(const material of item.materials||[]){
           const drive=material?.driveFile?.driveFile;
           if(drive?.id){
@@ -2745,10 +2747,13 @@ async function syncGoogleClassroomAnnouncements(){
             if(/^https:\/\//i.test(href)){const key='link:'+crypto.createHash('sha256').update(String(item.id)+'|'+href).digest('hex');const label=String(material?.link?.title||material?.youtubeVideo?.title||href).slice(0,250);await q('INSERT INTO b4_classroom_attachments(announcement_id,attachment_key,title,original_name,mime_type,size_bytes,data,external_url) VALUES(?,?,?,?,?,0,NULL,?) ON DUPLICATE KEY UPDATE announcement_id=VALUES(announcement_id),title=VALUES(title),external_url=VALUES(external_url)',[announcementId,key,label,label,'text/uri-list',href]);keepKeys.push(key);}
           }
         }
-        if(keepKeys.length){const marks=keepKeys.map(()=>'?').join(',');await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=? AND attachment_key NOT IN ('+marks+')',[announcementId,...keepKeys]);}else await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=?',[announcementId]);
+        if(announcementChanged){
+          if(keepKeys.length){const marks=keepKeys.map(()=>'?').join(',');await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=? AND attachment_key NOT IN ('+marks+')',[announcementId,...keepKeys]);}else await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=?',[announcementId]);
+        }
+        }
         imported++;
-        if(announcementChanged||previousPhotoHash!==(creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null)){
-          pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_ANNOUNCEMENT_SYNC',announcementId});
+        if(previousPhotoHash!==(creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null)){
+          pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_CREATOR_PHOTO_SYNC',announcementId});
         }
       }
       pageToken=data.nextPageToken||null;
