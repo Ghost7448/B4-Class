@@ -701,7 +701,7 @@ async function syncLiveData(forceFull=false){
       return;
     }
     if(S.view==='announcements'){
-      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+(a.creator_name||a.creator_photo_url?renderAnnouncementAuthor(a):'')+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
+      patchLiveCards('#content > .grid',S.announcements,a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>(a.creator_name||a.creator_photo_url?renderAnnouncementAuthor(a):'')+'<h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>');
       return;
     }
     render();
@@ -902,7 +902,7 @@ function formatAnnouncementBody(value){
 function renderAnnouncementAuthor(a){
  const isClassroom=a.source==='GOOGLE_CLASSROOM';
  const name=esc(a.creator_name||(isClassroom?'Google Classroom':'B4 Class'));
- if(isClassroom)return '<div class="classroom-author classroom-author-classroom"><div><small>Posted by</small><strong>'+name+'</strong></div></div>';
+ if(isClassroom){const fallback=esc(String(BROKEN_IMAGE_FALLBACK||''));return '<div class="classroom-author classroom-author-classroom"><img src="'+fallback+'" alt="" loading="lazy"><div><small>Posted by</small><strong>'+name+'</strong></div></div>';}
  const photo=String(a.creator_photo_url||'').trim();
  const fallback=String(BROKEN_IMAGE_FALLBACK||'');
  const safeFallback=esc(fallback);
@@ -918,7 +918,7 @@ function renderClassroomAttachments(items){
   return '<a class="classroom-attachment-file" href="'+url+'" target="_blank" rel="noopener noreferrer">'+icon+' '+name+' <span>↗</span></a>';
  }).join('')+'</div>';
 }
-function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>'+esc(a.title)+'</h3>'+(a.creator_name||a.creator_photo_url?renderAnnouncementAuthor(a):'')+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
+function announcementsV(){return title(t('announcements'),'class announcements.',can('MANAGE_ANNOUNCEMENTS')?'<button class="btn primary" onclick="announcementEdit()">＋ '+t('add')+'</button>':'')+'<div class="grid">'+S.announcements.map(a=>'<article class="card" data-live-id="'+esc(a.id)+'"><div class="head"><span class="badge">'+esc(a.category||'General')+'</span><small>'+esc(announcementTime(a.created_at))+'</small></div><h3>(a.creator_name||a.creator_photo_url?renderAnnouncementAuthor(a):'')+'<h3>'+esc(a.title)+'</h3>'+formatAnnouncementBody(a.body||'')+renderClassroomAttachments(a.attachments)+(can('MANAGE_ANNOUNCEMENTS')?'<div class="actions-row"><button class="btn ghost" onclick="announcementEdit('+a.id+')">Edit</button><button class="btn danger" onclick="delAPI(\'/api/admin/announcements/'+a.id+'\',\'Announcement deleted\')">Delete</button></div>':'')+'</article>').join('')+'</div>'}
 function chatTime(value){
   const d=new Date(value);
   if(!Number.isFinite(d.getTime()))return String(value||'');
