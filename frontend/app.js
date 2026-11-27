@@ -1398,8 +1398,11 @@ async function syncPushSubscription(showErrors=true){
 }
 async function sendTestPush(){
   try{
-    toast(S.lang==='ar'?'جاري إرسال اختبار الإشعار…':'Sending test notification…');
+    toast(S.lang==='ar'?'جاري التأكد من اشتراك الجهاز ثم إرسال الاختبار…':'Checking this device subscription and sending a test…');
+    const ready=await syncPushSubscription(true);
+    if(!ready)return;
     const d=await api('/api/notifications/push/test',{method:'POST',body:JSON.stringify({})});
+    if(!d?.ok)throw new Error(d?.message||'Push test was not accepted by the push service');
     toast((S.lang==='ar'?'تم إرسال الاختبار ✓ ':'Test push sent ✓ ')+(d.message||''));
   }catch(e){
     toast((S.lang==='ar'?'فشل اختبار الإشعار: ':'Push test failed: ')+(e.message||'Unknown error'));
