@@ -370,6 +370,10 @@ const PERMISSION_DEFS = [
 async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS b4_classroom_connection(id TINYINT UNSIGNED PRIMARY KEY,course_id VARCHAR(80) NOT NULL,account_email VARCHAR(255) NULL,refresh_token_enc TEXT NOT NULL,last_synced_at DATETIME NULL,last_error VARCHAR(500) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_classroom_announcements(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,google_announcement_id VARCHAR(180) NOT NULL UNIQUE,title VARCHAR(220) NOT NULL,body MEDIUMTEXT NULL,created_at DATETIME NULL,updated_at DATETIME NULL,created_by_email VARCHAR(255) NULL,course_id VARCHAR(80) NOT NULL,source_url VARCHAR(500) NULL,synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_classroom_course_created(course_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  const [creatorNameColumn]=await q("SHOW COLUMNS FROM b4_classroom_announcements LIKE 'creator_name'");
+  if(!creatorNameColumn.length)await q("ALTER TABLE b4_classroom_announcements ADD COLUMN creator_name VARCHAR(255) NULL");
+  const [creatorPhotoColumn]=await q("SHOW COLUMNS FROM b4_classroom_announcements LIKE 'creator_photo_url'");
+  if(!creatorPhotoColumn.length)await q("ALTER TABLE b4_classroom_announcements ADD COLUMN creator_photo_url VARCHAR(1000) NULL");
   await q("CREATE TABLE IF NOT EXISTS b4_classroom_attachments(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,announcement_id BIGINT UNSIGNED NOT NULL,attachment_key VARCHAR(500) NOT NULL UNIQUE,drive_file_id VARCHAR(180) NULL,title VARCHAR(255) NOT NULL,original_name VARCHAR(255) NULL,mime_type VARCHAR(160) NOT NULL DEFAULT 'application/octet-stream',size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,data LONGBLOB NULL,external_url VARCHAR(1000) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_classroom_attachment_announcement(announcement_id),FOREIGN KEY(announcement_id) REFERENCES b4_classroom_announcements(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_account_link_tokens(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,token_hash CHAR(64) NOT NULL UNIQUE,expires_at DATETIME NOT NULL,used_at DATETIME NULL,created_by BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE,INDEX idx_account_link_expiry(expires_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS exam_security_events(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,attempt_id BIGINT UNSIGNED NOT NULL,exam_id BIGINT UNSIGNED NOT NULL,user_id BIGINT UNSIGNED NOT NULL,event_type VARCHAR(40) NOT NULL,source VARCHAR(60) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_exam_security_attempt(attempt_id,event_type,created_at),INDEX idx_exam_security_exam(exam_id,created_at),FOREIGN KEY(attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,FOREIGN KEY(exam_id) REFERENCES exams(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -653,7 +657,7 @@ async function getBootstrap(req) {
   `);
   const [classroomAnnouncements] = await q(`
     SELECT id AS classroom_id,-id AS id,title,body,'Google Classroom' AS category,created_at,NULL AS created_by,
-           'GOOGLE_CLASSROOM' AS source,source_url
+           'GOOGLE_CLASSROOM' AS source,source_url,creator_name,creator_photo_url
     FROM b4_classroom_announcements WHERE course_id=? ORDER BY created_at DESC LIMIT 30
   `,[CLASSROOM_COURSE_ID]);
   if(classroomAnnouncements.length){
@@ -2565,6 +2569,22 @@ async function syncGoogleClassroomAnnouncements(){
     const tokens=await tokenRes.json();if(!tokenRes.ok||!tokens.access_token)throw new Error('Google access token refresh failed');
     let pageToken=null,imported=0;
     const currentAnnouncementIds=[];
+    const classroomCreatorCache=new Map();
+    async function getClassroomCreator(userId){
+      const id=String(userId||'');if(!id)return {name:'Google Classroom',photoUrl:null};
+      if(classroomCreatorCache.has(id))return classroomCreatorCache.get(id);
+      let profile=null;
+      for(const role of ['teachers','students']){
+        try{
+          const profileUrl='https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/'+role+'/'+encodeURIComponent(id)+'?fields=userProfile(name(fullName),photoUrl,emailAddress)';
+          const profileResponse=await fetch(profileUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
+          const profileData=await profileResponse.json();
+          if(profileResponse.ok&&profileData.userProfile){profile=profileData.userProfile;break;}
+        }catch{}
+      }
+      const result={name:String(profile?.name?.fullName||profile?.emailAddress||'Google Classroom').slice(0,255),photoUrl:/^https:\/\//i.test(String(profile?.photoUrl||''))?String(profile.photoUrl).slice(0,1000):null};
+      classroomCreatorCache.set(id,result);return result;
+    }
     do{
       const url=new URL('https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/announcements');
       url.searchParams.set('pageSize','100');url.searchParams.set('orderBy','updateTime desc');
@@ -2580,10 +2600,11 @@ async function syncGoogleClassroomAnnouncements(){
         const created=item.creationTime?new Date(item.creationTime):new Date();
         if(Number.isNaN(created.getTime()))continue;
         const safeBody=body.slice(0,60000);
-        await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url)
-          VALUES(?,?,?,?,?,?,?,?)
-          ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url)`,
-          [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id)]);
+        const creator=await getClassroomCreator(item.creatorUserId);
+        await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_photo_url)
+          VALUES(?,?,?,?,?,?,?,?,?,?)
+          ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_photo_url=VALUES(creator_photo_url)`,
+          [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id),creator.name,creator.photoUrl]);
         const [savedAnnouncement]=await q('SELECT id FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
         const announcementId=Number(savedAnnouncement[0]?.id||0);const keepKeys=[];
         for(const material of item.materials||[]){
