@@ -926,13 +926,22 @@ function renderAnnouncementComments(a){
 }
 async function editAnnouncementComment(commentId,announcementId){
  const item=S.announcements.find(a=>Number(a.id)===Number(announcementId));const comment=item?.comments?.find(c=>Number(c.id)===Number(commentId));if(!comment)return;
- const next=prompt(S.lang==='ar'?'عدّل التعليق':'Edit comment',comment.body||'');if(next===null)return;if(!next.trim())return toast(S.lang==='ar'?'التعليق مينفعش يكون فاضي':'Comment cannot be empty');
- try{const r=await api('/api/announcements/comments/'+commentId,{method:'PATCH',body:JSON.stringify({body:next.trim()})});Object.assign(comment,r.comment);render();toast(S.lang==='ar'?'تم تعديل التعليق':'Comment updated')}
- catch(e){toast(e.message||'Could not edit comment')}
+ const ar=S.lang==='ar';
+ modal('<div class="comment-edit-modal"><div class="comment-edit-heading"><span class="comment-edit-icon">✎</span><div><h2>'+(ar?'تعديل التعليق':'Edit comment')+'</h2><p>'+(ar?'عدّل نص تعليقك قبل الحفظ':'Update your comment before saving')+'</p></div></div><textarea class="comment-edit-input" maxlength="2000" rows="5">'+esc(comment.body||'')+'</textarea><div class="comment-edit-actions"><button type="button" class="btn ghost comment-edit-cancel">'+(ar?'إلغاء':'Cancel')+'</button><button type="button" class="btn primary comment-edit-save">'+(ar?'حفظ التعديل':'Save changes')+'</button></div></div>');
+ const field=$('#modal .comment-edit-input');
+ $('#modal .comment-edit-cancel')?.addEventListener('click',()=>close());
+ $('#modal .comment-edit-save')?.addEventListener('click',async()=>{
+  const next=field?.value?.trim();if(!next)return toast(ar?'التعليق مينفعش يكون فاضي':'Comment cannot be empty');
+  const save=$('#modal .comment-edit-save');if(save)save.disabled=true;
+  try{const r=await api('/api/announcements/comments/'+commentId,{method:'PATCH',body:JSON.stringify({body:next})});Object.assign(comment,r.comment);close();render();toast(ar?'تم تعديل التعليق':'Comment updated')}
+  catch(e){if(save)save.disabled=false;toast(e.message||'Could not edit comment')}
+ });
 }
 async function deleteAnnouncementComment(commentId,announcementId){
- if(!confirm(S.lang==='ar'?'متأكد إنك عايز تمسح التعليق؟':'Delete this comment?'))return;
- try{await api('/api/announcements/comments/'+commentId,{method:'DELETE'});const item=S.announcements.find(a=>Number(a.id)===Number(announcementId));if(item)item.comments=(item.comments||[]).filter(c=>Number(c.id)!==Number(commentId));render();toast(S.lang==='ar'?'تم حذف التعليق':'Comment deleted')}
+ const ar=S.lang==='ar';
+ const ok=await confirmAction(ar?'متأكد إنك عايز تمسح التعليق؟':'Are you sure you want to delete this comment?',{title:ar?'حذف التعليق':'Delete comment',confirmText:ar?'حذف':'Delete',cancelText:ar?'إلغاء':'Cancel',danger:true});
+ if(!ok)return;
+ try{await api('/api/announcements/comments/'+commentId,{method:'DELETE'});const item=S.announcements.find(a=>Number(a.id)===Number(announcementId));if(item)item.comments=(item.comments||[]).filter(c=>Number(c.id)!==Number(commentId));render();toast(ar?'تم حذف التعليق':'Comment deleted')}
  catch(e){toast(e.message||'Could not delete comment')}
 }
 async function postAnnouncementComment(e,id){
