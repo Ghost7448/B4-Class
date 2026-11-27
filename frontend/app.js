@@ -921,8 +921,19 @@ function renderAnnouncementComments(a){
   const comments=Array.isArray(a.comments)?a.comments:[];
   const ar=S.lang==='ar';
   return '<section class="announcement-comments"><div class="announcement-comments-title">💬 '+(ar?'التعليقات':'Comments')+' <span>'+comments.length+'</span></div>'+
-   (comments.length?'<div class="announcement-comment-list">'+comments.map(x=>'<div class="announcement-comment"><b>'+esc(x.author_name||'B4 User')+'</b><p>'+esc(x.body||'')+'</p><small>'+esc(announcementTime(x.created_at))+'</small></div>').join('')+'</div>':'<p class="muted announcement-no-comments">'+(ar?'مفيش تعليقات لسه':'No comments yet')+'</p>')+
+   (comments.length?'<div class="announcement-comment-list">'+comments.map(x=>'<div class="announcement-comment"><div class="announcement-comment-top"><b>'+esc(x.author_name||'B4 User')+'</b>'+(S.me&&Number(x.user_id)===Number(S.me.id)?'<div class="announcement-comment-tools"><button type="button" class="btn ghost" onclick="editAnnouncementComment('+Number(x.id)+','+Number(a.id)+')">'+(ar?'تعديل':'Edit')+'</button><button type="button" class="btn danger" onclick="deleteAnnouncementComment('+Number(x.id)+','+Number(a.id)+')">'+(ar?'مسح':'Delete')+'</button></div>':'')+'</div><p>'+esc(x.body||'')+'</p><small>'+esc(announcementTime(x.created_at))+'</small></div>').join('')+'</div>':'<p class="muted announcement-no-comments">'+(ar?'مفيش تعليقات لسه':'No comments yet')+'</p>')+
    (S.me?'<form class="announcement-comment-form" onsubmit="postAnnouncementComment(event,'+Number(a.id)+')"><input name="comment" maxlength="2000" placeholder="'+(ar?'اكتب تعليقك...':'Write a comment...')+'" required><button class="btn primary" type="submit">'+(ar?'إرسال':'Comment')+'</button></form>':'<small class="muted">'+(ar?'سجل الدخول للتعليق':'Log in to comment')+'</small>')+'</section>';
+}
+async function editAnnouncementComment(commentId,announcementId){
+ const item=S.announcements.find(a=>Number(a.id)===Number(announcementId));const comment=item?.comments?.find(c=>Number(c.id)===Number(commentId));if(!comment)return;
+ const next=prompt(S.lang==='ar'?'عدّل التعليق':'Edit comment',comment.body||'');if(next===null)return;if(!next.trim())return toast(S.lang==='ar'?'التعليق مينفعش يكون فاضي':'Comment cannot be empty');
+ try{const r=await api('/api/announcements/comments/'+commentId,{method:'PATCH',body:JSON.stringify({body:next.trim()})});Object.assign(comment,r.comment);render();toast(S.lang==='ar'?'تم تعديل التعليق':'Comment updated')}
+ catch(e){toast(e.message||'Could not edit comment')}
+}
+async function deleteAnnouncementComment(commentId,announcementId){
+ if(!confirm(S.lang==='ar'?'متأكد إنك عايز تمسح التعليق؟':'Delete this comment?'))return;
+ try{await api('/api/announcements/comments/'+commentId,{method:'DELETE'});const item=S.announcements.find(a=>Number(a.id)===Number(announcementId));if(item)item.comments=(item.comments||[]).filter(c=>Number(c.id)!==Number(commentId));render();toast(S.lang==='ar'?'تم حذف التعليق':'Comment deleted')}
+ catch(e){toast(e.message||'Could not delete comment')}
 }
 async function postAnnouncementComment(e,id){
   e.preventDefault();const form=e.currentTarget,field=form.elements.comment,body=field.value.trim();if(!body)return;
