@@ -370,6 +370,7 @@ const PERMISSION_DEFS = [
 async function ensurePermissionSchema() {
   await q("CREATE TABLE IF NOT EXISTS b4_classroom_connection(id TINYINT UNSIGNED PRIMARY KEY,course_id VARCHAR(80) NOT NULL,account_email VARCHAR(255) NULL,refresh_token_enc TEXT NOT NULL,last_synced_at DATETIME NULL,last_error VARCHAR(500) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_classroom_announcements(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,google_announcement_id VARCHAR(180) NOT NULL UNIQUE,title VARCHAR(220) NOT NULL,body MEDIUMTEXT NULL,created_at DATETIME NULL,updated_at DATETIME NULL,created_by_email VARCHAR(255) NULL,course_id VARCHAR(80) NOT NULL,source_url VARCHAR(500) NULL,synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,INDEX idx_classroom_course_created(course_id,created_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+  await q("CREATE TABLE IF NOT EXISTS b4_classroom_attachments(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,announcement_id BIGINT UNSIGNED NOT NULL,attachment_key VARCHAR(500) NOT NULL UNIQUE,drive_file_id VARCHAR(180) NULL,title VARCHAR(255) NOT NULL,original_name VARCHAR(255) NULL,mime_type VARCHAR(160) NOT NULL DEFAULT 'application/octet-stream',size_bytes BIGINT UNSIGNED NOT NULL DEFAULT 0,data LONGBLOB NULL,external_url VARCHAR(1000) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_classroom_attachment_announcement(announcement_id),FOREIGN KEY(announcement_id) REFERENCES b4_classroom_announcements(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_account_link_tokens(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,user_id BIGINT UNSIGNED NOT NULL,token_hash CHAR(64) NOT NULL UNIQUE,expires_at DATETIME NOT NULL,used_at DATETIME NULL,created_by BIGINT UNSIGNED NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,FOREIGN KEY(created_by) REFERENCES users(id) ON DELETE CASCADE,INDEX idx_account_link_expiry(expires_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS exam_security_events(id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,attempt_id BIGINT UNSIGNED NOT NULL,exam_id BIGINT UNSIGNED NOT NULL,user_id BIGINT UNSIGNED NOT NULL,event_type VARCHAR(40) NOT NULL,source VARCHAR(60) NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,INDEX idx_exam_security_attempt(attempt_id,event_type,created_at),INDEX idx_exam_security_exam(exam_id,created_at),FOREIGN KEY(attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,FOREIGN KEY(exam_id) REFERENCES exams(id) ON DELETE CASCADE,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
   await q("CREATE TABLE IF NOT EXISTS b4_exam_drafts(user_id BIGINT UNSIGNED PRIMARY KEY,draft_json LONGTEXT NOT NULL,updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
@@ -651,10 +652,18 @@ async function getBootstrap(req) {
     WHERE class_name='B4' ORDER BY created_at DESC LIMIT 20
   `);
   const [classroomAnnouncements] = await q(`
-    SELECT -id AS id,title,body,'Google Classroom' AS category,created_at,NULL AS created_by,
+    SELECT id AS classroom_id,-id AS id,title,body,'Google Classroom' AS category,created_at,NULL AS created_by,
            'GOOGLE_CLASSROOM' AS source,source_url
     FROM b4_classroom_announcements WHERE course_id=? ORDER BY created_at DESC LIMIT 30
   `,[CLASSROOM_COURSE_ID]);
+  if(classroomAnnouncements.length){
+    const ids=classroomAnnouncements.map(a=>Number(a.classroom_id));
+    const marks=ids.map(()=>'?').join(',');
+    const [files]=await q(`SELECT id,announcement_id,title,original_name,mime_type,size_bytes,external_url FROM b4_classroom_attachments WHERE announcement_id IN (${marks}) ORDER BY id`,ids);
+    const grouped=new Map();
+    for(const file of files){const key=Number(file.announcement_id);if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push({...file,url:file.external_url||('/api/classroom/files/'+file.id),is_image:String(file.mime_type||'').startsWith('image/')});}
+    for(const announcement of classroomAnnouncements)announcement.attachments=grouped.get(Number(announcement.classroom_id))||[];
+  }
   const announcements=[...manualAnnouncements.map(a=>({...a,source:'B4'})),...classroomAnnouncements]
     .sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0)).slice(0,30);
   const [schedule] = await q(`SELECT day_name,p1,p2,p3,p4,p5,p6,p7,p8 FROM schedule WHERE class_name='B4' ORDER BY day_order`);
@@ -770,6 +779,20 @@ app.delete('/api/notifications/read',requireAuth,async(req,res)=>{await q('DELET
 app.delete('/api/notifications/:id',requireAuth,async(req,res)=>{const id=Number(req.params.id);if(!Number.isSafeInteger(id))return res.status(400).json({error:'Invalid notification'});await q('DELETE FROM notifications WHERE id=? AND user_id=?',[id,req.session.userId]);res.json({ok:true})});
 
 app.get('/api/time',(req,res)=>res.json(cairoNow()));
+app.get('/api/classroom/files/:id',requireAuth,async(req,res)=>{
+  try{
+    const id=Number(req.params.id);
+    if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({error:'Invalid attachment'});
+    const [rows]=await q('SELECT title,mime_type,data FROM b4_classroom_attachments WHERE id=? LIMIT 1',[id]);
+    if(!rows[0]||!rows[0].data)return res.status(404).json({error:'Attachment not found'});
+    res.setHeader('Content-Type',rows[0].mime_type||'application/octet-stream');
+    res.setHeader('Content-Disposition',"inline; filename*=UTF-8''"+encodeURIComponent(rows[0].title||'attachment'));
+    res.setHeader('X-Content-Type-Options','nosniff');
+    res.setHeader('Cache-Control','private, max-age=3600');
+    res.send(rows[0].data);
+  }catch(e){console.error('Classroom attachment read failed:',e.message);res.status(500).json({error:'Could not open attachment'});}
+});
+
 app.get('/api/bootstrap', async (req, res) => {
   try {
     res.json(await getBootstrap(req));
@@ -2494,6 +2517,31 @@ async function checkSchoolEndPushSchedule(){
 }
 
 
+async function saveClassroomDriveAttachment(accessToken,announcementId,driveFile){
+  const fileId=String(driveFile?.id||'');if(!fileId)return null;
+  const key='drive:'+fileId;
+  const [existing]=await q('SELECT id FROM b4_classroom_attachments WHERE attachment_key=? LIMIT 1',[key]);
+  if(existing[0])return Number(existing[0].id);
+  const metaResponse=await fetch('https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'?fields=id,name,mimeType,size,webViewLink',{headers:{Authorization:'Bearer '+accessToken}});
+  const meta=await metaResponse.json();if(!metaResponse.ok)throw new Error(meta.error?.message||'Drive metadata request failed');
+  const exportTypes={'application/vnd.google-apps.document':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.google-apps.spreadsheet':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.google-apps.presentation':'application/vnd.openxmlformats-officedocument.presentationml.presentation'};
+  const exportMime=exportTypes[meta.mimeType];
+  const downloadUrl=exportMime?'https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'/export?mimeType='+encodeURIComponent(exportMime):'https://www.googleapis.com/drive/v3/files/'+encodeURIComponent(fileId)+'?alt=media';
+  const response=await fetch(downloadUrl,{headers:{Authorization:'Bearer '+accessToken}});
+  if(!response.ok)throw new Error('Drive download failed ('+response.status+')');
+  if(Number(response.headers.get('content-length')||0)>15*1024*1024)throw new Error('File is larger than 15 MB');
+  let buffer=Buffer.from(await response.arrayBuffer());if(buffer.length>15*1024*1024)throw new Error('File is larger than 15 MB');
+  let mime=exportMime||meta.mimeType||'application/octet-stream';
+  let name=String(meta.name||driveFile.title||'Classroom attachment').slice(0,250);
+  if(exportMime){const ext=exportMime.includes('wordprocessingml')?'.docx':exportMime.includes('spreadsheetml')?'.xlsx':'.pptx';if(!name.toLowerCase().endsWith(ext))name+=ext;}
+  if(mime.startsWith('image/')&&mime!=='image/gif'){
+    try{const compressed=await sharp(buffer,{failOn:'error'}).rotate().resize({width:1920,height:1920,fit:'inside',withoutEnlargement:true}).webp({quality:78,effort:4}).toBuffer();if(compressed.length<buffer.length){buffer=compressed;mime='image/webp';name=name.replace(/\.[^.]+$/,'')+'.webp';}}
+    catch(error){console.warn('Classroom image compression skipped:',error.message);}
+  }
+  await q('INSERT INTO b4_classroom_attachments(announcement_id,attachment_key,drive_file_id,title,original_name,mime_type,size_bytes,data,external_url) VALUES(?,?,?,?,?,?,?,?,NULL) ON DUPLICATE KEY UPDATE announcement_id=VALUES(announcement_id),title=VALUES(title),original_name=VALUES(original_name),mime_type=VALUES(mime_type),size_bytes=VALUES(size_bytes),data=VALUES(data)',[announcementId,key,fileId,name,String(meta.name||driveFile.title||name).slice(0,250),mime,buffer.length,buffer]);
+  const [saved]=await q('SELECT id FROM b4_classroom_attachments WHERE attachment_key=? LIMIT 1',[key]);return saved[0]?Number(saved[0].id):null;
+}
+
 let classroomSyncRunning=false;
 async function syncGoogleClassroomAnnouncements(){
   if(classroomSyncRunning||!process.env.GOOGLE_CLIENT_ID||!process.env.GOOGLE_CLIENT_SECRET)return;
@@ -2527,6 +2575,20 @@ async function syncGoogleClassroomAnnouncements(){
           VALUES(?,?,?,?,?,?,?,?)
           ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url)`,
           [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id)]);
+        const [savedAnnouncement]=await q('SELECT id FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
+        const announcementId=Number(savedAnnouncement[0]?.id||0);const keepKeys=[];
+        for(const material of item.materials||[]){
+          const drive=material?.driveFile?.driveFile;
+          if(drive?.id){
+            const key='drive:'+String(drive.id);
+            try{await saveClassroomDriveAttachment(tokens.access_token,announcementId,drive);keepKeys.push(key);}
+            catch(error){console.warn('Classroom Drive attachment not copied:',drive.title||drive.id,error.message);const href=String(drive.alternateLink||'');if(/^https:\/\//i.test(href)){const fallbackKey='link:'+crypto.createHash('sha256').update(String(item.id)+'|'+href).digest('hex');const label=String(drive.title||'Google Drive file').slice(0,250);await q('INSERT INTO b4_classroom_attachments(announcement_id,attachment_key,title,original_name,mime_type,size_bytes,data,external_url) VALUES(?,?,?,?,?,0,NULL,?) ON DUPLICATE KEY UPDATE announcement_id=VALUES(announcement_id),title=VALUES(title),external_url=VALUES(external_url)',[announcementId,fallbackKey,label,label,'text/uri-list',href]);keepKeys.push(fallbackKey);}}
+          }else{
+            const href=String(material?.link?.url||material?.youtubeVideo?.alternateLink||'');
+            if(/^https:\/\//i.test(href)){const key='link:'+crypto.createHash('sha256').update(String(item.id)+'|'+href).digest('hex');const label=String(material?.link?.title||material?.youtubeVideo?.title||href).slice(0,250);await q('INSERT INTO b4_classroom_attachments(announcement_id,attachment_key,title,original_name,mime_type,size_bytes,data,external_url) VALUES(?,?,?,?,?,0,NULL,?) ON DUPLICATE KEY UPDATE announcement_id=VALUES(announcement_id),title=VALUES(title),external_url=VALUES(external_url)',[announcementId,key,label,label,'text/uri-list',href]);keepKeys.push(key);}
+          }
+        }
+        if(keepKeys.length){const marks=keepKeys.map(()=>'?').join(',');await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=? AND attachment_key NOT IN ('+marks+')',[announcementId,...keepKeys]);}else await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=?',[announcementId]);
         imported++;
       }
       pageToken=data.nextPageToken||null;
