@@ -903,7 +903,9 @@ function renderAnnouncementAuthor(a){
  const isClassroom=a.source==='GOOGLE_CLASSROOM';
  const name=esc(a.creator_name||(isClassroom?'Google Classroom':'B4 Class'));
  const photo=String(a.creator_photo_url||'').trim();
- const avatar=photo?'<img src="'+esc(photo)+'" alt="" loading="lazy">':'<img src="'+BROKEN_IMAGE_FALLBACK+'" alt="" loading="lazy">';
+ const fallback=String(BROKEN_IMAGE_FALLBACK||'');
+ const safeFallback=esc(fallback);
+ const avatar=photo?'<img src="'+esc(photo)+'" alt="" loading="lazy" onerror="this.onerror=null;this.src=\''+safeFallback+'\'">':'<img src="'+safeFallback+'" alt="" loading="lazy">';
  return '<div class="classroom-author">'+avatar+'<div><small>Posted by</small><strong>'+name+'</strong></div></div>';
 }
 function renderClassroomAttachments(items){
