@@ -397,7 +397,7 @@ function liveDataSignature(){
     assignments:S.assignments.map(x=>[x.id,x.title,x.status,x.description,x.due_at,x.attachment_id,x.submission_id,x.submission_file_id,x.submission_name,x.score]),
     resources:S.resources.map(x=>[x.id,x.title,x.description,x.url,x.file_url,x.filename]),
     exams:S.exams.map(x=>[x.id,x.title,x.status,x.starts_at,x.ends_at,x.duration_minutes]),
-    announcements:S.announcements.map(x=>[x.id,x.title,x.body,x.category]),
+    announcements:S.announcements.map(x=>[x.id,x.title,x.body,x.category,x.source,x.creator_name,x.creator_photo_url,(x.attachments||[]).map(f=>[f.id,f.title,f.url,f.mime_type])]),
     notifications:S.notifications.map(x=>[x.id,x.title,x.body,x.read_at]),
     developers:S.developers.map(x=>[x.id,x.name,x.title,x.title2,x.avatar_url])
   })
