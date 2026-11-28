@@ -2779,10 +2779,9 @@ async function syncGoogleClassroomAnnouncements(){
       classroomCreatorCacheGlobal.set(id,{value:result,expiresAt:Date.now()+(result.photoUrl?6*60*60:60)*1000});
       return result;
     }
-    // Reuse pageToken and imported declared at the start of this sync.
+    // Reuse the sync-level pageToken and seenAnnouncementIds declarations.
     // Fetch every page for reliable deletion detection, but fully process only
     // the ten newest announcements to avoid expensive historical profile/file work.
-    const seenAnnouncementIds=new Set();
     const allClassroomItems=[];
     do{
       const url=new URL('https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/announcements');
