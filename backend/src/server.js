@@ -2779,7 +2779,7 @@ async function syncGoogleClassroomAnnouncements(){
       classroomCreatorCacheGlobal.set(id,{value:result,expiresAt:Date.now()+(result.photoUrl?6*60*60:60)*1000});
       return result;
     }
-    let pageToken=null,imported=0;
+    // Reuse pageToken and imported declared at the start of this sync.
     // Fetch every page for reliable deletion detection, but fully process only
     // the ten newest announcements to avoid expensive historical profile/file work.
     const seenAnnouncementIds=new Set();
