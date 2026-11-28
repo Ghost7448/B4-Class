@@ -2895,13 +2895,23 @@ async function syncGoogleClassroomAnnouncements(){
     let prunedAnnouncements=0;
     if(retainedClassroomIds.length){
       const keepMarks=retainedClassroomIds.map(()=>'?').join(',');
-      const [pruned]=await q('DELETE FROM b4_classroom_announcements WHERE course_id=? AND id NOT IN ('+keepMarks+')',[String(rows[0].course_id),...retainedClassroomIds]);
-      prunedAnnouncements=Number(pruned?.affectedRows||0);
-      await q("DELETE FROM profile_images WHERE entity_type='classroom' AND entity_id NOT IN ("+keepMarks+")",retainedClassroomIds);
+      const [rowsToPrune]=await q('SELECT id FROM b4_classroom_announcements WHERE course_id=? AND id NOT IN ('+keepMarks+')',[String(rows[0].course_id),...retainedClassroomIds]);
+      const pruneIds=rowsToPrune.map(row=>Number(row.id));
+      if(pruneIds.length){
+        const pruneMarks=pruneIds.map(()=>'?').join(',');
+        const [pruned]=await q('DELETE FROM b4_classroom_announcements WHERE course_id=? AND id IN ('+pruneMarks+')',[String(rows[0].course_id),...pruneIds]);
+        prunedAnnouncements=Number(pruned?.affectedRows||0);
+        await q("DELETE FROM profile_images WHERE entity_type='classroom' AND entity_id IN ("+pruneMarks+")",pruneIds);
+      }
     }else{
-      const [pruned]=await q('DELETE FROM b4_classroom_announcements WHERE course_id=?',[String(rows[0].course_id)]);
-      prunedAnnouncements=Number(pruned?.affectedRows||0);
-      await q("DELETE FROM profile_images WHERE entity_type='classroom'");
+      const [rowsToPrune]=await q('SELECT id FROM b4_classroom_announcements WHERE course_id=?',[String(rows[0].course_id)]);
+      const pruneIds=rowsToPrune.map(row=>Number(row.id));
+      if(pruneIds.length){
+        const pruneMarks=pruneIds.map(()=>'?').join(',');
+        const [pruned]=await q('DELETE FROM b4_classroom_announcements WHERE course_id=? AND id IN ('+pruneMarks+')',[String(rows[0].course_id),...pruneIds]);
+        prunedAnnouncements=Number(pruned?.affectedRows||0);
+        await q("DELETE FROM profile_images WHERE entity_type='classroom' AND entity_id IN ("+pruneMarks+")",pruneIds);
+      }
     }
     if(prunedAnnouncements){
       pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_ANNOUNCEMENTS_PRUNED',count:prunedAnnouncements});
