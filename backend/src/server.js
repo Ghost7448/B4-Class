@@ -700,7 +700,7 @@ async function getBootstrap(req) {
     FROM b4_classroom_announcements a
     LEFT JOIN profile_images pi ON pi.entity_type='classroom' AND pi.entity_id=a.id
     LEFT JOIN linked_accounts la ON la.provider='GOOGLE' AND (la.provider_user_id=a.created_by_email OR LOWER(la.provider_email)=LOWER(a.creator_google_email))
-    WHERE a.course_id=? ORDER BY a.created_at DESC LIMIT 30
+    WHERE a.course_id=? ORDER BY a.created_at DESC LIMIT 10
   `,[CLASSROOM_COURSE_ID]);
   if(classroomAnnouncements.length){
     const ids=classroomAnnouncements.map(a=>Number(a.classroom_id));
@@ -2779,6 +2779,11 @@ async function syncGoogleClassroomAnnouncements(){
       classroomCreatorCacheGlobal.set(id,{value:result,expiresAt:Date.now()+(result.photoUrl?6*60*60:60)*1000});
       return result;
     }
+    let pageToken=null,imported=0;
+    // Fetch every page for reliable deletion detection, but fully process only
+    // the ten newest announcements to avoid expensive historical profile/file work.
+    const seenAnnouncementIds=new Set();
+    const allClassroomItems=[];
     do{
       const url=new URL('https://classroom.googleapis.com/v1/courses/'+encodeURIComponent(rows[0].course_id)+'/announcements');
       url.searchParams.set('pageSize','100');url.searchParams.set('orderBy','updateTime desc');
@@ -2786,96 +2791,65 @@ async function syncGoogleClassroomAnnouncements(){
       if(pageToken)url.searchParams.set('pageToken',pageToken);
       const response=await fetch(url,{headers:{Authorization:'Bearer '+tokens.access_token}});
       const data=await response.json();if(!response.ok)throw new Error(data.error?.message||'Google Classroom announcements request failed');
-      for(const item of data.announcements||[]){
-        if(!item.id)continue;
-        // Scan every page, not only recent updates: the full set is needed
-        // to detect announcements that were deleted in Google Classroom.
-        seenAnnouncementIds.add(String(item.id));
-        const classroomText=String(item.text||'').replace(/\r\n?/g,'\n').trim();
-        const classroomLines=classroomText.split('\n');
-        const firstContentLine=classroomLines.findIndex(line=>line.trim());
-        const remainingText=firstContentLine>=0?classroomLines.slice(firstContentLine+1).join('\n').trim():'';
-        // Classroom announcements have one text field, not separate title/body fields.
-        // Use the first line as the title and the remaining lines as the description.
-        // For one-line announcements, keep all text in the description to avoid duplication.
-        const title=remainingText
-          ? classroomLines[firstContentLine].trim().slice(0,220)||'إعلان من Google Classroom'
-          : 'إعلان من Google Classroom';
-        const body=remainingText||classroomText;
-        const created=item.creationTime?new Date(item.creationTime):new Date();
-        if(Number.isNaN(created.getTime()))continue;
-        const safeBody=body.slice(0,60000);
-        const creator=await getClassroomCreator(item.creatorUserId);
-        const [previousCreatorPhoto]=await q('SELECT id,title,body,updated_at,creator_photo_source_hash FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
-        const previous=previousCreatorPhoto[0]||null;
-        const previousPhotoHash=previous?.creator_photo_source_hash||null;
-        const incomingUpdateTime=item.updateTime?new Date(item.updateTime).getTime():null;
-        const previousUpdateTime=previous?.updated_at?new Date(previous.updated_at).getTime():null;
-        const announcementChanged=!previous||String(previous.title||'')!==title||String(previous.body||'')!==safeBody||(incomingUpdateTime!==null&&Number.isFinite(previousUpdateTime)&&Math.abs(previousUpdateTime-incomingUpdateTime)>1000);
-        await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_google_email,creator_photo_url,creator_photo_source_hash)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
-          ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_google_email=COALESCE(VALUES(creator_google_email),creator_google_email),creator_photo_url=COALESCE(VALUES(creator_photo_url),creator_photo_url),creator_photo_source_hash=COALESCE(VALUES(creator_photo_source_hash),creator_photo_source_hash)`,
-          [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id),creator.name,creator.email,creator.photoUrl,creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null]);
-        const [savedAnnouncement]=await q('SELECT id FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
-        const announcementId=Number(savedAnnouncement[0]?.id||0);
-        if(announcementChanged)pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_ANNOUNCEMENT_SYNC',announcementId});
-        // Classroom photoUrl is often protected; fetch it server-side with the OAuth token
-        // and cache a small WebP avatar so every signed-in student can display it reliably.
-        if(announcementId && creator.photoUrl){
-          const photoHash=crypto.createHash('sha256').update(creator.photoUrl).digest('hex');
-          const [cachedPhoto]=await q("SELECT 1 FROM profile_images WHERE entity_type='classroom' AND entity_id=? LIMIT 1",[announcementId]);
-          if(!cachedPhoto.length || previousPhotoHash!==photoHash){
-            try{
-              const photoUrlObject=new URL(creator.photoUrl);
-              if(photoUrlObject.protocol!=='https:' || !/(^|\.)googleusercontent\.com$/i.test(photoUrlObject.hostname))throw new Error('Unexpected Google profile photo host');
-              let photoResponse=await fetch(creator.photoUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
-              if(!photoResponse.ok)photoResponse=await fetch(creator.photoUrl);
-              const photoType=String(photoResponse.headers.get('content-type')||'').toLowerCase();
-              if(photoResponse.ok && photoType.startsWith('image/')){
-                const photoBuffer=Buffer.from(await photoResponse.arrayBuffer());
-                if(photoBuffer.length>0 && photoBuffer.length<=5*1024*1024){
-                  const avatar=await sharp(photoBuffer).rotate().resize(160,160,{fit:'cover'}).webp({quality:78,effort:4}).toBuffer();
-                  await q("INSERT INTO profile_images(entity_type,entity_id,mime_type,data) VALUES('classroom',?,'image/webp',?) ON DUPLICATE KEY UPDATE mime_type=VALUES(mime_type),data=VALUES(data)",[announcementId,avatar]);
-                  console.log('Classroom creator photo cached',{announcementId,bytes:avatar.length});
-                }else console.warn('Classroom creator photo has invalid size',{announcementId,bytes:photoBuffer.length});
-              }else console.warn('Classroom creator photo download failed',{announcementId,status:photoResponse.status,contentType:photoType});
-            }catch(photoError){console.warn('Classroom creator photo cache failed',{announcementId,message:photoError.message});}
-          }
-        }
-        const keepKeys=[];
-        if(announcementChanged){
-        for(const material of item.materials||[]){
-          const drive=material?.driveFile?.driveFile;
-          if(drive?.id){
-            const key='drive:'+String(drive.id);
-            try{await saveClassroomDriveAttachment(tokens.access_token,announcementId,drive);keepKeys.push(key);}
-            catch(error){console.warn('Classroom Drive attachment not copied:',drive.title||drive.id,error.message);const href=String(drive.alternateLink||'');if(/^https:\/\//i.test(href)){const fallbackKey='link:'+crypto.createHash('sha256').update(String(item.id)+'|'+href).digest('hex');const label=String(drive.title||'Google Drive file').slice(0,250);await q('INSERT INTO b4_classroom_attachments(announcement_id,attachment_key,title,original_name,mime_type,size_bytes,data,external_url) VALUES(?,?,?,?,?,0,NULL,?) ON DUPLICATE KEY UPDATE announcement_id=VALUES(announcement_id),title=VALUES(title),external_url=VALUES(external_url)',[announcementId,fallbackKey,label,label,'text/uri-list',href]);keepKeys.push(fallbackKey);}}
-          }else{
-            const href=String(material?.link?.url||material?.youtubeVideo?.alternateLink||'');
-            if(/^https:\/\//i.test(href)){const key='link:'+crypto.createHash('sha256').update(String(item.id)+'|'+href).digest('hex');const label=String(material?.link?.title||material?.youtubeVideo?.title||href).slice(0,250);await q('INSERT INTO b4_classroom_attachments(announcement_id,attachment_key,title,original_name,mime_type,size_bytes,data,external_url) VALUES(?,?,?,?,?,0,NULL,?) ON DUPLICATE KEY UPDATE announcement_id=VALUES(announcement_id),title=VALUES(title),external_url=VALUES(external_url)',[announcementId,key,label,label,'text/uri-list',href]);keepKeys.push(key);}
-          }
-        }
-        if(announcementChanged){
-          if(keepKeys.length){const marks=keepKeys.map(()=>'?').join(',');await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=? AND attachment_key NOT IN ('+marks+')',[announcementId,...keepKeys]);}else await q('DELETE FROM b4_classroom_attachments WHERE announcement_id=?',[announcementId]);
-        }
-        }
-        imported++;
-        // Only notify about announcements discovered since the previous successful sync.
-        // The initial import stays silent to avoid flooding the class with old posts.
-        if(!previous && Number.isFinite(previousSyncAt) && created.getTime()>previousSyncAt){
-          await notifyClassExcept(0,{
-            type:'announcement',
-            title:title==='إعلان من Google Classroom'?'إعلان جديد من Google Classroom':title,
-            body:safeBody,
-            url:'/?view=announcements'
-          });
-        }
-        if(previousPhotoHash!==(creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null)){
-          pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_CREATOR_PHOTO_SYNC',announcementId});
-        }
-      }
+      for(const item of data.announcements||[]){if(!item.id)continue;seenAnnouncementIds.add(String(item.id));allClassroomItems.push(item);}
       pageToken=data.nextPageToken||null;
     }while(pageToken);
+    const classroomItems=allClassroomItems.sort((a,b)=>new Date(b.creationTime||0).getTime()-new Date(a.creationTime||0).getTime()).slice(0,10);
+    for(const item of classroomItems){
+      if(!item.id)continue;
+      if(!item.id)continue;
+      // Scan every page, not only recent updates: the full set is needed
+      // to detect announcements that were deleted in Google Classroom.
+      const classroomText=String(item.text||'').replace(/\r\n?/g,'\n').trim();
+      const classroomLines=classroomText.split('\n');
+      const firstContentLine=classroomLines.findIndex(line=>line.trim());
+      const remainingText=firstContentLine>=0?classroomLines.slice(firstContentLine+1).join('\n').trim():'';
+      // Classroom announcements have one text field, not separate title/body fields.
+      // Use the first line as the title and the remaining lines as the description.
+      // For one-line announcements, keep all text in the description to avoid duplication.
+      const title=remainingText
+        ? classroomLines[firstContentLine].trim().slice(0,220)||'إعلان من Google Classroom'
+        : 'إعلان من Google Classroom';
+      const body=remainingText||classroomText;
+      const created=item.creationTime?new Date(item.creationTime):new Date();
+      if(Number.isNaN(created.getTime()))continue;
+      const safeBody=body.slice(0,60000);
+      const creator=await getClassroomCreator(item.creatorUserId);
+      const [previousCreatorPhoto]=await q('SELECT id,title,body,updated_at,creator_photo_source_hash FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
+      const previous=previousCreatorPhoto[0]||null;
+      const previousPhotoHash=previous?.creator_photo_source_hash||null;
+      const incomingUpdateTime=item.updateTime?new Date(item.updateTime).getTime():null;
+      const previousUpdateTime=previous?.updated_at?new Date(previous.updated_at).getTime():null;
+      const announcementChanged=!previous||String(previous.title||'')!==title||String(previous.body||'')!==safeBody||(incomingUpdateTime!==null&&Number.isFinite(previousUpdateTime)&&Math.abs(previousUpdateTime-incomingUpdateTime)>1000);
+      await q(`INSERT INTO b4_classroom_announcements(google_announcement_id,title,body,created_at,updated_at,created_by_email,course_id,source_url,creator_name,creator_google_email,creator_photo_url,creator_photo_source_hash)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE title=VALUES(title),body=VALUES(body),updated_at=VALUES(updated_at),source_url=VALUES(source_url),creator_name=VALUES(creator_name),creator_google_email=COALESCE(VALUES(creator_google_email),creator_google_email),creator_photo_url=COALESCE(VALUES(creator_photo_url),creator_photo_url),creator_photo_source_hash=COALESCE(VALUES(creator_photo_source_hash),creator_photo_source_hash)`,
+        [String(item.id),title,safeBody,created,item.updateTime?new Date(item.updateTime):null,item.creatorUserId?String(item.creatorUserId):null,String(rows[0].course_id),'https://classroom.google.com/c/'+encodeURIComponent(rows[0].course_id),creator.name,creator.email,creator.photoUrl,creator.photoUrl?crypto.createHash('sha256').update(creator.photoUrl).digest('hex'):null]);
+      const [savedAnnouncement]=await q('SELECT id FROM b4_classroom_announcements WHERE google_announcement_id=? LIMIT 1',[String(item.id)]);
+      const announcementId=Number(savedAnnouncement[0]?.id||0);
+      if(announcementChanged)pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_ANNOUNCEMENT_SYNC',announcementId});
+      // Classroom photoUrl is often protected; fetch it server-side with the OAuth token
+      // and cache a small WebP avatar so every signed-in student can display it reliably.
+      if(announcementId && creator.photoUrl){
+        const photoHash=crypto.createHash('sha256').update(creator.photoUrl).digest('hex');
+        const [cachedPhoto]=await q("SELECT 1 FROM profile_images WHERE entity_type='classroom' AND entity_id=? LIMIT 1",[announcementId]);
+        if(!cachedPhoto.length || previousPhotoHash!==photoHash){
+          try{
+            const photoUrlObject=new URL(creator.photoUrl);
+            if(photoUrlObject.protocol!=='https:' || !/(^|\.)googleusercontent\.com$/i.test(photoUrlObject.hostname))throw new Error('Unexpected Google profile photo host');
+            let photoResponse=await fetch(creator.photoUrl,{headers:{Authorization:'Bearer '+tokens.access_token}});
+            if(!photoResponse.ok)photoResponse=await fetch(creator.photoUrl);
+            const photoType=String(photoResponse.headers.get('content-type')||'').toLowerCase();
+            if(photoResponse.ok && photoType.startsWith('image/')){
+              const photoBuffer=Buffer.from(await photoResponse.arrayBuffer());
+              if(photoBuffer.length>0 && photoBuffer.length<=5*1024*1024){
+                const avatar=await sharp(photoBuffer).rotate().resize(160,160,{fit:'cover'}).webp({quality:78,effort:4}).toBuffer();
+                await q("INSERT INTO profile_images(entity_type,entity_id,mime_type,data) VALUES('classroom',?,'image/webp',?) ON DUPLICATE KEY UPDATE mime_type=VALUES(mime_type),data=VALUES(data)",[announcementId,avatar]);
+                console.log('Classroom creator photo cached',{announcementId,bytes:avatar.length});
+              }else console.warn('Classroom creator photo has invalid size',{announcementId,bytes:photoBuffer.length});
+            }else console.warn('Classroom creator photo download failed',{announcementId,status:photoResponse.status,contentType:photoType});
+          }catch(photoError){console.warn('Classroom creator photo cache failed',{announcementId,message:photoError.message});}
+    }
     // Only reconcile deletions after every Classroom page was fetched
     // successfully; an API error must never wipe the local announcements.
     const [storedAnnouncements]=await q('SELECT id,google_announcement_id FROM b4_classroom_announcements WHERE course_id=?',[String(rows[0].course_id)]);
@@ -2885,6 +2859,23 @@ async function syncGoogleClassroomAnnouncements(){
         await q('DELETE FROM b4_classroom_announcements WHERE id=?',[stored.id]);
         removedAnnouncements++;
       }
+    }
+    const [retainedClassroomRows]=await q('SELECT id FROM b4_classroom_announcements WHERE course_id=? ORDER BY created_at DESC,id DESC LIMIT 10',[String(rows[0].course_id)]);
+    const retainedClassroomIds=retainedClassroomRows.map(row=>Number(row.id));
+    let prunedAnnouncements=0;
+    if(retainedClassroomIds.length){
+      const keepMarks=retainedClassroomIds.map(()=>'?').join(',');
+      const [pruned]=await q('DELETE FROM b4_classroom_announcements WHERE course_id=? AND id NOT IN ('+keepMarks+')',[String(rows[0].course_id),...retainedClassroomIds]);
+      prunedAnnouncements=Number(pruned?.affectedRows||0);
+      await q("DELETE FROM profile_images WHERE entity_type='classroom' AND entity_id NOT IN ("+keepMarks+")",retainedClassroomIds);
+    }else{
+      const [pruned]=await q('DELETE FROM b4_classroom_announcements WHERE course_id=?',[String(rows[0].course_id)]);
+      prunedAnnouncements=Number(pruned?.affectedRows||0);
+      await q("DELETE FROM profile_images WHERE entity_type='classroom'");
+    }
+    if(prunedAnnouncements){
+      pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_ANNOUNCEMENTS_PRUNED',count:prunedAnnouncements});
+      console.log('Google Classroom old announcements pruned',{courseId:rows[0].course_id,count:prunedAnnouncements});
     }
     if(removedAnnouncements){
       pushGlobalEvent('data-changed',{path:'/api/bootstrap',method:'CLASSROOM_ANNOUNCEMENTS_DELETED',count:removedAnnouncements});
